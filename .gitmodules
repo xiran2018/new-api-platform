@@ -1,0 +1,4 @@
+[submodule "core/new-api"]
+	path = core/new-api
+	url = git@github.com:xiran2018/new-api.git
+	branch = main

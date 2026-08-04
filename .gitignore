@@ -1,0 +1,6 @@
+# Generated extension assembly output
+core/new-api/platform/
+core/new-api/web/src/platform/
+
+# Build reports
+artifacts/

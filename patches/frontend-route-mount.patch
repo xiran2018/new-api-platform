@@ -1,0 +1,25 @@
+diff --git a/web/src/routes/faq/index.tsx b/web/src/routes/faq/index.tsx
+new file mode 100644
+--- /dev/null
++++ b/web/src/routes/faq/index.tsx
+@@
++import { createFileRoute } from '@tanstack/react-router'
++
++import { FaqPage } from '@/platform/public-pages/faq'
++
++export const Route = createFileRoute('/faq/')({ component: FaqPage })
+diff --git a/web/src/routes/_authenticated/platform/content/index.tsx b/web/src/routes/_authenticated/platform/content/index.tsx
+new file mode 100644
+--- /dev/null
++++ b/web/src/routes/_authenticated/platform/content/index.tsx
+@@
++import { createFileRoute } from '@tanstack/react-router'
++
++import { ContentManagementPage } from '@/platform/admin-pages/content'
++
++export const Route = createFileRoute('/_authenticated/platform/content/')({
++  component: ContentManagementPage,
++})
+
+# After applying this patch, run `bun run build` in web/ to regenerate the
+# tracked routeTree.gen.ts. Do not patch that generated file by hand.

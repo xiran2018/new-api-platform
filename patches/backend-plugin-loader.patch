@@ -1,0 +1,12 @@
+diff --git a/router/main.go b/router/main.go
+--- a/router/main.go
++++ b/router/main.go
+@@
+ 	"github.com/QuantumNous/new-api/common"
+ 	"github.com/QuantumNous/new-api/middleware"
++	"github.com/QuantumNous/new-api/platform"
+@@
+ func SetRouter(router *gin.Engine, assets WebAssets) {
+ 	SetApiRouter(router)
++	platform.RegisterRoutes(router.Group("/api"))
+ 	SetDashboardRouter(router)
