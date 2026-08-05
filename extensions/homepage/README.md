@@ -13,14 +13,14 @@ bunx serve .
 
 ## 部署与启用
 
-项目的装配脚本会自动将本目录发布为 new-api 同域静态资源 `/home/`。执行：
+门户代理直接从本目录读取首页静态资源。执行：
 
 ```bash
 cd /home/jing/new-api-platform
 ./scripts/rebuild-and-start.sh
 ```
 
-独立首页会直接成为站点根路径 `/`，不需要、也不能再在 new-api 管理端的「系统设置 → 首页内容填充」中填写 URL；请保持该配置为空，避免 iframe 递归加载。
+独立首页由外层 `extensions/gateway` 门户代理直接服务于站点根路径 `/`；不需要、也不能再在 new-api 管理端的「系统设置 → 首页内容填充」中填写 URL，请保持该配置为空，避免 iframe 递归加载。
 
 页面会按浏览器语言及系统主题显示。
 

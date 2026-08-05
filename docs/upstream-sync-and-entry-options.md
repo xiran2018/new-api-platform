@@ -151,6 +151,63 @@ git -C core/new-api stash -u
 
 适合：单机、内网、开发与简单部署。
 
+当前项目已采用方案 B。运行：
+
+```bash
+cd /home/jing/new-api-platform
+./scripts/rebuild-and-start.sh
+```
+
+该脚本按 `core/new-api/.env` 中的 `PORT` 启动 `new-api`（默认 `7000`），并启动门户于 `:11115`。用户始终访问门户端口。门户脚本自动读取 `.env` 的端口并设置其上游地址；日常只需要修改门户端口：
+
+```text
+PLATFORM_GATEWAY_PORT=11115
+```
+
+`PLATFORM_GATEWAY_UPSTREAM` 和 `PLATFORM_HOMEPAGE_DIR` 是门户程序的底层高级配置。标准的 `rebuild-and-start.sh` 已分别自动设置为 `http://127.0.0.1:<core/.env PORT>` 和 `extensions/homepage`，通常不要手动设置。
+
+在集群中，每个主/从节点均可运行同一门户版本；外部负载均衡器访问各节点的门户端口。门户不连接数据库或 Redis，不影响 `NODE_TYPE=master/slave` 的同步职责。
+
+#### 门户与内部端口
+
+默认端口分工：
+
+```text
+11115  门户对外监听端口，浏览器与负载均衡器访问此端口
+7000   new-api 默认内部监听端口，仅由本机门户转发使用；实际值由 core/new-api/.env 的 PORT 决定
+```
+
+默认启动：
+
+```bash
+cd /home/jing/new-api-platform
+./scripts/rebuild-and-start.sh
+```
+
+只修改门户对外端口，例如改为 `12000`：
+
+```bash
+PLATFORM_GATEWAY_PORT=12000 ./scripts/rebuild-and-start.sh
+```
+
+修改 new-api 内部端口时，只需编辑 `core/new-api/.env`：
+
+```bash
+sed -i 's/^PORT=.*/PORT=7100/' core/new-api/.env
+./scripts/rebuild-and-start.sh
+```
+
+同时修改门户对外端口与 new-api 内部端口：
+
+```bash
+sed -i 's/^PORT=.*/PORT=7100/' core/new-api/.env
+PLATFORM_GATEWAY_PORT=12000 ./scripts/rebuild-and-start.sh
+```
+
+`core/new-api/.env` 中的 `PORT` 是唯一的 new-api 内部端口来源。启动脚本会读取该值，并自动将门户代理转发到相同端口；不再使用 `NEW_API_INTERNAL_PORT`。
+
+修改端口后必须先停止旧的启动进程，再重新运行 `./scripts/rebuild-and-start.sh`。内部端口只应绑定在可信网络/本机；用户和外部负载均衡器应始终访问门户端口。
+
 ### 当前原则
 
 - 不要通过“系统设置 → 首页内容填充”嵌入同域首页 URL；会造成 iframe 递归或路由回退问题。
