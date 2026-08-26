@@ -5,8 +5,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 core_dir="$repo_root/core/new-api"
 upstream_url="https://github.com/QuantumNous/new-api.git"
 
-if [[ ! -d "$core_dir/.git" ]]; then
-  echo "core/new-api must be an upstream Git checkout" >&2
+if [[ ! -e "$core_dir/.git" ]]; then
+  echo "core/new-api must be a Git checkout or submodule" >&2
   exit 1
 fi
 
@@ -16,13 +16,29 @@ if ! git -C "$core_dir" remote get-url upstream >/dev/null 2>&1; then
   exit 1
 fi
 
-git -C "$core_dir" -c core.pager=cat fetch upstream
-
 mode="${1:---check}"
-if [[ "$mode" != "--check" && "$mode" != "--merge" ]]; then
-  echo "Usage: $0 [--check|--merge]" >&2
+if [[ "$mode" != "--check" && "$mode" != "--merge" && "$mode" != "--sync" ]]; then
+  echo "Usage: $0 [--check|--merge|--sync]" >&2
   exit 1
 fi
+
+if [[ -n "$(git -C "$core_dir" status --porcelain)" ]]; then
+  echo "Refusing to sync: core/new-api has uncommitted changes." >&2
+  echo "Commit or stash them before running this script." >&2
+  exit 1
+fi
+
+git -C "$core_dir" switch main
+git -C "$core_dir" -c core.pager=cat fetch origin
+git -C "$core_dir" -c core.pager=cat fetch upstream
+
+if ! git -C "$core_dir" merge-base --is-ancestor HEAD origin/main; then
+  echo "Refusing to sync: local main is not an ancestor of origin/main." >&2
+  echo "Review the divergence in core/new-api before merging upstream." >&2
+  exit 1
+fi
+
+git -C "$core_dir" merge --ff-only origin/main
 
 echo
 echo "=== Incoming upstream commits ==="
@@ -51,15 +67,6 @@ if [[ "$mode" == "--check" ]]; then
   exit 0
 fi
 
-if [[ -n "$(git -C "$core_dir" status --porcelain)" ]]; then
-  echo "Refusing to merge: core/new-api has uncommitted changes." >&2
-  echo "Save platform work first, then rerun --merge:" >&2
-  echo "  git -C \"$core_dir\" add -A" >&2
-  echo "  git -C \"$core_dir\" commit -m 'feat: add platform extension seams'" >&2
-  echo "Alternatively, use git -C \"$core_dir\" stash -u for a temporary save." >&2
-  exit 1
-fi
-
 git -C "$core_dir" merge --no-edit upstream/main
 
 "$repo_root/scripts/assemble-extensions.sh"
@@ -72,7 +79,23 @@ git -C "$core_dir" merge --no-edit upstream/main
 
 (
   cd "$core_dir"
-  go build ./router ./platform
+  GOCACHE=/tmp/new-api-platform-go-cache go build ./router ./platform
 )
 
-echo "Upstream sync checks completed. Review core/new-api git status before committing."
+if [[ "$mode" == "--sync" ]]; then
+  git -C "$core_dir" push origin main
+
+  git -C "$repo_root" add core/new-api
+  if git -C "$repo_root" diff --cached --quiet -- core/new-api; then
+    echo
+    echo "Core sync complete. The outer repository already records this submodule commit."
+  else
+    git -C "$repo_root" commit -m "chore: sync new-api upstream" -- core/new-api
+    git -C "$repo_root" push
+    echo
+    echo "Core sync complete. The Fork and outer submodule pointer were pushed."
+  fi
+else
+  echo "Upstream merge and checks completed. Push core with:"
+  echo "  git -C \"$core_dir\" push origin main"
+fi

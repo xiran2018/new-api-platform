@@ -63,6 +63,22 @@ git push origin main
 
 合并前可运行 `./scripts/sync-upstream.sh --check` 查看上游摘要；core 工作区干净时也可使用 `./scripts/sync-upstream.sh --merge`。
 
+### 一键同步脚本
+
+日常推荐先预检，再执行一键同步：
+
+```bash
+cd /home/jing/new-api-platform
+./scripts/sync-upstream.sh --check
+./scripts/sync-upstream.sh --sync
+```
+
+`--sync` 会确认 core 工作区干净、将本地 `main` 快进到 Fork 的 `origin/main`、合并 `upstream/main`、装配 extensions、构建前端和 Go 接缝、把 core 推送到 Fork，并自动提交和推送外层仓库的 `core/new-api` 子模块指针。该外层提交只包含子模块指针，不会带入其他未暂存文件。
+
+如果外层仓库已经记录相同的 core 提交，脚本会跳过空提交；无需再手动执行 `git add core/new-api`。
+
+若只想在本地完成合并和验证而不推送 Fork，使用 `./scripts/sync-upstream.sh --merge`。
+
 ## 发生冲突时
 
 查看冲突文件：
