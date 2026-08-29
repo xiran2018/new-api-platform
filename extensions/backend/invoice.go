@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"strconv"
 	"strings"
 	"time"
@@ -46,6 +47,7 @@ type invoiceRequest struct {
 	InvoiceType  string     `gorm:"size:32;not null" json:"invoiceType"`
 	Emails       string     `gorm:"type:text;not null" json:"emails"`
 	Amount       float64    `gorm:"not null" json:"amount"`
+	AmountCents  int64      `gorm:"not null;default:0" json:"amountCents"`
 	Status       string     `gorm:"size:32;index;not null" json:"status"`
 	FileID       *uint64    `json:"fileId"`
 	AdminNote    string     `gorm:"type:text" json:"adminNote"`
@@ -54,11 +56,12 @@ type invoiceRequest struct {
 }
 
 type invoiceRequestOrder struct {
-	ID        uint64  `gorm:"primaryKey" json:"id"`
-	RequestID uint64  `gorm:"index;not null" json:"requestId"`
-	TopUpID   int     `gorm:"uniqueIndex;not null" json:"topUpId"`
-	TradeNo   string  `gorm:"size:255;not null" json:"tradeNo"`
-	Amount    float64 `gorm:"not null" json:"amount"`
+	ID          uint64  `gorm:"primaryKey" json:"id"`
+	RequestID   uint64  `gorm:"index;not null" json:"requestId"`
+	TopUpID     int     `gorm:"uniqueIndex;not null" json:"topUpId"`
+	TradeNo     string  `gorm:"size:255;not null" json:"tradeNo"`
+	Amount      float64 `gorm:"not null" json:"amount"`
+	AmountCents int64   `gorm:"not null;default:0" json:"amountCents"`
 }
 
 type reimbursementRequest struct {
@@ -66,6 +69,7 @@ type reimbursementRequest struct {
 	UserID      int        `gorm:"index;not null" json:"userId"`
 	Title       string     `gorm:"size:255;not null" json:"title"`
 	Amount      float64    `gorm:"not null" json:"amount"`
+	AmountCents int64      `gorm:"not null;default:0" json:"amountCents"`
 	Email       string     `gorm:"size:255;not null" json:"email"`
 	Note        string     `gorm:"type:text" json:"note"`
 	Status      string     `gorm:"size:32;index;not null" json:"status"`
@@ -106,9 +110,12 @@ func registerInvoiceRoutes(api *gin.RouterGroup) {
 	admin.GET("/requests", listAdminInvoiceRequests)
 	admin.GET("/requests/:id", getAdminInvoiceRequestDetail)
 	admin.POST("/requests/:id/upload", uploadInvoice)
+	admin.PATCH("/requests/:id/status", updateInvoiceRequestStatus)
 	admin.GET("/requests/:id/file", downloadAdminInvoice)
 	admin.GET("/reimbursements", listAdminReimbursements)
 	admin.POST("/reimbursements/:id/upload", uploadReimbursement)
+	admin.PATCH("/reimbursements/:id/status", updateReimbursementStatus)
+	admin.GET("/audit-logs", listInvoiceAuditLogs)
 	admin.GET("/reimbursements/:id/file", downloadAdminReimbursement)
 	admin.GET("/content", getInvoiceAdminContent)
 	admin.PUT("/content", saveInvoiceContent)
@@ -150,6 +157,10 @@ func saveInvoiceProfile(c *gin.Context) {
 	in.Title, in.TaxNumber, in.InvoiceType, in.Emails = strings.TrimSpace(in.Title), strings.TrimSpace(in.TaxNumber), strings.TrimSpace(in.InvoiceType), strings.TrimSpace(in.Emails)
 	if in.Title == "" || in.TaxNumber == "" || in.Emails == "" || (in.InvoiceType != "normal" && in.InvoiceType != "vat") {
 		apiError(c, 400, errors.New("invalid invoice information"))
+		return
+	}
+	if len(in.Title) > 255 || len(in.TaxNumber) > 100 || !validEmailList(in.Emails) {
+		apiError(c, 400, errors.New("invalid invoice title, tax number, or email address"))
 		return
 	}
 	in.UserID = c.GetInt("id")
@@ -264,10 +275,15 @@ func createInvoiceRequest(c *gin.Context) {
 		apiError(c, 400, errors.New("orders must belong to the current user and be completed"))
 		return
 	}
-	request := invoiceRequest{UserID: c.GetInt("id"), ProfileTitle: profile.Title, TaxNumber: profile.TaxNumber, InvoiceType: profile.InvoiceType, Emails: profile.Emails, Status: "pending", RequestedAt: time.Now()}
+	request := invoiceRequest{UserID: c.GetInt("id"), ProfileTitle: profile.Title, TaxNumber: profile.TaxNumber, InvoiceType: profile.InvoiceType, Emails: profile.Emails, Status: invoiceStatusPending, RequestedAt: time.Now()}
 	for _, order := range orders {
-		request.Amount += order.Money
+		if order.Money <= 0 || strings.TrimSpace(order.TradeNo) == "" {
+			apiError(c, 400, errors.New("orders must have a positive amount and order number"))
+			return
+		}
+		request.AmountCents += moneyToCents(order.Money)
 	}
+	request.Amount = centsToMoney(request.AmountCents)
 	err = db.Transaction(func(tx *gorm.DB) error {
 		var count int64
 		if err := tx.Model(&invoiceRequestOrder{}).Where("top_up_id IN ?", in.OrderIDs).Count(&count).Error; err != nil {
@@ -281,9 +297,13 @@ func createInvoiceRequest(c *gin.Context) {
 		}
 		links := make([]invoiceRequestOrder, 0, len(orders))
 		for _, order := range orders {
-			links = append(links, invoiceRequestOrder{RequestID: request.ID, TopUpID: order.Id, TradeNo: order.TradeNo, Amount: order.Money})
+			amountCents := moneyToCents(order.Money)
+			links = append(links, invoiceRequestOrder{RequestID: request.ID, TopUpID: order.Id, TradeNo: order.TradeNo, Amount: centsToMoney(amountCents), AmountCents: amountCents})
 		}
-		return tx.Create(&links).Error
+		if err := tx.Create(&links).Error; err != nil {
+			return err
+		}
+		return writeInvoiceAudit(tx, c, "invoice_request", request.ID, "created", "", request.Status, "")
 	})
 	if err != nil {
 		apiError(c, 409, err)
@@ -317,10 +337,21 @@ func createReimbursement(c *gin.Context) {
 		apiError(c, 400, errors.New("title, positive amount and email are required"))
 		return
 	}
-	row.ID, row.UserID, row.Status, row.RequestedAt, row.FileID = 0, c.GetInt("id"), "pending", time.Now(), nil
+	if len(row.Title) > 255 || len(row.Email) > 255 || len(row.Note) > 4000 || !validEmailList(row.Email) || row.Amount > 100000000 {
+		apiError(c, 400, errors.New("invalid reimbursement information"))
+		return
+	}
+	row.ID, row.UserID, row.Status, row.RequestedAt, row.FileID = 0, c.GetInt("id"), invoiceStatusPending, time.Now(), nil
+	row.AmountCents = moneyToCents(row.Amount)
+	row.Amount = centsToMoney(row.AmountCents)
 	db, err := platformDatabase()
 	if err == nil {
-		err = db.Create(&row).Error
+		err = db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+			return writeInvoiceAudit(tx, c, "reimbursement", row.ID, "created", "", row.Status, "")
+		})
 	}
 	if err != nil {
 		apiError(c, 500, err)
@@ -398,12 +429,19 @@ func listAdminInvoiceRequests(c *gin.Context) {
 		apiError(c, 500, err)
 		return
 	}
-	var rows []invoiceRequest
-	q := db.Order("id desc")
-	if status := c.Query("status"); status != "" {
-		q = q.Where("status = ?", status)
+	page, pageSize := parsePage(c)
+	q := applyAdminRequestFilters(db.Model(&invoiceRequest{}), c, "user_id")
+	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where("profile_title ILIKE ? OR tax_number ILIKE ? OR emails ILIKE ? OR EXISTS (SELECT 1 FROM invoice_request_orders iro WHERE iro.request_id = invoice_requests.id AND iro.trade_no ILIKE ?)", like, like, like, like)
 	}
-	if err = q.Find(&rows).Error; err != nil {
+	var total int64
+	if err = q.Count(&total).Error; err != nil {
+		apiError(c, 500, err)
+		return
+	}
+	var rows []invoiceRequest
+	if err = q.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
 		apiError(c, 500, err)
 		return
 	}
@@ -411,16 +449,27 @@ func listAdminInvoiceRequests(c *gin.Context) {
 		invoiceRequest
 		Orders []invoiceRequestOrder `json:"orders"`
 	}
+	requestIDs := make([]uint64, 0, len(rows))
+	for _, row := range rows {
+		requestIDs = append(requestIDs, row.ID)
+	}
+	var orders []invoiceRequestOrder
+	if len(requestIDs) > 0 {
+		err = db.Where("request_id IN ?", requestIDs).Order("id").Find(&orders).Error
+	}
+	if err != nil {
+		apiError(c, 500, err)
+		return
+	}
+	grouped := make(map[uint64][]invoiceRequestOrder)
+	for _, order := range orders {
+		grouped[order.RequestID] = append(grouped[order.RequestID], order)
+	}
 	out := make([]adminInvoiceView, 0, len(rows))
 	for _, row := range rows {
-		var orders []invoiceRequestOrder
-		if err := db.Where("request_id = ?", row.ID).Order("id").Find(&orders).Error; err != nil {
-			apiError(c, 500, err)
-			return
-		}
-		out = append(out, adminInvoiceView{invoiceRequest: row, Orders: orders})
+		out = append(out, adminInvoiceView{invoiceRequest: row, Orders: grouped[row.ID]})
 	}
-	c.JSON(200, gin.H{"success": true, "data": out})
+	c.JSON(200, gin.H{"success": true, "data": out, "pagination": gin.H{"page": page, "pageSize": pageSize, "total": total}})
 }
 
 type adminInvoiceOrderDetail struct {
@@ -474,16 +523,23 @@ func listAdminReimbursements(c *gin.Context) {
 		apiError(c, 500, err)
 		return
 	}
-	var rows []reimbursementRequest
-	q := db.Order("id desc")
-	if status := c.Query("status"); status != "" {
-		q = q.Where("status = ?", status)
+	page, pageSize := parsePage(c)
+	q := applyAdminRequestFilters(db.Model(&reimbursementRequest{}), c, "user_id")
+	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where("title ILIKE ? OR email ILIKE ? OR note ILIKE ?", like, like, like)
 	}
-	if err = q.Find(&rows).Error; err != nil {
+	var total int64
+	if err = q.Count(&total).Error; err != nil {
 		apiError(c, 500, err)
 		return
 	}
-	c.JSON(200, gin.H{"success": true, "data": rows})
+	var rows []reimbursementRequest
+	if err = q.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
+		apiError(c, 500, err)
+		return
+	}
+	c.JSON(200, gin.H{"success": true, "data": rows, "pagination": gin.H{"page": page, "pageSize": pageSize, "total": total}})
 }
 
 func receiveFile(c *gin.Context) (*platformFile, error) {
@@ -527,6 +583,21 @@ func uploadRequestFile(c *gin.Context, invoice bool) {
 	db, err := platformDatabase()
 	if err == nil {
 		err = db.Transaction(func(tx *gorm.DB) error {
+			oldStatus := ""
+			oldFile := false
+			if invoice {
+				var row invoiceRequest
+				if err := tx.First(&row, id).Error; err != nil {
+					return err
+				}
+				oldStatus, oldFile = row.Status, row.FileID != nil
+			} else {
+				var row reimbursementRequest
+				if err := tx.First(&row, id).Error; err != nil {
+					return err
+				}
+				oldStatus, oldFile = row.Status, row.FileID != nil
+			}
 			if err := tx.Create(file).Error; err != nil {
 				return err
 			}
@@ -543,7 +614,18 @@ func uploadRequestFile(c *gin.Context, invoice bool) {
 			if result.RowsAffected != 1 {
 				return gorm.ErrRecordNotFound
 			}
-			return nil
+			entityType := "reimbursement"
+			if invoice {
+				entityType = "invoice_request"
+			}
+			if err := saveFileVersion(tx, c, entityType, id, file.ID); err != nil {
+				return err
+			}
+			action := "file_uploaded"
+			if oldFile {
+				action = "file_replaced"
+			}
+			return writeInvoiceAudit(tx, c, entityType, id, action, oldStatus, invoiceStatusCompleted, c.PostForm("note"))
 		})
 	}
 	if err != nil {
@@ -655,6 +737,17 @@ func saveInvoiceContent(c *gin.Context) {
 	if in.SampleInstructions != "" || in.ReimbursementInstructions == "" {
 		in.ReimbursementInstructions = in.SampleInstructions
 	}
+	cleanInstructions, err := sanitizeRichHTML(in.ReimbursementInstructions)
+	if err != nil {
+		apiError(c, 400, err)
+		return
+	}
+	cleanService, err := sanitizeRichHTML(in.CustomerService)
+	if err != nil {
+		apiError(c, 400, err)
+		return
+	}
+	in.ReimbursementInstructions, in.CustomerService = cleanInstructions, cleanService
 	db, err := platformDatabase()
 	if err == nil {
 		err = db.Transaction(func(tx *gorm.DB) error {
@@ -706,6 +799,11 @@ func updateInvoiceSample(c *gin.Context) {
 	c.JSON(200, gin.H{"success": true})
 }
 func uploadInvoiceSample(c *gin.Context) {
+	id, parseErr := strconv.ParseUint(c.Param("id"), 10, 64)
+	if parseErr != nil {
+		apiError(c, 400, parseErr)
+		return
+	}
 	file, err := receiveFile(c)
 	if err != nil {
 		apiError(c, 400, err)
@@ -717,14 +815,25 @@ func uploadInvoiceSample(c *gin.Context) {
 			if err := tx.Create(file).Error; err != nil {
 				return err
 			}
-			result := tx.Model(&invoiceSample{}).Where("id = ?", c.Param("id")).Update("file_id", file.ID)
+			var sample invoiceSample
+			if err := tx.First(&sample, id).Error; err != nil {
+				return err
+			}
+			result := tx.Model(&invoiceSample{}).Where("id = ?", id).Update("file_id", file.ID)
 			if result.Error != nil {
 				return result.Error
 			}
 			if result.RowsAffected != 1 {
 				return gorm.ErrRecordNotFound
 			}
-			return nil
+			if err := saveFileVersion(tx, c, "invoice_sample", id, file.ID); err != nil {
+				return err
+			}
+			action := "file_uploaded"
+			if sample.FileID != nil {
+				action = "file_replaced"
+			}
+			return writeInvoiceAudit(tx, c, "invoice_sample", id, action, "", "", "")
 		})
 	}
 	if err != nil {
@@ -732,6 +841,19 @@ func uploadInvoiceSample(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"success": true})
+}
+
+func validEmailList(value string) bool {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ';' })
+	if len(parts) == 0 {
+		return false
+	}
+	for _, part := range parts {
+		if _, err := mail.ParseAddress(strings.TrimSpace(part)); err != nil {
+			return false
+		}
+	}
+	return true
 }
 func deleteInvoiceSample(c *gin.Context) {
 	db, err := platformDatabase()

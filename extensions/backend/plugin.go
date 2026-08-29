@@ -71,7 +71,10 @@ func platformDatabase() (*gorm.DB, error) {
 		if platformDBErr != nil {
 			return
 		}
-		platformDBErr = platformDB.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{}, &invoiceProfile{}, &platformFile{}, &invoiceRequest{}, &invoiceRequestOrder{}, &reimbursementRequest{}, &invoiceSample{})
+		platformDBErr = platformDB.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{}, &invoiceProfile{}, &platformFile{}, &invoiceRequest{}, &invoiceRequestOrder{}, &reimbursementRequest{}, &invoiceSample{}, &invoiceAuditLog{}, &platformFileVersion{})
+		if platformDBErr == nil {
+			platformDBErr = backfillInvoiceMoney(platformDB)
+		}
 		if platformDBErr == nil {
 			platformDBErr = platformDB.Where(platformSetting{Key: "updates_enabled"}).FirstOrCreate(&platformSetting{Key: "updates_enabled", Value: "true"}).Error
 		}
@@ -214,6 +217,12 @@ func saveFAQItem(c *gin.Context) {
 		c.JSON(400, gin.H{"success": false, "message": "category, title and content are required"})
 		return
 	}
+	cleanBody, cleanErr := sanitizeRichHTML(row.BodyHTML)
+	if cleanErr != nil {
+		c.JSON(400, gin.H{"success": false, "message": cleanErr.Error()})
+		return
+	}
+	row.BodyHTML = cleanBody
 	db, err := platformDatabase()
 	if err == nil {
 		if c.Param("id") != "" {
@@ -296,6 +305,11 @@ func decodeUpdate(c *gin.Context) (updateEntry, error) {
 	if item.Title == "" || strings.TrimSpace(item.BodyHTML) == "" {
 		return item, errors.New("title and rich text content are required")
 	}
+	cleanBody, err := sanitizeRichHTML(item.BodyHTML)
+	if err != nil {
+		return item, err
+	}
+	item.BodyHTML = cleanBody
 	if item.PublishedAt.IsZero() {
 		item.PublishedAt = time.Now()
 	}

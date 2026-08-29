@@ -84,6 +84,15 @@ const resources: Record<string, Record<string, string>> = {
     Query: "查询",
     pending: "待处理",
     completed: "已完成",
+    processing: "处理中",
+    rejected: "已驳回",
+    "Search applications": "搜索申请、税号、邮箱或订单号",
+    "Mark processing": "标记处理中",
+    Reject: "驳回",
+    Reopen: "重新打开",
+    "Rejection reason": "驳回原因",
+    Previous: "上一页",
+    Next: "下一页",
     not_requested: "未申请",
     success: "成功",
     Replace: "替换",
@@ -225,6 +234,18 @@ const faqManagementTranslations: Record<string, string> = {
   ja: "よくある質問管理",
   vi: "Quản lý câu hỏi thường gặp",
 };
+
+const workflowTranslations: Record<string, Record<string, string>> = {
+  zhTW: { processing: "處理中", rejected: "已駁回", "Search applications": "搜尋申請、稅號、信箱或訂單號", "Mark processing": "標記處理中", Reject: "駁回", Reopen: "重新開啟", "Rejection reason": "駁回原因", Previous: "上一頁", Next: "下一頁" },
+  fr: { processing: "En traitement", rejected: "Rejetée", "Search applications": "Rechercher une demande", "Mark processing": "Marquer en traitement", Reject: "Rejeter", Reopen: "Rouvrir", "Rejection reason": "Motif du rejet", Previous: "Précédent", Next: "Suivant" },
+  ru: { processing: "В обработке", rejected: "Отклонено", "Search applications": "Поиск заявок", "Mark processing": "В обработку", Reject: "Отклонить", Reopen: "Открыть снова", "Rejection reason": "Причина отклонения", Previous: "Назад", Next: "Далее" },
+  ja: { processing: "処理中", rejected: "却下済み", "Search applications": "申請を検索", "Mark processing": "処理中にする", Reject: "却下", Reopen: "再開", "Rejection reason": "却下理由", Previous: "前へ", Next: "次へ" },
+  vi: { processing: "Đang xử lý", rejected: "Đã từ chối", "Search applications": "Tìm kiếm yêu cầu", "Mark processing": "Đánh dấu đang xử lý", Reject: "Từ chối", Reopen: "Mở lại", "Rejection reason": "Lý do từ chối", Previous: "Trước", Next: "Tiếp" },
+};
+
+for (const [language, translations] of Object.entries(workflowTranslations)) {
+  Object.assign(resources[language], translations);
+}
 
 for (const [language, translation] of Object.entries(
   faqManagementTranslations,

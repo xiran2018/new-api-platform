@@ -29,6 +29,7 @@ type Request = {
   requestedAt: string;
   completedAt?: string;
   fileId?: number;
+  adminNote?: string;
   orders?: Array<{ tradeNo: string }>;
 };
 type Sample = {
@@ -73,6 +74,10 @@ export function InvoiceManagementPage() {
   const [samples, setSamples] = useState<Sample[]>([]);
   const [sampleInstructions, setSampleInstructions] = useState("");
   const [service, setService] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [preview, setPreview] = useState<{
     url: string;
     mimeType: string;
@@ -81,12 +86,13 @@ export function InvoiceManagementPage() {
   const sampleListRef = useRef<HTMLDivElement>(null);
   const load = async () => {
     const [i, r, c] = await Promise.all([
-      api.get("/api/platform/admin/invoice/requests"),
-      api.get("/api/platform/admin/invoice/reimbursements"),
+      api.get("/api/platform/admin/invoice/requests", { params: { keyword, status, page, pageSize: 20 } }),
+      api.get("/api/platform/admin/invoice/reimbursements", { params: { keyword, status, page, pageSize: 20 } }),
       api.get("/api/platform/admin/invoice/content"),
     ]);
     setInvoices(i.data.data ?? []);
     setReimbursements(r.data.data ?? []);
+    setTotal((tab === "reimbursement" ? r.data.pagination?.total : i.data.pagination?.total) ?? 0);
     setSamples(c.data.data?.samples ?? []);
     setSampleInstructions(
       c.data.data?.sampleInstructions ??
@@ -97,7 +103,7 @@ export function InvoiceManagementPage() {
   };
   useEffect(() => {
     void load();
-  }, []);
+  }, [keyword, status, page, tab]);
   const upload = async (
     kind: "requests" | "reimbursements" | "samples",
     id: number,
@@ -147,15 +153,37 @@ export function InvoiceManagementPage() {
           </button>
         ))}
       </div>
+      {(tab === "invoice" || tab === "reimbursement") && (
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            className={`${input} min-w-64 flex-1`}
+            value={keyword}
+            placeholder={t("Search applications")}
+            onChange={(event) => { setKeyword(event.target.value); setPage(1); }}
+          />
+          <select className={input} value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+            <option value="">{t("All statuses")}</option>
+            {['pending', 'processing', 'completed', 'rejected'].map((value) => <option key={value} value={value}>{t(value)}</option>)}
+          </select>
+        </div>
+      )}
       {tab === "invoice" && (
-        <RequestTable rows={invoices} kind="requests" onUpload={upload} />
+        <RequestTable rows={invoices} kind="requests" onUpload={upload} onReload={load} />
       )}
       {tab === "reimbursement" && (
         <RequestTable
           rows={reimbursements}
           kind="reimbursements"
           onUpload={upload}
+          onReload={load}
         />
+      )}
+      {(tab === "invoice" || tab === "reimbursement") && total > 20 && (
+        <div className="flex items-center justify-end gap-3 text-sm">
+          <button className="rounded-md border px-3 py-2 disabled:opacity-50" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t("Previous")}</button>
+          <span>{page} / {Math.ceil(total / 20)}</span>
+          <button className="rounded-md border px-3 py-2 disabled:opacity-50" disabled={page * 20 >= total} onClick={() => setPage(page + 1)}>{t("Next")}</button>
+        </div>
       )}
       {tab === "samples" && (
         <div className="space-y-5">
@@ -266,6 +294,7 @@ function RequestTable({
   rows,
   kind,
   onUpload,
+  onReload,
 }: {
   rows: Request[];
   kind: "requests" | "reimbursements";
@@ -274,6 +303,7 @@ function RequestTable({
     id: number,
     file: File,
   ) => Promise<void>;
+  onReload: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const isReimbursement = kind === "reimbursements";
@@ -309,6 +339,14 @@ function RequestTable({
       `/api/platform/admin/invoice/requests/${id}`,
     );
     setDetail(response.data.data);
+  };
+  const changeStatus = async (row: Request, nextStatus: string) => {
+    const requiresReason = nextStatus === "rejected";
+    const note = requiresReason ? window.prompt(t("Rejection reason")) : (row.adminNote ?? "");
+    if (requiresReason && !note?.trim()) return;
+    await api.patch(`/api/platform/admin/invoice/${kind}/${row.id}/status`, { status: nextStatus, note });
+    toast.success(t("Saved successfully"));
+    await onReload();
   };
   return (
     <div
@@ -388,6 +426,9 @@ function RequestTable({
                       {t("Download")}
                     </button>
                   )}
+                  {x.status === "pending" && <button className="whitespace-nowrap text-primary" onClick={() => void changeStatus(x, "processing")}>{t("Mark processing")}</button>}
+                  {(x.status === "pending" || x.status === "processing") && <button className="whitespace-nowrap text-destructive" onClick={() => void changeStatus(x, "rejected")}>{t("Reject")}</button>}
+                  {x.status === "rejected" && <button className="whitespace-nowrap text-primary" onClick={() => void changeStatus(x, "pending")}>{t("Reopen")}</button>}
                 </div>
               </td>
             </tr>
