@@ -7,7 +7,9 @@ Run `./scripts/assemble-extensions.sh` before frontend or backend builds. The sc
 See `docs/extension-architecture.md` for the stable integration seams and upgrade procedure.
 
 For a local rebuild and startup, run `./scripts/rebuild-and-start.sh`. It uses
-`core/new-api/.env`, including `PORT=7000`.
+`core/new-api/.env`, including `PORT=7000`. Before building, the script runs
+`bun install --frozen-lockfile`, so dependencies added by an upstream update are
+installed without modifying `bun.lock`.
 
 ## Databases
 
@@ -21,7 +23,8 @@ PLATFORM_DATABASE_URL=postgresql://root:123456@localhost:5432/platform_db?sslmod
 ## Updating new-api upstream
 
 The upstream sync helper fetches the official repository, assembles extensions,
-regenerates frontend routes and runs the affected build checks.
+installs the exact dependencies recorded in `bun.lock`, regenerates frontend
+routes and runs the affected build checks.
 
 ```bash
 ./scripts/sync-upstream.sh

@@ -14,6 +14,7 @@ fi
 "$repo_root/scripts/assemble-extensions.sh"
 
 cd "$core_dir/web"
+bun install --frozen-lockfile
 bun run build
 
 cd "$core_dir"

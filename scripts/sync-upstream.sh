@@ -88,6 +88,7 @@ git -C "$core_dir" merge --no-edit upstream/main
 
 (
   cd "$core_dir/web"
+  bun install --frozen-lockfile
   bun run build
   bun run typecheck
 )
