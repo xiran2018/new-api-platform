@@ -32,32 +32,47 @@ git -C "$core_dir" switch main
 git -C "$core_dir" -c core.pager=cat fetch origin
 git -C "$core_dir" -c core.pager=cat fetch upstream
 
-if ! git -C "$core_dir" merge-base --is-ancestor HEAD origin/main; then
-  echo "Refusing to sync: local main is not an ancestor of origin/main." >&2
-  echo "Review the divergence in core/new-api before merging upstream." >&2
+if git -C "$core_dir" merge-base --is-ancestor origin/main HEAD; then
+  echo "Local main already contains origin/main; keeping local commits."
+elif git -C "$core_dir" merge-base --is-ancestor HEAD origin/main; then
+  git -C "$core_dir" merge --ff-only origin/main
+else
+  echo "Refusing to sync: local main and origin/main have diverged." >&2
+  echo "Review both sides in core/new-api before merging upstream." >&2
   exit 1
 fi
 
-git -C "$core_dir" merge --ff-only origin/main
-
 echo
 echo "=== Incoming upstream commits ==="
-git -C "$core_dir" --no-pager log --oneline HEAD..upstream/main
+incoming_count="$(git -C "$core_dir" rev-list --count HEAD..upstream/main)"
+if [[ "$incoming_count" -eq 0 ]]; then
+  echo "(none)"
+else
+  git -C "$core_dir" --no-pager log --oneline HEAD..upstream/main
+fi
 
 echo
 echo "=== Changed files summary ==="
-git -C "$core_dir" --no-pager diff --stat HEAD..upstream/main
+if [[ "$incoming_count" -eq 0 ]]; then
+  echo "(none)"
+else
+  git -C "$core_dir" --no-pager diff --stat HEAD..upstream/main
+fi
 
 echo
 echo "=== Merge safety check ==="
-merge_base="$(git -C "$core_dir" merge-base HEAD upstream/main)"
-merge_preview="$(git -C "$core_dir" merge-tree "$merge_base" HEAD upstream/main)"
-if ! grep -q '^<<<<<<< ' <<<"$merge_preview"; then
+if [[ "$incoming_count" -eq 0 ]]; then
   echo "Clean merge: yes"
 else
-  echo "Clean merge: no. Resolve the reported conflicts before using --merge." >&2
-  echo "$merge_preview" >&2
-  exit 1
+  merge_base="$(git -C "$core_dir" merge-base HEAD upstream/main)"
+  merge_preview="$(git -C "$core_dir" merge-tree "$merge_base" HEAD upstream/main)"
+  if ! grep -q '^<<<<<<< ' <<<"$merge_preview"; then
+    echo "Clean merge: yes"
+  else
+    echo "Clean merge: no. Resolve the reported conflicts before using --merge." >&2
+    echo "$merge_preview" >&2
+    exit 1
+  fi
 fi
 
 if [[ "$mode" == "--check" ]]; then
