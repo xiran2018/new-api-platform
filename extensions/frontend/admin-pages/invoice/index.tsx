@@ -266,7 +266,6 @@ function RequestTable({
   rows,
   kind,
   onUpload,
-  onPreview,
 }: {
   rows: Request[];
   kind: "requests" | "reimbursements";
