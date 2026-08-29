@@ -2,6 +2,7 @@ import type { TopNavLink } from '@/components/layout/types'
 import { api } from '@/lib/api'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import '../i18n/invoice-translations'
 
 export type PlatformNavItem = {
   id: string
@@ -26,6 +27,11 @@ export const platformAdminNav: PlatformNavItem[] = [
     requiresAuth: true,
   },
   { id: 'faq-management', title: 'FAQ management', href: '/platform/faq-management', order: 71, requiresAuth: true },
+  { id: 'invoice-management', title: 'Invoice management', href: '/invoice-management', order: 72, requiresAuth: true },
+]
+
+export const platformUserNav: PlatformNavItem[] = [
+  { id: 'invoice', title: 'Invoice', href: '/invoice', order: 10, requiresAuth: true },
 ]
 
 export function getPlatformPublicTopNavLinks(): TopNavLink[] {

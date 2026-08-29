@@ -17,15 +17,15 @@ import (
 )
 
 type updateEntry struct {
-	ID        uint64    `gorm:"primaryKey" json:"id"`
-	Title     string    `gorm:"size:255;not null" json:"title"`
-	Icon      string    `gorm:"size:32" json:"icon"`
-	BodyHTML  string    `gorm:"type:text;not null" json:"bodyHtml"`
-	Published bool      `json:"published"`
-	SortOrder int       `json:"sortOrder"`
+	ID          uint64    `gorm:"primaryKey" json:"id"`
+	Title       string    `gorm:"size:255;not null" json:"title"`
+	Icon        string    `gorm:"size:32" json:"icon"`
+	BodyHTML    string    `gorm:"type:text;not null" json:"bodyHtml"`
+	Published   bool      `json:"published"`
+	SortOrder   int       `json:"sortOrder"`
 	PublishedAt time.Time `json:"publishedAt"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 type platformSetting struct {
@@ -33,8 +33,23 @@ type platformSetting struct {
 	Value string `gorm:"type:text;not null"`
 }
 
-type faqCategory struct { ID uint64 `gorm:"primaryKey" json:"id"`; Name string `gorm:"size:120;not null" json:"name"`; SortOrder int `json:"sortOrder"`; CreatedAt time.Time `json:"createdAt"`; UpdatedAt time.Time `json:"updatedAt"` }
-type faqItem struct { ID uint64 `gorm:"primaryKey" json:"id"`; CategoryID uint64 `gorm:"index;not null" json:"categoryId"`; Title string `gorm:"size:255;not null" json:"title"`; BodyHTML string `gorm:"type:text;not null" json:"bodyHtml"`; Published bool `json:"published"`; SortOrder int `json:"sortOrder"`; CreatedAt time.Time `json:"createdAt"`; UpdatedAt time.Time `json:"updatedAt"` }
+type faqCategory struct {
+	ID        uint64    `gorm:"primaryKey" json:"id"`
+	Name      string    `gorm:"size:120;not null" json:"name"`
+	SortOrder int       `json:"sortOrder"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+type faqItem struct {
+	ID         uint64    `gorm:"primaryKey" json:"id"`
+	CategoryID uint64    `gorm:"index;not null" json:"categoryId"`
+	Title      string    `gorm:"size:255;not null" json:"title"`
+	BodyHTML   string    `gorm:"type:text;not null" json:"bodyHtml"`
+	Published  bool      `json:"published"`
+	SortOrder  int       `json:"sortOrder"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
 
 var platformDB *gorm.DB
 var platformDBOnce sync.Once
@@ -53,8 +68,10 @@ func platformDatabase() (*gorm.DB, error) {
 				platformDB, platformDBErr = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 			}
 		}
-		if platformDBErr != nil { return }
-		platformDBErr = platformDB.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{})
+		if platformDBErr != nil {
+			return
+		}
+		platformDBErr = platformDB.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{}, &invoiceProfile{}, &platformFile{}, &invoiceRequest{}, &invoiceRequestOrder{}, &reimbursementRequest{}, &invoiceSample{})
 		if platformDBErr == nil {
 			platformDBErr = platformDB.Where(platformSetting{Key: "updates_enabled"}).FirstOrCreate(&platformSetting{Key: "updates_enabled", Value: "true"}).Error
 		}
@@ -66,15 +83,26 @@ func platformDatabase() (*gorm.DB, error) {
 // It never opens or migrates new-api's database.
 func createPlatformDatabase(dsn string) error {
 	u, err := url.Parse(dsn)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	databaseName := strings.TrimPrefix(u.Path, "/")
-	if databaseName == "" || databaseName == "postgres" { return errors.New("PLATFORM_DATABASE_URL must name a non-core database") }
+	if databaseName == "" || databaseName == "postgres" {
+		return errors.New("PLATFORM_DATABASE_URL must name a non-core database")
+	}
 	u.Path = "/postgres"
 	adminDB, err := gorm.Open(postgres.Open(u.String()), &gorm.Config{})
-	if err != nil { return err }
-	sqlDB, err := adminDB.DB(); if err != nil { return err }
+	if err != nil {
+		return err
+	}
+	sqlDB, err := adminDB.DB()
+	if err != nil {
+		return err
+	}
 	defer sqlDB.Close()
-	if err = adminDB.Exec(`CREATE DATABASE "` + strings.ReplaceAll(databaseName, `"`, ``) + `"`).Error; err != nil && !strings.Contains(err.Error(), "already exists") { return err }
+	if err = adminDB.Exec(`CREATE DATABASE "` + strings.ReplaceAll(databaseName, `"`, ``) + `"`).Error; err != nil && !strings.Contains(err.Error(), "already exists") {
+		return err
+	}
 	return nil
 }
 
@@ -84,6 +112,7 @@ func RegisterRoutes(apiRouter *gin.RouterGroup) {
 	publicRouter.GET("/updates", getPublicUpdates)
 	publicRouter.GET("/updates/settings", getPublicUpdateSettings)
 	publicRouter.GET("/faq", getPublicFAQ)
+	registerInvoiceRoutes(apiRouter)
 
 	adminRouter := apiRouter.Group("/platform/admin")
 	adminRouter.Use(middleware.AdminAuth())
@@ -104,14 +133,108 @@ func RegisterRoutes(apiRouter *gin.RouterGroup) {
 	adminRouter.DELETE("/faq/items/:id", deleteFAQItem)
 }
 
-func getPublicFAQ(c *gin.Context) { db, err := platformDatabase(); if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }; var categories []faqCategory; _ = db.Order("sort_order asc, id asc").Find(&categories).Error; var items []faqItem; query := strings.TrimSpace(c.Query("q")); itemQuery := db.Where("published = ?", true); if query != "" { itemQuery = itemQuery.Where("title ILIKE ? OR body_html ILIKE ?", "%"+query+"%", "%"+query+"%") }; _ = itemQuery.Order("sort_order asc, id asc").Find(&items).Error; c.JSON(200, gin.H{"success": true, "data": gin.H{"categories": categories, "items": items}}) }
+func getPublicFAQ(c *gin.Context) {
+	db, err := platformDatabase()
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	var categories []faqCategory
+	_ = db.Order("sort_order asc, id asc").Find(&categories).Error
+	var items []faqItem
+	query := strings.TrimSpace(c.Query("q"))
+	itemQuery := db.Where("published = ?", true)
+	if query != "" {
+		itemQuery = itemQuery.Where("title ILIKE ? OR body_html ILIKE ?", "%"+query+"%", "%"+query+"%")
+	}
+	_ = itemQuery.Order("sort_order asc, id asc").Find(&items).Error
+	c.JSON(200, gin.H{"success": true, "data": gin.H{"categories": categories, "items": items}})
+}
 
-func listFAQCategories(c *gin.Context) { db, err := platformDatabase(); if err != nil { c.JSON(500, gin.H{"success": false}); return }; var rows []faqCategory; err = db.Order("sort_order asc, id asc").Find(&rows).Error; c.JSON(200, gin.H{"success": err == nil, "data": rows}) }
-func saveFAQCategory(c *gin.Context) { var row faqCategory; if err := c.ShouldBindJSON(&row); err != nil || strings.TrimSpace(row.Name) == "" { c.JSON(400, gin.H{"success": false, "message": "category name is required"}); return }; db, err := platformDatabase(); if err == nil { if c.Param("id") != "" { var id uint64; _, _ = fmt.Sscan(c.Param("id"), &id); err = db.Model(&faqCategory{}).Where("id = ?", id).Updates(map[string]any{"name": row.Name, "sort_order": row.SortOrder}).Error } else { err = db.Create(&row).Error } }; c.JSON(200, gin.H{"success": err == nil, "data": row}) }
-func deleteFAQCategory(c *gin.Context) { var id uint64; _, _ = fmt.Sscan(c.Param("id"), &id); db, err := platformDatabase(); if err == nil { err = db.Transaction(func(tx *gorm.DB) error { if err := tx.Where("category_id = ?", id).Delete(&faqItem{}).Error; err != nil { return err }; return tx.Delete(&faqCategory{}, id).Error }) }; c.JSON(200, gin.H{"success": err == nil}) }
-func listFAQItems(c *gin.Context) { db, err := platformDatabase(); if err != nil { c.JSON(500, gin.H{"success": false}); return }; var rows []faqItem; q := strings.TrimSpace(c.Query("q")); query := db; if q != "" { query = query.Where("title ILIKE ? OR body_html ILIKE ?", "%"+q+"%", "%"+q+"%") }; err = query.Order("sort_order asc, id asc").Find(&rows).Error; c.JSON(200, gin.H{"success": err == nil, "data": rows}) }
-func saveFAQItem(c *gin.Context) { var row faqItem; if err := c.ShouldBindJSON(&row); err != nil || row.CategoryID == 0 || strings.TrimSpace(row.Title) == "" || strings.TrimSpace(row.BodyHTML) == "" { c.JSON(400, gin.H{"success": false, "message": "category, title and content are required"}); return }; db, err := platformDatabase(); if err == nil { if c.Param("id") != "" { var id uint64; _, _ = fmt.Sscan(c.Param("id"), &id); err = db.Model(&faqItem{}).Where("id = ?", id).Updates(map[string]any{"category_id": row.CategoryID, "title": row.Title, "body_html": row.BodyHTML, "published": row.Published, "sort_order": row.SortOrder}).Error } else { err = db.Create(&row).Error } }; c.JSON(200, gin.H{"success": err == nil, "data": row}) }
-func deleteFAQItem(c *gin.Context) { var id uint64; _, _ = fmt.Sscan(c.Param("id"), &id); db, err := platformDatabase(); if err == nil { err = db.Delete(&faqItem{}, id).Error }; c.JSON(200, gin.H{"success": err == nil}) }
+func listFAQCategories(c *gin.Context) {
+	db, err := platformDatabase()
+	if err != nil {
+		c.JSON(500, gin.H{"success": false})
+		return
+	}
+	var rows []faqCategory
+	err = db.Order("sort_order asc, id asc").Find(&rows).Error
+	c.JSON(200, gin.H{"success": err == nil, "data": rows})
+}
+func saveFAQCategory(c *gin.Context) {
+	var row faqCategory
+	if err := c.ShouldBindJSON(&row); err != nil || strings.TrimSpace(row.Name) == "" {
+		c.JSON(400, gin.H{"success": false, "message": "category name is required"})
+		return
+	}
+	db, err := platformDatabase()
+	if err == nil {
+		if c.Param("id") != "" {
+			var id uint64
+			_, _ = fmt.Sscan(c.Param("id"), &id)
+			err = db.Model(&faqCategory{}).Where("id = ?", id).Updates(map[string]any{"name": row.Name, "sort_order": row.SortOrder}).Error
+		} else {
+			err = db.Create(&row).Error
+		}
+	}
+	c.JSON(200, gin.H{"success": err == nil, "data": row})
+}
+func deleteFAQCategory(c *gin.Context) {
+	var id uint64
+	_, _ = fmt.Sscan(c.Param("id"), &id)
+	db, err := platformDatabase()
+	if err == nil {
+		err = db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("category_id = ?", id).Delete(&faqItem{}).Error; err != nil {
+				return err
+			}
+			return tx.Delete(&faqCategory{}, id).Error
+		})
+	}
+	c.JSON(200, gin.H{"success": err == nil})
+}
+func listFAQItems(c *gin.Context) {
+	db, err := platformDatabase()
+	if err != nil {
+		c.JSON(500, gin.H{"success": false})
+		return
+	}
+	var rows []faqItem
+	q := strings.TrimSpace(c.Query("q"))
+	query := db
+	if q != "" {
+		query = query.Where("title ILIKE ? OR body_html ILIKE ?", "%"+q+"%", "%"+q+"%")
+	}
+	err = query.Order("sort_order asc, id asc").Find(&rows).Error
+	c.JSON(200, gin.H{"success": err == nil, "data": rows})
+}
+func saveFAQItem(c *gin.Context) {
+	var row faqItem
+	if err := c.ShouldBindJSON(&row); err != nil || row.CategoryID == 0 || strings.TrimSpace(row.Title) == "" || strings.TrimSpace(row.BodyHTML) == "" {
+		c.JSON(400, gin.H{"success": false, "message": "category, title and content are required"})
+		return
+	}
+	db, err := platformDatabase()
+	if err == nil {
+		if c.Param("id") != "" {
+			var id uint64
+			_, _ = fmt.Sscan(c.Param("id"), &id)
+			err = db.Model(&faqItem{}).Where("id = ?", id).Updates(map[string]any{"category_id": row.CategoryID, "title": row.Title, "body_html": row.BodyHTML, "published": row.Published, "sort_order": row.SortOrder}).Error
+		} else {
+			err = db.Create(&row).Error
+		}
+	}
+	c.JSON(200, gin.H{"success": err == nil, "data": row})
+}
+func deleteFAQItem(c *gin.Context) {
+	var id uint64
+	_, _ = fmt.Sscan(c.Param("id"), &id)
+	db, err := platformDatabase()
+	if err == nil {
+		err = db.Delete(&faqItem{}, id).Error
+	}
+	c.JSON(200, gin.H{"success": err == nil})
+}
 
 func listContent(c *gin.Context) {
 	c.JSON(200, gin.H{"success": true, "data": []any{}})
@@ -119,70 +242,148 @@ func listContent(c *gin.Context) {
 
 func getPublicUpdates(c *gin.Context) {
 	db, err := platformDatabase()
-	if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	var setting platformSetting
-	if err = db.First(&setting, "key = ?", "updates_enabled").Error; err != nil || setting.Value != "true" { c.JSON(404, gin.H{"success": false}); return }
+	if err = db.First(&setting, "key = ?", "updates_enabled").Error; err != nil || setting.Value != "true" {
+		c.JSON(404, gin.H{"success": false})
+		return
+	}
 	var items []updateEntry
-	if err = db.Where("published = ?", true).Order("published_at desc, sort_order asc").Find(&items).Error; err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	if err = db.Where("published = ?", true).Order("published_at desc, sort_order asc").Find(&items).Error; err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"success": true, "data": items})
 }
 
 func getPublicUpdateSettings(c *gin.Context) {
 	db, err := platformDatabase()
-	if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	var setting platformSetting
-	if err = db.First(&setting, "key = ?", "updates_enabled").Error; err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	if err = db.First(&setting, "key = ?", "updates_enabled").Error; err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": setting.Value == "true"}})
 }
 
 func listUpdates(c *gin.Context) {
-	db, err := platformDatabase(); if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	db, err := platformDatabase()
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	var items []updateEntry
-	if err = db.Order("published_at desc, sort_order asc").Find(&items).Error; err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	if err = db.Order("published_at desc, sort_order asc").Find(&items).Error; err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"success": true, "data": items})
 }
 
 func decodeUpdate(c *gin.Context) (updateEntry, error) {
 	var item updateEntry
-	if err := c.ShouldBindJSON(&item); err != nil { return item, err }
+	if err := c.ShouldBindJSON(&item); err != nil {
+		return item, err
+	}
 	item.Title = strings.TrimSpace(item.Title)
-	if item.Title == "" || strings.TrimSpace(item.BodyHTML) == "" { return item, errors.New("title and rich text content are required") }
-	if item.PublishedAt.IsZero() { item.PublishedAt = time.Now() }
+	if item.Title == "" || strings.TrimSpace(item.BodyHTML) == "" {
+		return item, errors.New("title and rich text content are required")
+	}
+	if item.PublishedAt.IsZero() {
+		item.PublishedAt = time.Now()
+	}
 	return item, nil
 }
 
 func createUpdate(c *gin.Context) {
-	item, err := decodeUpdate(c); if err != nil { c.JSON(400, gin.H{"success": false, "message": err.Error()}); return }
-	db, err := platformDatabase(); if err == nil { err = db.Create(&item).Error }
-	if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	item, err := decodeUpdate(c)
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	db, err := platformDatabase()
+	if err == nil {
+		err = db.Create(&item).Error
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"success": true, "data": item})
 }
 
 func updateUpdate(c *gin.Context) {
-	var id uint64; if _, err := fmt.Sscan(c.Param("id"), &id); err != nil { c.JSON(400, gin.H{"success": false}); return }
-	item, err := decodeUpdate(c); if err != nil { c.JSON(400, gin.H{"success": false, "message": err.Error()}); return }
-	db, err := platformDatabase(); if err == nil { err = db.Model(&updateEntry{}).Where("id = ?", id).Updates(map[string]any{"title": item.Title, "icon": item.Icon, "body_html": item.BodyHTML, "published": item.Published, "sort_order": item.SortOrder, "published_at": item.PublishedAt}).Error }
-	if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	var id uint64
+	if _, err := fmt.Sscan(c.Param("id"), &id); err != nil {
+		c.JSON(400, gin.H{"success": false})
+		return
+	}
+	item, err := decodeUpdate(c)
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	db, err := platformDatabase()
+	if err == nil {
+		err = db.Model(&updateEntry{}).Where("id = ?", id).Updates(map[string]any{"title": item.Title, "icon": item.Icon, "body_html": item.BodyHTML, "published": item.Published, "sort_order": item.SortOrder, "published_at": item.PublishedAt}).Error
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"success": true})
 }
 
 func deleteUpdate(c *gin.Context) {
 	var id uint64
-	if _, err := fmt.Sscan(c.Param("id"), &id); err != nil { c.JSON(400, gin.H{"success": false}); return }
-	db, err := platformDatabase(); if err == nil { err = db.Delete(&updateEntry{}, id).Error }
-	if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	if _, err := fmt.Sscan(c.Param("id"), &id); err != nil {
+		c.JSON(400, gin.H{"success": false})
+		return
+	}
+	db, err := platformDatabase()
+	if err == nil {
+		err = db.Delete(&updateEntry{}, id).Error
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"success": true})
 }
 
 func getUpdateSettings(c *gin.Context) {
-	db, err := platformDatabase(); if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
-	var setting platformSetting; _ = db.First(&setting, "key = ?", "updates_enabled").Error
+	db, err := platformDatabase()
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	var setting platformSetting
+	_ = db.First(&setting, "key = ?", "updates_enabled").Error
 	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": setting.Value == "true"}})
 }
 
 func saveUpdateSettings(c *gin.Context) {
-	var input struct { Enabled bool `json:"enabled"` }; if err := c.ShouldBindJSON(&input); err != nil { c.JSON(400, gin.H{"success": false}); return }
-	db, err := platformDatabase(); if err == nil { err = db.Save(&platformSetting{Key: "updates_enabled", Value: fmt.Sprint(input.Enabled)}).Error }
-	if err != nil { c.JSON(500, gin.H{"success": false, "message": err.Error()}); return }
+	var input struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(400, gin.H{"success": false})
+		return
+	}
+	db, err := platformDatabase()
+	if err == nil {
+		err = db.Save(&platformSetting{Key: "updates_enabled", Value: fmt.Sprint(input.Enabled)}).Error
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"success": true})
 }
