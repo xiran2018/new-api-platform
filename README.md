@@ -105,6 +105,128 @@ cp .env.docker.example .env.docker
 The full database migration and Docker deployment procedure is documented in
 `docs/docker-production-deployment.md`.
 
+## Starting on another server
+
+The target server runs the application, portal gateway, PostgreSQL and Redis
+entirely with Docker. It does not need Go, Bun or a local source build.
+
+### 1. Install Docker
+
+On Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install -y git curl ca-certificates
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"
+```
+
+Log out and back in, then verify:
+
+```bash
+docker version
+docker compose version
+```
+
+### 2. Download the deployment files
+
+```bash
+cd /opt
+sudo git clone https://github.com/xiran2018/new-api-platform.git
+sudo chown -R "$USER":"$USER" /opt/new-api-platform
+cd /opt/new-api-platform
+```
+
+The core submodule is not required when the server only pulls and runs the
+prebuilt images.
+
+### 3. Configure the environment
+
+```bash
+cp .env.docker.example .env.docker
+chmod 600 .env.docker
+nano .env.docker
+```
+
+Replace `POSTGRES_PASSWORD`, `REDIS_PASSWORD` and `SESSION_SECRET` with strong,
+unique values. Generate a session secret with:
+
+```bash
+openssl rand -hex 32
+```
+
+For internal HTTP access, keep `SESSION_COOKIE_SECURE=false`. For production
+HTTPS, set it to `true` and configure the exact public URL in
+`SESSION_COOKIE_TRUSTED_URL`.
+
+If the Docker Hub repositories are private, log in with an access token:
+
+```bash
+docker login --username jingquanliang
+```
+
+### 4. Pull and start all services
+
+```bash
+./scripts/docker-prod.sh pull
+./scripts/docker-prod.sh start
+```
+
+This downloads and starts:
+
+```text
+jingquanliang/new-api-platform:latest
+jingquanliang/new-api-platform-gateway:latest
+postgres:15-alpine
+redis:7-alpine
+```
+
+### 5. Verify the deployment
+
+```bash
+./scripts/docker-prod.sh ps
+curl -I http://127.0.0.1:11115/
+curl http://127.0.0.1:11115/api/status
+```
+
+Follow application and gateway logs with:
+
+```bash
+./scripts/docker-prod.sh logs
+```
+
+The public address is `http://SERVER_IP:11115/`. If a host firewall is enabled:
+
+```bash
+sudo ufw allow 11115/tcp
+```
+
+Only the gateway publishes a host port. new-api port `7000`, PostgreSQL and
+Redis remain inside the Docker network.
+
+### 6. Persistent data
+
+The Compose stack uses persistent Docker volumes:
+
+| Volume | Data |
+| --- | --- |
+| `postgres_data` | Both `new-api` and `platform_db` databases |
+| `redis_data` | Redis AOF data |
+| `app_data` | new-api runtime data |
+| `app_logs` | Application logs |
+
+Normal stop/start operations retain these volumes:
+
+```bash
+./scripts/docker-prod.sh down
+./scripts/docker-prod.sh start
+```
+
+Never run `docker compose down -v` in production because `-v` deletes the
+database and Redis volumes. Existing server data must be migrated with
+`pg_dump` and `pg_restore`; do not copy a live PostgreSQL data directory. See
+`docs/docker-production-deployment.md` for the complete migration commands.
+
 For a local rebuild and startup, run `./scripts/rebuild-and-start.sh`. It uses
 `core/new-api/.env`, including `PORT=7000`. Before building, the script runs
 `bun install --frozen-lockfile`, so dependencies added by an upstream update are
