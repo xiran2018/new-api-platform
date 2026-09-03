@@ -1,4 +1,5 @@
 name: Publish Docker images
+run-name: Publish Docker images (${{ inputs.version || github.sha }})
 
 on:
   workflow_dispatch:
