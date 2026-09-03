@@ -4,3 +4,4 @@ core/new-api/web/src/platform/
 
 # Build reports
 artifacts/
+.env.docker

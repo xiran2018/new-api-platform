@@ -1,0 +1,16 @@
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /build
+COPY extensions/gateway/go.mod ./
+COPY extensions/gateway/main.go ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /platform-gateway .
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+COPY --from=builder /platform-gateway /platform-gateway
+COPY extensions/homepage/ /homepage/
+
+EXPOSE 11115
+ENTRYPOINT ["/platform-gateway"]
+

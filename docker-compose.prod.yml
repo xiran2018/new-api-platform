@@ -1,0 +1,122 @@
+version: "2.4"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: new-api
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d new-api"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - platform
+
+  platform-db-init:
+    image: postgres:15-alpine
+    restart: "no"
+    environment:
+      PGUSER: ${POSTGRES_USER:-root}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        exists="$$(psql -h postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='platform_db'")"
+        if [ "$$exists" != "1" ]; then
+          psql -h postgres -d postgres -c 'CREATE DATABASE platform_db'
+        fi
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - platform
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: ${TZ:-Asia/Shanghai}
+    networks:
+      - platform
+
+  new-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${APP_IMAGE:-jingquanliang/new-api-platform:latest}
+    restart: unless-stopped
+    command: ["--log-dir", "/app/logs"]
+    environment:
+      PORT: "7000"
+      SQL_DSN: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@postgres:5432/new-api?sslmode=disable
+      PLATFORM_DATABASE_URL: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@postgres:5432/platform_db?sslmode=disable
+      REDIS_CONN_STRING: redis://:${REDIS_PASSWORD}@redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      NODE_NAME: ${NODE_NAME:-new-api-node-1}
+      BATCH_UPDATE_ENABLED: "true"
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - app_data:/data
+      - app_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7000/api/status | grep -q '\"success\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks:
+      - platform
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    image: ${GATEWAY_IMAGE:-jingquanliang/new-api-platform-gateway:latest}
+    restart: unless-stopped
+    environment:
+      PLATFORM_GATEWAY_PORT: "11115"
+      PLATFORM_GATEWAY_UPSTREAM: http://new-api:7000
+      PLATFORM_HOMEPAGE_DIR: /homepage
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${PUBLIC_PORT:-11115}:11115"
+    depends_on:
+      new-api:
+        condition: service_healthy
+    networks:
+      - platform
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_data:
+  app_logs:
+
+networks:
+  platform:
+    driver: bridge

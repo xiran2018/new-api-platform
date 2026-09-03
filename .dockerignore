@@ -1,0 +1,12 @@
+.git
+.agents
+.codex
+artifacts
+core/new-api/.git
+core/new-api/.env
+core/new-api/data
+core/new-api/logs
+core/new-api/web/node_modules
+core/new-api/web/dist
+extensions/gateway/llmapi-platform-gateway
+

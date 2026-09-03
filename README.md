@@ -6,6 +6,100 @@ Run `./scripts/assemble-extensions.sh` before frontend or backend builds. The sc
 
 See `docs/extension-architecture.md` for the stable integration seams and upgrade procedure.
 
+For a complete Docker deployment with the application, portal gateway,
+PostgreSQL and Redis, see [docs/docker-production-deployment.md](docs/docker-production-deployment.md).
+Use `./scripts/publish-docker-images.sh` to build and publish both project
+images to Docker Hub with `latest` and immutable version tags.
+
+## Publishing Docker images
+
+Prerequisites:
+
+- Docker Engine is installed and the current user can run `docker`.
+- The machine can access `registry-1.docker.io` and `proxy.golang.org`.
+- A Docker Hub access token has been created. Do not use the account password.
+
+Build and publish both images using the default Docker Hub username
+`jingquanliang` and the current Git commit as the immutable version:
+
+```bash
+cd /home/jing/new-api-platform
+./scripts/publish-docker-images.sh --token 'YOUR_DOCKER_HUB_ACCESS_TOKEN'
+```
+
+Specify a different Docker Hub username or version when needed:
+
+```bash
+./scripts/publish-docker-images.sh \
+  --token 'YOUR_DOCKER_HUB_ACCESS_TOKEN' \
+  --username jingquanliang \
+  --version v1.0.0
+```
+
+Available arguments:
+
+| Argument | Meaning | Default |
+| --- | --- | --- |
+| `--token TOKEN` | Docker Hub access token | Existing Docker login or `DOCKERHUB_TOKEN` |
+| `--username USERNAME` | Docker Hub namespace | `jingquanliang` |
+| `--version VERSION` | Immutable image tag | Current short Git commit |
+| `--help` | Display command usage | - |
+
+The script builds and pushes four tags:
+
+```text
+jingquanliang/new-api-platform:<version>
+jingquanliang/new-api-platform:latest
+jingquanliang/new-api-platform-gateway:<version>
+jingquanliang/new-api-platform-gateway:latest
+```
+
+### Publish with GitHub Actions
+
+If the local network cannot resolve or reach Docker Hub, use the included
+`Publish Docker images` GitHub Actions workflow. In the GitHub repository open
+`Settings -> Secrets and variables -> Actions` and create:
+
+| Secret | Value |
+| --- | --- |
+| `DOCKERHUB_USERNAME` | `jingquanliang` |
+| `DOCKERHUB_TOKEN` | A Docker Hub access token with read/write permission |
+
+Then open `Actions -> Publish Docker images -> Run workflow`. The optional
+version input accepts values such as `v1.0.0`. With no version input, the
+workflow publishes `sha-<commit>` and `latest`. Pushing a Git tag beginning
+with `v` also triggers the workflow automatically:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow runs on GitHub infrastructure, so it does not depend on the local
+machine's DNS or proxy configuration.
+
+Passing a token as an argument may record it in shell history or expose it
+briefly in the process list. On a shared machine, prefer:
+
+```bash
+export DOCKERHUB_TOKEN='YOUR_DOCKER_HUB_ACCESS_TOKEN'
+./scripts/publish-docker-images.sh
+unset DOCKERHUB_TOKEN
+```
+
+On the deployment machine, download both project images plus the official
+PostgreSQL and Redis images, then start the stack:
+
+```bash
+cp .env.docker.example .env.docker
+# Edit .env.docker and replace all placeholder secrets.
+./scripts/docker-prod.sh pull
+./scripts/docker-prod.sh start
+```
+
+The full database migration and Docker deployment procedure is documented in
+`docs/docker-production-deployment.md`.
+
 For a local rebuild and startup, run `./scripts/rebuild-and-start.sh`. It uses
 `core/new-api/.env`, including `PORT=7000`. Before building, the script runs
 `bun install --frozen-lockfile`, so dependencies added by an upstream update are
