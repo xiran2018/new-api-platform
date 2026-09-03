@@ -65,6 +65,11 @@ If the local network cannot resolve or reach Docker Hub, use the included
 | `DOCKERHUB_USERNAME` | `jingquanliang` |
 | `DOCKERHUB_TOKEN` | A Docker Hub access token with read/write permission |
 
+These must be **Repository secrets**, not Actions variables. The username
+secret is optional because the workflow defaults to `jingquanliang`; the
+`DOCKERHUB_TOKEN` repository secret is required. Environment secrets are not
+used unless the workflow job is explicitly assigned to that environment.
+
 Then open `Actions -> Publish Docker images -> Run workflow`. The optional
 version input accepts values such as `v1.0.0`. With no version input, the
 workflow publishes `sha-<commit>` and `latest`. Pushing a Git tag beginning
