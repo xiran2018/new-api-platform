@@ -27,13 +27,13 @@ Use this document when `./scripts/sync-upstream.sh --merge` reports a conflict.
 Keep existing new-api configuration unchanged:
 
 ```text
-SQL_DSN=postgresql://root:123456@localhost:5432/new-api
+SQL_DSN=postgresql://root:POSTGRES_PASSWORD@localhost:5432/new-api
 ```
 
 Platform-only features use:
 
 ```text
-PLATFORM_DATABASE_URL=postgresql://root:123456@localhost:5432/platform_db?sslmode=disable
+PLATFORM_DATABASE_URL=postgresql://root:POSTGRES_PASSWORD@localhost:5432/platform_db?sslmode=disable
 ```
 
 Do not replace `POSTGRES_DB: new-api` with `platform_db`. The Compose `platform-db-init` service creates the second database in the same PostgreSQL instance.

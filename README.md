@@ -11,136 +11,138 @@ PostgreSQL and Redis, see [docs/docker-production-deployment.md](docs/docker-pro
 Use `./scripts/publish-docker-images.sh` to build and publish both project
 images to Docker Hub with `latest` and immutable version tags.
 
-## Publishing Docker images
+## 五种运行方式
 
-Prerequisites:
+下面五种方式相互独立。新机器部署前先确定使用哪一种，不要同时执行
+`docker-compose.prod.yml` 和 `docker-compose.host-db.yml`，除非明确需要两套应用。
 
-- Docker Engine is installed and the current user can run `docker`.
-- The machine can access `registry-1.docker.io` and `proxy.golang.org`.
-- A Docker Hub access token has been created. Do not use the account password.
+| 方式 | 应用 | PostgreSQL/Redis | 对外端口 | 主要配置文件 |
+| --- | --- | --- | --- | --- |
+| 1. 源码启动 | 宿主机源码 | 宿主机已有服务或方式 3 | `11115` | `core/new-api/.env` |
+| 2. 全部 Docker | Docker 镜像 | Compose 内部容器 | `11115` | `.env.docker`、`docker-compose.prod.yml` |
+| 3. Docker 只启动数据库 | 后续用源码启动 | Docker 容器并映射到宿主机 | `5432`、`6379` | `core/new-api/.env`、`core/new-api/docker-compose-mydev.yml` |
+| 4. Docker 只启动应用 | Docker 镜像 | 已存在并映射到宿主机的容器 | `11116` | `.env.docker`、`docker-compose.host-db.yml` |
+| 5. 生成 Docker 镜像 | 构建但不启动 | 不需要 | 无 | `Dockerfile`、`Dockerfile.gateway` |
 
-Build and publish both images using the default Docker Hub username
-`jingquanliang` and the current Git commit as the immutable version:
+### 公共准备工作
 
-```bash
-cd /home/jing/new-api-platform
-./scripts/publish-docker-images.sh --token 'YOUR_DOCKER_HUB_ACCESS_TOKEN'
-```
-
-Specify a different Docker Hub username or version when needed:
-
-```bash
-./scripts/publish-docker-images.sh \
-  --token 'YOUR_DOCKER_HUB_ACCESS_TOKEN' \
-  --username jingquanliang \
-  --version v1.0.0
-```
-
-Available arguments:
-
-| Argument | Meaning | Default |
-| --- | --- | --- |
-| `--token TOKEN` | Docker Hub access token | Existing Docker login or `DOCKERHUB_TOKEN` |
-| `--username USERNAME` | Docker Hub namespace | `jingquanliang` |
-| `--version VERSION` | Immutable image tag | Current short Git commit |
-| `--help` | Display command usage | - |
-
-The script builds and pushes four tags:
-
-```text
-jingquanliang/new-api-platform:<version>
-jingquanliang/new-api-platform:latest
-jingquanliang/new-api-platform-gateway:<version>
-jingquanliang/new-api-platform-gateway:latest
-```
-
-### Publish with GitHub Actions
-
-If the local network cannot resolve or reach Docker Hub, use the included
-`Publish Docker images` GitHub Actions workflow. In the GitHub repository open
-`Settings -> Secrets and variables -> Actions` and create:
-
-| Secret | Value |
-| --- | --- |
-| `DOCKERHUB_USERNAME` | `jingquanliang` |
-| `DOCKERHUB_TOKEN` | A Docker Hub access token with read/write permission |
-
-These must be **Repository secrets**, not Actions variables. The username
-secret is optional because the workflow defaults to `jingquanliang`; the
-`DOCKERHUB_TOKEN` repository secret is required. Environment secrets are not
-used unless the workflow job is explicitly assigned to that environment.
-
-Then open `Actions -> Publish Docker images -> Run workflow`. The optional
-version input accepts values such as `v1.0.0`. With no version input, the
-workflow publishes `sha-<commit>` and `latest`. Pushing a Git tag beginning
-with `v` also triggers the workflow automatically:
+拉取完整代码。源码运行、数据库开发栈和本地镜像构建都必须包含 core 子模块：
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git clone --recurse-submodules \
+  https://github.com/xiran2018/new-api-platform.git
+cd new-api-platform
+git submodule update --init --recursive
 ```
 
-The workflow runs on GitHub infrastructure, so it does not depend on the local
-machine's DNS or proxy configuration.
+只通过 Docker Hub 镜像运行方式 2 或方式 4 时，core 子模块不参与运行，但保留递归
+拉取可以确保后续仍能构建和更新源码。
 
-Passing a token as an argument may record it in shell history or expose it
-briefly in the process list. On a shared machine, prefer:
+本文命令默认使用 Docker Compose v2（`docker compose`）。如果服务器只有旧版
+`docker-compose`，手工命令中的 `docker compose` 可直接替换为 `docker-compose`；
+`scripts/docker-prod.sh` 会自动识别两种版本。新机器建议安装 Compose v2。
 
-```bash
-export DOCKERHUB_TOKEN='YOUR_DOCKER_HUB_ACCESS_TOKEN'
-./scripts/publish-docker-images.sh
-unset DOCKERHUB_TOKEN
-```
-
-On the deployment machine, download both project images plus the official
-PostgreSQL and Redis images, then start the stack:
-
-```bash
-cp .env.docker.example .env.docker
-# Edit .env.docker and replace all placeholder secrets.
-./scripts/docker-prod.sh pull
-./scripts/docker-prod.sh start
-```
-
-The full database migration and Docker deployment procedure is documented in
-`docs/docker-production-deployment.md`.
-
-## Starting on another server
-
-The target server runs the application, portal gateway, PostgreSQL and Redis
-entirely with Docker. It does not need Go, Bun or a local source build.
-
-### 1. Install Docker
-
-On Ubuntu/Debian:
+方式 2、3、4、5 都需要 Docker。Ubuntu/Debian 新机器可执行：
 
 ```bash
 sudo apt update
-sudo apt install -y git curl ca-certificates
+sudo apt install -y git curl ca-certificates openssl
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER"
 ```
 
-Log out and back in, then verify:
+执行 `usermod` 后退出并重新登录，再确认：
 
 ```bash
 docker version
 docker compose version
 ```
 
-### 2. Download the deployment files
+### 方式 1：源码启动程序
+
+适用场景：开发和调试 Go/React/平台扩展源码。安装：
 
 ```bash
-cd /opt
-sudo git clone https://github.com/xiran2018/new-api-platform.git
-sudo chown -R "$USER":"$USER" /opt/new-api-platform
-cd /opt/new-api-platform
+# Ubuntu/Debian 基础工具和 Docker（数据库使用 Docker 时需要）
+sudo apt update
+sudo apt install -y git curl ca-certificates build-essential openssl
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"
+
+# 安装当前稳定版 Go
+sudo snap install go --classic
+
+# 安装 Bun；安装完成后重新加载 shell
+curl -fsSL https://bun.sh/install | bash
+source "$HOME/.bashrc"
+
+# 当前 core/new-api/go.mod 要求 Go 1.25.1 或更高版本
+go version
+bun --version
+docker compose version
 ```
 
-The core submodule is not required when the server only pulls and runs the
-prebuilt images.
+全新 clone 不包含私有 `.env`。创建并编辑：
 
-### 3. Configure the environment
+```bash
+cd core/new-api
+cp .env.example .env
+chmod 600 .env
+nano .env
+```
+
+在 `core/new-api/.env` 中取消注释或新增以下字段。URL 中的密码必须与上方
+密码字段完全相同：
+
+```dotenv
+PORT=7000
+POSTGRES_PASSWORD=YOUR_POSTGRES_PASSWORD
+REDIS_PASSWORD=YOUR_REDIS_PASSWORD
+SQL_DSN=postgresql://root:YOUR_POSTGRES_PASSWORD@127.0.0.1:5432/new-api
+PLATFORM_DATABASE_URL=postgresql://root:YOUR_POSTGRES_PASSWORD@127.0.0.1:5432/platform_db?sslmode=disable
+REDIS_CONN_STRING=redis://:YOUR_REDIS_PASSWORD@127.0.0.1:6379/0
+SESSION_SECRET=YOUR_32_BYTE_OR_LONGER_RANDOM_SECRET
+```
+
+生成会话密钥：
+
+```bash
+openssl rand -hex 32
+```
+
+先保证 PostgreSQL、Redis 和 `platform_db` 已存在。可以执行方式 3，或者启动已经
+存在的共享容器：
+
+```bash
+docker start postgres redis
+```
+
+验证连接配置和服务：
+
+```bash
+cd /path/to/new-api-platform/core/new-api
+set -a; source .env; set +a
+docker exec postgres pg_isready -U root -d new-api
+docker exec redis redis-cli -a "$REDIS_PASSWORD" ping
+unset POSTGRES_PASSWORD REDIS_PASSWORD SQL_DSN PLATFORM_DATABASE_URL REDIS_CONN_STRING SESSION_SECRET
+```
+
+从项目根目录启动源码应用和门户：
+
+```bash
+cd /path/to/new-api-platform
+./scripts/rebuild-and-start.sh
+```
+
+浏览器访问 `http://SERVER_IP:11115/`。该脚本会装配 `extensions/`、按锁文件安装
+前端依赖、构建前端，然后运行 new-api 和门户代理。使用 `Ctrl+C` 同时停止两者。
+
+### 方式 2：应用、PostgreSQL 和 Redis 全部由 Docker 启动
+
+适用场景：独立服务器部署。只需安装 Git、Docker Engine 和 Docker Compose，
+不需要安装 Go 或 Bun。
+
+创建根目录 Docker 环境文件：
 
 ```bash
 cp .env.docker.example .env.docker
@@ -148,166 +150,232 @@ chmod 600 .env.docker
 nano .env.docker
 ```
 
-Replace `POSTGRES_PASSWORD`, `REDIS_PASSWORD` and `SESSION_SECRET` with strong,
-unique values. Generate a session secret with:
+至少设置以下字段：
 
-```bash
-openssl rand -hex 32
+```dotenv
+POSTGRES_USER=root
+POSTGRES_PASSWORD=YOUR_URL_SAFE_POSTGRES_PASSWORD
+REDIS_PASSWORD=YOUR_REDIS_PASSWORD
+SESSION_SECRET=YOUR_32_BYTE_OR_LONGER_RANDOM_SECRET
+PUBLIC_PORT=11115
+TZ=Asia/Shanghai
+NODE_NAME=new-api-node-1
+SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_TRUSTED_URL=
+TRUSTED_PROXIES=
+APP_IMAGE=jingquanliang/new-api-platform:latest
+GATEWAY_IMAGE=jingquanliang/new-api-platform-gateway:latest
 ```
 
-For internal HTTP access, keep `SESSION_COOKIE_SECURE=false`. For production
-HTTPS, set it to `true` and configure the exact public URL in
-`SESSION_COOKIE_TRUSTED_URL`.
+生产 HTTPS 环境应改为：
 
-If the Docker Hub repositories are private, log in with an access token:
-
-```bash
-docker login --username jingquanliang
+```dotenv
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_TRUSTED_URL=https://YOUR_DOMAIN
+TRUSTED_PROXIES=YOUR_LOAD_BALANCER_CIDR
 ```
 
-### 4. Pull and start all services
+下载两个项目镜像以及官方 PostgreSQL、Redis 镜像并启动：
 
 ```bash
 ./scripts/docker-prod.sh pull
 ./scripts/docker-prod.sh start
+./scripts/docker-prod.sh ps
 ```
 
-This downloads and starts:
-
-```text
-jingquanliang/new-api-platform:latest
-jingquanliang/new-api-platform-gateway:latest
-postgres:15
-redis:latest
-```
-
-### 5. Verify the deployment
+`ps` 中 `postgres`、`redis`、`new-api` 应为 healthy，`gateway` 应为 running。
+如需先检查 Compose 展开结果而不启动：
 
 ```bash
-./scripts/docker-prod.sh ps
-curl -I http://127.0.0.1:11115/
-curl http://127.0.0.1:11115/api/status
+docker compose --env-file .env.docker -f docker-compose.prod.yml config -q
 ```
 
-Follow application and gateway logs with:
+访问 `http://SERVER_IP:11115/`。查看日志或停止：
 
 ```bash
 ./scripts/docker-prod.sh logs
-```
-
-The public address is `http://SERVER_IP:11115/`. If a host firewall is enabled:
-
-```bash
-sudo ufw allow 11115/tcp
-```
-
-Only the gateway publishes a host port. new-api port `7000`, PostgreSQL and
-Redis remain inside the Docker network.
-
-### 6. Persistent data
-
-The Compose stack uses persistent Docker volumes:
-
-| Volume | Data |
-| --- | --- |
-| `postgres_data` | Both `new-api` and `platform_db` databases |
-| `redis_data` | Redis AOF data |
-| `app_data` | new-api runtime data |
-| `app_logs` | Application logs |
-
-Normal stop/start operations retain these volumes:
-
-```bash
 ./scripts/docker-prod.sh down
-./scripts/docker-prod.sh start
 ```
 
-Never run `docker compose down -v` in production because `-v` deletes the
-database and Redis volumes. Existing server data must be migrated with
-`pg_dump` and `pg_restore`; do not copy a live PostgreSQL data directory. See
-`docs/docker-production-deployment.md` for the complete migration commands.
+数据保存在 Compose volumes：`postgres_data`、`redis_data`、`app_data`、
+`app_logs`。不要执行 `docker compose down -v`，它会删除数据卷。`new-api` 和
+`platform_db` 都位于同一个 PostgreSQL 容器，但仍是两个独立数据库。
 
-## Testing Docker with the host databases
+`POSTGRES_PASSWORD` 只在 PostgreSQL 数据卷首次初始化时设置数据库密码。已有
+数据卷不能只靠修改 `.env.docker` 改密码；必须先在 PostgreSQL 中执行密码变更，
+再同步修改 `.env.docker`。Redis 密码也必须与实际启动参数一致。
 
-For local development, `docker-compose.host-db.yml` runs only the prebuilt
-new-api application and portal gateway containers. Both the source process and
-the Docker application connect to the PostgreSQL and Redis containers already
-published on the host at ports `5432` and `6379`.
+### 方式 3：Docker 只启动 PostgreSQL 和 Redis，对外提供服务
 
-This shares the running database services, not their physical data directories.
-Never mount one PostgreSQL data directory into two PostgreSQL containers.
+适用场景：数据库机只运行 PostgreSQL 和 Redis 容器，通过 `5432`、`6379` 提供给
+同机或另一台机器上的主程序。此 Compose 不会启动 new-api 或门户。
+先按方式 1 创建 `core/new-api/.env`，其中必须包含：
 
-Prepare `.env.docker` with the same database credentials and `SESSION_SECRET`
-used by the source application:
+```dotenv
+POSTGRES_PASSWORD=YOUR_POSTGRES_PASSWORD
+REDIS_PASSWORD=YOUR_REDIS_PASSWORD
+```
+
+然后从 core 目录启动。Compose 会自动读取同目录的 `.env`：
+
+```bash
+cd /path/to/new-api-platform/core/new-api
+docker compose -p new-api -f docker-compose-mydev.yml \
+  up -d postgres redis platform-db-init
+```
+
+首次启动前可以检查变量是否已正确展开：
+
+```bash
+docker compose -p new-api -f docker-compose-mydev.yml config -q
+```
+
+该文件的 `ports` 字段映射：
+
+```text
+数据库机所有网卡:5432 -> PostgreSQL 容器:5432
+数据库机所有网卡:6379 -> Redis 容器:6379
+```
+
+`platform-db-init` 会创建 `platform_db`。检查：
+
+```bash
+docker exec postgres pg_isready -U root -d new-api
+set -a; source .env; set +a
+docker exec redis redis-cli -a "$REDIS_PASSWORD" ping
+unset REDIS_PASSWORD
+```
+
+预期返回 `accepting connections` 和 `PONG`。随后按方式 1 从项目根目录运行
+`./scripts/rebuild-and-start.sh`。停止/恢复数据库容器：
+
+```bash
+docker stop postgres redis
+docker start postgres redis
+```
+
+使用上面的 `-p new-api` 后，PostgreSQL 数据卷名为 `new-api_pg_data`。可用
+`docker volume inspect new-api_pg_data` 确认。禁止使用 `down -v`，也不要让两个
+PostgreSQL 容器同时挂载同一个数据目录。若容器已经存在但停止，只运行
+`docker start postgres redis`；若容器被删除，重新执行本节的 `docker compose up`。
+
+主程序与数据库容器在同一台机器时，`core/new-api/.env` 使用方式 1 所示的
+`127.0.0.1`。主程序在另一台机器时，把三条连接地址中的 `127.0.0.1` 改为数据库机
+的内网 IP 或可解析域名，例如：
+
+```dotenv
+SQL_DSN=postgresql://root:YOUR_POSTGRES_PASSWORD@DB_PRIVATE_IP:5432/new-api
+PLATFORM_DATABASE_URL=postgresql://root:YOUR_POSTGRES_PASSWORD@DB_PRIVATE_IP:5432/platform_db?sslmode=disable
+REDIS_CONN_STRING=redis://:YOUR_REDIS_PASSWORD@DB_PRIVATE_IP:6379/0
+```
+
+跨机器使用时不要向公网开放 `5432`、`6379`。数据库机防火墙只允许主程序服务器的
+内网 IP 访问这两个端口；同时确认云安全组也采用相同限制。密码仍填写在主程序机的
+`core/new-api/.env`，且必须与数据库机 `core/new-api/.env` 中创建容器所用密码一致。
+
+### 方式 4：Docker 只启动主程序，使用已有 PostgreSQL 和 Redis
+
+适用场景：只启动 new-api 应用容器和门户容器，不创建 PostgreSQL、Redis。已有
+服务可以是宿主机安装的服务，也可以是已对外映射端口的 Docker 容器；服务既可以
+与主程序同机，也可以在另一台内网机器。
+
+创建根目录 `.env.docker`：
 
 ```bash
 cp .env.docker.example .env.docker
 chmod 600 .env.docker
-# Edit POSTGRES_PASSWORD, REDIS_PASSWORD and SESSION_SECRET.
+nano .env.docker
 ```
 
-Pull and start the Docker test application:
+设置：
 
-```bash
-docker compose --env-file .env.docker \
-  -f docker-compose.host-db.yml pull
-docker compose --env-file .env.docker \
-  -f docker-compose.host-db.yml up -d
+```dotenv
+POSTGRES_USER=root
+POSTGRES_PASSWORD=与已有PostgreSQL实际密码一致
+REDIS_PASSWORD=与已有Redis实际密码一致
+SESSION_SECRET=与源码core/new-api/.env一致
+HOST_DB_PUBLIC_PORT=11116
+EXISTING_SERVICES_HOST=host.docker.internal
+HOST_POSTGRES_PORT=5432
+HOST_REDIS_PORT=6379
+HOST_DB_NODE_NAME=docker-host-db-node
+APP_IMAGE=jingquanliang/new-api-platform:latest
+GATEWAY_IMAGE=jingquanliang/new-api-platform-gateway:latest
 ```
 
-The two application variants can run together:
+字段含义：
 
-| Variant | Public address | Database and Redis |
+| 文件 | 字段 | 设置方法 |
 | --- | --- | --- |
-| Source | `http://SERVER_IP:11115` | Host ports `5432` and `6379` |
-| Docker test | `http://SERVER_IP:11116` | The same host ports |
+| `.env.docker` | `EXISTING_SERVICES_HOST` | 数据库与应用 Docker 同机时填 `host.docker.internal`；数据库在另一台机器时填其内网 IP 或域名 |
+| `.env.docker` | `HOST_POSTGRES_PORT` | PostgreSQL 对外端口，默认 `5432` |
+| `.env.docker` | `HOST_REDIS_PORT` | Redis 对外端口，默认 `6379` |
+| `.env.docker` | `HOST_DB_PUBLIC_PORT` | 门户在应用机发布的端口，默认 `11116` |
+| `.env.docker` | `POSTGRES_USER`、`POSTGRES_PASSWORD` | 必须与已有 PostgreSQL 的实际凭据一致 |
+| `.env.docker` | `REDIS_PASSWORD` | 必须与已有 Redis 的实际密码一致 |
 
-new-api port `7000` remains internal to the Docker test network, so it does not
-conflict with the source process listening on host port `7000`.
-
-Check status and logs:
-
-```bash
-docker compose --env-file .env.docker \
-  -f docker-compose.host-db.yml ps
-docker compose --env-file .env.docker \
-  -f docker-compose.host-db.yml logs -f
-```
-
-Stop the Docker test stack without affecting PostgreSQL or Redis:
+已有 PostgreSQL 必须同时包含 `new-api` 和 `platform_db`。启动应用和门户，不会
+创建新的数据库或 Redis 容器：
 
 ```bash
-docker compose --env-file .env.docker \
-  -f docker-compose.host-db.yml down
+docker compose --env-file .env.docker -f docker-compose.host-db.yml pull
+docker compose --env-file .env.docker -f docker-compose.host-db.yml config -q
+docker compose --env-file .env.docker -f docker-compose.host-db.yml up -d
+docker compose --env-file .env.docker -f docker-compose.host-db.yml ps
 ```
 
-On an older host that only provides `docker-compose`, load the environment
-before running the same commands:
+Docker 应用访问 `http://SERVER_IP:11116/`，源码应用继续使用 `11115`。两者的修改
+会立即写入同一数据库。停止只会删除应用/门户容器，不影响 PostgreSQL 和 Redis：
 
 ```bash
-set -a
-source .env.docker
-set +a
-docker-compose -f docker-compose.host-db.yml up -d
+docker compose --env-file .env.docker -f docker-compose.host-db.yml down
 ```
 
-Because both application variants share the databases, all user, recharge,
-FAQ, invoice and administrative changes are immediately visible to both. Do
-not use this mode for destructive testing against production data.
-
-For a local rebuild and startup, run `./scripts/rebuild-and-start.sh`. It uses
-`core/new-api/.env`, including `PORT=7000`. Before building, the script runs
-`bun install --frozen-lockfile`, so dependencies added by an upstream update are
-installed without modifying `bun.lock`.
-
-## Databases
-
-Keep new-api and platform data separate:
+查看日志：
 
 ```bash
-SQL_DSN=postgresql://root:123456@localhost:5432/new-api
-PLATFORM_DATABASE_URL=postgresql://root:123456@localhost:5432/platform_db?sslmode=disable
+docker compose --env-file .env.docker -f docker-compose.host-db.yml logs -f
 ```
+
+同机模式通过 `extra_hosts: host.docker.internal:host-gateway` 访问宿主机。远程模式
+直接访问 `EXISTING_SERVICES_HOST`。若数据库没有监听/映射所填端口、凭据不一致，
+或数据库机防火墙拒绝应用机 IP，此方式无法连接。
+
+### 方式 5：生成并发布 Docker 镜像
+
+本地构建需要 Docker、可访问 Docker Hub/Go/Bun 依赖网络，以及完整 core 子模块。
+只生成本地镜像、不上传 Docker Hub：
+
+```bash
+cd /path/to/new-api-platform
+docker build --pull -t new-api-platform:local -f Dockerfile .
+docker build --pull -t new-api-platform-gateway:local -f Dockerfile.gateway .
+docker image ls new-api-platform new-api-platform-gateway
+```
+
+构建并上传时，创建具有 Read/Write 权限的 Docker Hub Access Token 后运行：
+
+```bash
+cd /path/to/new-api-platform
+./scripts/publish-docker-images.sh \
+  --token 'YOUR_DOCKER_HUB_ACCESS_TOKEN' \
+  --username jingquanliang \
+  --version v1.0.0
+```
+
+脚本使用根目录 `Dockerfile` 构建应用镜像，使用 `Dockerfile.gateway` 构建门户镜像，
+并推送版本标签和 `latest`：
+
+```text
+jingquanliang/new-api-platform:v1.0.0
+jingquanliang/new-api-platform:latest
+jingquanliang/new-api-platform-gateway:v1.0.0
+jingquanliang/new-api-platform-gateway:latest
+```
+
+若本机无法访问 Docker Hub，在 GitHub 仓库的 Actions Repository secrets 添加
+`DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN`，再运行 `Publish Docker images`
+workflow。Token 必须是具有 Read/Write 权限的 Access Token，不能提交到 Git。
 
 ## Updating new-api upstream
 

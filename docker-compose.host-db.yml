@@ -11,9 +11,9 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       PORT: "7000"
-      SQL_DSN: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/new-api?sslmode=disable
-      PLATFORM_DATABASE_URL: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/platform_db?sslmode=disable
-      REDIS_CONN_STRING: redis://:${REDIS_PASSWORD}@host.docker.internal:${HOST_REDIS_PORT:-6379}
+      SQL_DSN: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@${EXISTING_SERVICES_HOST:-host.docker.internal}:${HOST_POSTGRES_PORT:-5432}/new-api?sslmode=disable
+      PLATFORM_DATABASE_URL: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@${EXISTING_SERVICES_HOST:-host.docker.internal}:${HOST_POSTGRES_PORT:-5432}/platform_db?sslmode=disable
+      REDIS_CONN_STRING: redis://:${REDIS_PASSWORD}@${EXISTING_SERVICES_HOST:-host.docker.internal}:${HOST_REDIS_PORT:-6379}
       SESSION_SECRET: ${SESSION_SECRET}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:-}
