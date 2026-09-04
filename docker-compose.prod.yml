@@ -2,7 +2,7 @@ version: "2.4"
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:15
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-root}
@@ -20,7 +20,7 @@ services:
       - platform
 
   platform-db-init:
-    image: postgres:15-alpine
+    image: postgres:15
     restart: "no"
     environment:
       PGUSER: ${POSTGRES_USER:-root}
@@ -40,7 +40,7 @@ services:
       - platform
 
   redis:
-    image: redis:7-alpine
+    image: redis:latest
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
