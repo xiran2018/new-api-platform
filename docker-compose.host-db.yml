@@ -1,0 +1,58 @@
+version: "2.4"
+
+# Local image testing with the PostgreSQL and Redis services already exposed
+# by the host. This stack does not create database or Redis containers.
+services:
+  host-db-new-api:
+    image: ${APP_IMAGE:-jingquanliang/new-api-platform:latest}
+    restart: unless-stopped
+    command: ["--log-dir", "/app/logs"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      PORT: "7000"
+      SQL_DSN: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/new-api?sslmode=disable
+      PLATFORM_DATABASE_URL: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/platform_db?sslmode=disable
+      REDIS_CONN_STRING: redis://:${REDIS_PASSWORD}@host.docker.internal:${HOST_REDIS_PORT:-6379}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      NODE_NAME: ${HOST_DB_NODE_NAME:-docker-host-db-node}
+      BATCH_UPDATE_ENABLED: "true"
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - host_db_app_data:/data
+      - host_db_app_logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7000/api/status | grep -q '\"success\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks:
+      - host-db-platform
+
+  host-db-gateway:
+    image: ${GATEWAY_IMAGE:-jingquanliang/new-api-platform-gateway:latest}
+    restart: unless-stopped
+    environment:
+      PLATFORM_GATEWAY_PORT: "11115"
+      PLATFORM_GATEWAY_UPSTREAM: http://host-db-new-api:7000
+      PLATFORM_HOMEPAGE_DIR: /homepage
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${HOST_DB_PUBLIC_PORT:-11116}:11115"
+    depends_on:
+      host-db-new-api:
+        condition: service_healthy
+    networks:
+      - host-db-platform
+
+volumes:
+  host_db_app_data:
+  host_db_app_logs:
+
+networks:
+  host-db-platform:
+    driver: bridge

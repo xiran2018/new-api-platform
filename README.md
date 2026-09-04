@@ -177,8 +177,8 @@ This downloads and starts:
 ```text
 jingquanliang/new-api-platform:latest
 jingquanliang/new-api-platform-gateway:latest
-postgres:15-alpine
-redis:7-alpine
+postgres:15
+redis:latest
 ```
 
 ### 5. Verify the deployment
@@ -226,6 +226,74 @@ Never run `docker compose down -v` in production because `-v` deletes the
 database and Redis volumes. Existing server data must be migrated with
 `pg_dump` and `pg_restore`; do not copy a live PostgreSQL data directory. See
 `docs/docker-production-deployment.md` for the complete migration commands.
+
+## Testing Docker with the host databases
+
+For local development, `docker-compose.host-db.yml` runs only the prebuilt
+new-api application and portal gateway containers. Both the source process and
+the Docker application connect to the PostgreSQL and Redis containers already
+published on the host at ports `5432` and `6379`.
+
+This shares the running database services, not their physical data directories.
+Never mount one PostgreSQL data directory into two PostgreSQL containers.
+
+Prepare `.env.docker` with the same database credentials and `SESSION_SECRET`
+used by the source application:
+
+```bash
+cp .env.docker.example .env.docker
+chmod 600 .env.docker
+# Edit POSTGRES_PASSWORD, REDIS_PASSWORD and SESSION_SECRET.
+```
+
+Pull and start the Docker test application:
+
+```bash
+docker compose --env-file .env.docker \
+  -f docker-compose.host-db.yml pull
+docker compose --env-file .env.docker \
+  -f docker-compose.host-db.yml up -d
+```
+
+The two application variants can run together:
+
+| Variant | Public address | Database and Redis |
+| --- | --- | --- |
+| Source | `http://SERVER_IP:11115` | Host ports `5432` and `6379` |
+| Docker test | `http://SERVER_IP:11116` | The same host ports |
+
+new-api port `7000` remains internal to the Docker test network, so it does not
+conflict with the source process listening on host port `7000`.
+
+Check status and logs:
+
+```bash
+docker compose --env-file .env.docker \
+  -f docker-compose.host-db.yml ps
+docker compose --env-file .env.docker \
+  -f docker-compose.host-db.yml logs -f
+```
+
+Stop the Docker test stack without affecting PostgreSQL or Redis:
+
+```bash
+docker compose --env-file .env.docker \
+  -f docker-compose.host-db.yml down
+```
+
+On an older host that only provides `docker-compose`, load the environment
+before running the same commands:
+
+```bash
+set -a
+source .env.docker
+set +a
+docker-compose -f docker-compose.host-db.yml up -d
+```
+
+Because both application variants share the databases, all user, recharge,
+FAQ, invoice and administrative changes are immediately visible to both. Do
+not use this mode for destructive testing against production data.
 
 For a local rebuild and startup, run `./scripts/rebuild-and-start.sh`. It uses
 `core/new-api/.env`, including `PORT=7000`. Before building, the script runs
