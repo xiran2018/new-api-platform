@@ -32,6 +32,7 @@ else
 fi
 
 case "${1:-up}" in
+  config) "${compose[@]}" config -q ;;
   build) "${compose[@]}" build new-api gateway ;;
   pull) "${compose[@]}" pull postgres redis new-api gateway ;;
   up) "${compose[@]}" up -d --build ;;
@@ -39,5 +40,5 @@ case "${1:-up}" in
   down) "${compose[@]}" down ;;
   logs) "${compose[@]}" logs -f new-api gateway ;;
   ps) "${compose[@]}" ps ;;
-  *) echo "Usage: $0 [build|pull|up|start|down|logs|ps]" >&2; exit 1 ;;
+  *) echo "Usage: $0 [config|build|pull|up|start|down|logs|ps]" >&2; exit 1 ;;
 esac

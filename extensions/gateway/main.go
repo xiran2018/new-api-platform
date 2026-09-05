@@ -47,7 +47,17 @@ func main() {
 	})
 
 	log.Printf("platform gateway listening on :%s; proxying application traffic to %s", port, upstreamURL)
-	log.Fatal(http.ListenAndServe(":"+port, requestLogging(mux)))
+	handler := requestLogging(mux)
+	certFile := os.Getenv("PLATFORM_GATEWAY_TLS_CERT_FILE")
+	keyFile := os.Getenv("PLATFORM_GATEWAY_TLS_KEY_FILE")
+	if certFile != "" || keyFile != "" {
+		if certFile == "" || keyFile == "" {
+			log.Fatal("PLATFORM_GATEWAY_TLS_CERT_FILE and PLATFORM_GATEWAY_TLS_KEY_FILE must be configured together")
+		}
+		log.Printf("TLS enabled with certificate %s", certFile)
+		log.Fatal(http.ListenAndServeTLS(":"+port, certFile, keyFile, handler))
+	}
+	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
 func serveAsset(assetDir string, name string, response http.ResponseWriter, request *http.Request) {

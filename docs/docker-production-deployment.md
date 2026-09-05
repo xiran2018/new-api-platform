@@ -40,8 +40,22 @@ openssl rand -hex 32
 
 Edit `.env.docker` and replace all placeholder secrets. Use URL-safe
 characters for `POSTGRES_PASSWORD` because it is embedded in PostgreSQL URLs.
-For an HTTPS deployment, set `SESSION_COOKIE_SECURE=true` and set
-`SESSION_COOKIE_TRUSTED_URL` to the exact public origin.
+The complete Docker stack publishes HTTPS on host port `443`. Set these fields:
+
+```dotenv
+PUBLIC_PORT=443
+GATEWAY_TLS_CERT_DIR=./certs
+GATEWAY_TLS_CERT_FILE=/certs/fullchain.pem
+GATEWAY_TLS_KEY_FILE=/certs/privkey.pem
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_TRUSTED_URL=https://YOUR_DOMAIN
+```
+
+Point the domain DNS at this server and place its trusted PEM certificate chain
+and unencrypted PEM private key at `certs/fullchain.pem` and
+`certs/privkey.pem`. Open inbound TCP port `443` in the host firewall and cloud
+security group. See the complete Chinese procedure in the README under
+`方式 2：应用、PostgreSQL 和 Redis 全部由 Docker 启动`.
 
 The environment file is excluded from Git and must never be committed.
 
@@ -122,7 +136,7 @@ For a normal online target, pull all published and official images, then start:
 ```
 
 The `pull` command downloads the two project images plus the official
-`postgres:15-alpine` and `redis:7-alpine` images.
+`postgres:15` and `redis:latest` images.
 
 ## 4. Migrate the databases
 
@@ -186,17 +200,24 @@ Redis data directory while it is being written.
 The public entry is:
 
 ```text
-http://TARGET_HOST:11115/
+https://YOUR_DOMAIN/
 ```
 
-Only the gateway publishes a host port. new-api listens on port `7000` inside
+Only the gateway publishes host port `443`. It terminates TLS and listens on
+port `11115` inside its container. new-api listens on port `7000` inside
 the Docker network, PostgreSQL and Redis are not exposed to the host network.
 
 Verify from the target host:
 
 ```bash
-curl -I http://127.0.0.1:11115/
-curl http://127.0.0.1:11115/api/status
+curl -I https://YOUR_DOMAIN/
+curl https://YOUR_DOMAIN/api/status
+```
+
+After renewing the certificate, reload it with:
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.prod.yml restart gateway
 ```
 
 ## 7. Persistent storage and backups

@@ -15,8 +15,8 @@ services:
       PLATFORM_DATABASE_URL: postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@${EXISTING_SERVICES_HOST:-host.docker.internal}:${HOST_POSTGRES_PORT:-5432}/platform_db?sslmode=disable
       REDIS_CONN_STRING: redis://:${REDIS_PASSWORD}@${EXISTING_SERVICES_HOST:-host.docker.internal}:${HOST_REDIS_PORT:-6379}
       SESSION_SECRET: ${SESSION_SECRET}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
-      SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:-}
+      SESSION_COOKIE_SECURE: ${HOST_DB_SESSION_COOKIE_SECURE:-true}
+      SESSION_COOKIE_TRUSTED_URL: ${HOST_DB_SESSION_COOKIE_TRUSTED_URL}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       NODE_NAME: ${HOST_DB_NODE_NAME:-docker-host-db-node}
       BATCH_UPDATE_ENABLED: "true"
@@ -40,9 +40,13 @@ services:
       PLATFORM_GATEWAY_PORT: "11115"
       PLATFORM_GATEWAY_UPSTREAM: http://host-db-new-api:7000
       PLATFORM_HOMEPAGE_DIR: /homepage
+      PLATFORM_GATEWAY_TLS_CERT_FILE: ${GATEWAY_TLS_CERT_FILE:-/certs/fullchain.pem}
+      PLATFORM_GATEWAY_TLS_KEY_FILE: ${GATEWAY_TLS_KEY_FILE:-/certs/privkey.pem}
       TZ: ${TZ:-Asia/Shanghai}
     ports:
-      - "${HOST_DB_PUBLIC_PORT:-11116}:11115"
+      - "${HOST_DB_PUBLIC_PORT:-443}:11115"
+    volumes:
+      - "${GATEWAY_TLS_CERT_DIR:-./certs}:/certs:ro"
     depends_on:
       host-db-new-api:
         condition: service_healthy

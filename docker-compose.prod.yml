@@ -102,9 +102,13 @@ services:
       PLATFORM_GATEWAY_PORT: "11115"
       PLATFORM_GATEWAY_UPSTREAM: http://new-api:7000
       PLATFORM_HOMEPAGE_DIR: /homepage
+      PLATFORM_GATEWAY_TLS_CERT_FILE: ${GATEWAY_TLS_CERT_FILE:-/certs/fullchain.pem}
+      PLATFORM_GATEWAY_TLS_KEY_FILE: ${GATEWAY_TLS_KEY_FILE:-/certs/privkey.pem}
       TZ: ${TZ:-Asia/Shanghai}
     ports:
-      - "${PUBLIC_PORT:-11115}:11115"
+      - "${PUBLIC_PORT:-443}:11115"
+    volumes:
+      - "${GATEWAY_TLS_CERT_DIR:-./certs}:/certs:ro"
     depends_on:
       new-api:
         condition: service_healthy

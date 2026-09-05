@@ -19,9 +19,9 @@ images to Docker Hub with `latest` and immutable version tags.
 | 方式 | 应用 | PostgreSQL/Redis | 对外端口 | 主要配置文件 |
 | --- | --- | --- | --- | --- |
 | 1. 源码启动 | 宿主机源码 | 宿主机已有服务或方式 3 | `11115` | `core/new-api/.env` |
-| 2. 全部 Docker | Docker 镜像 | Compose 内部容器 | `11115` | `.env.docker`、`docker-compose.prod.yml` |
+| 2. 全部 Docker | Docker 镜像 | Compose 内部容器 | `443`（HTTPS） | `.env.docker`、`docker-compose.prod.yml`、`certs/` |
 | 3. Docker 只启动数据库 | 后续用源码启动 | Docker 容器并映射到宿主机 | `5432`、`6379` | `core/new-api/.env`、`core/new-api/docker-compose-mydev.yml` |
-| 4. Docker 只启动应用 | Docker 镜像 | 已存在并映射到宿主机的容器 | `11116` | `.env.docker`、`docker-compose.host-db.yml` |
+| 4. Docker 只启动应用 | Docker 镜像 | 已存在并映射到宿主机的容器 | `443`（HTTPS） | `.env.docker`、`docker-compose.host-db.yml`、`certs/` |
 | 5. 生成 Docker 镜像 | 构建但不启动 | 不需要 | 无 | `Dockerfile`、`Dockerfile.gateway` |
 
 ### 公共准备工作
@@ -139,15 +139,45 @@ cd /path/to/new-api-platform
 
 ### 方式 2：应用、PostgreSQL 和 Redis 全部由 Docker 启动
 
-适用场景：独立服务器部署。只需安装 Git、Docker Engine 和 Docker Compose，
-不需要安装 Go 或 Bun。
+适用场景：独立服务器部署。只需安装 Docker Engine 和 Docker Compose，不需要安装
+Go、Bun，也不需要下载 `core/new-api` 源码。但 Compose、环境文件和 TLS 证书必须
+保存在宿主机上的持久化部署目录。本说明统一使用 `/opt/llmapi-deploy`。
 
-创建根目录 Docker 环境文件：
+只下载运行需要的 Compose、环境示例和部署脚本，不下载应用源码：
 
 ```bash
+sudo mkdir -p /opt/llmapi-deploy/certs /opt/llmapi-deploy/scripts
+sudo chown -R "$USER":"$USER" /opt/llmapi-deploy
+cd /opt/llmapi-deploy
+
+curl -fL \
+  https://raw.githubusercontent.com/xiran2018/new-api-platform/main/docker-compose.prod.yml \
+  -o docker-compose.prod.yml
+curl -fL \
+  https://raw.githubusercontent.com/xiran2018/new-api-platform/main/.env.docker.example \
+  -o .env.docker.example
+curl -fL \
+  https://raw.githubusercontent.com/xiran2018/new-api-platform/main/scripts/docker-prod.sh \
+  -o scripts/docker-prod.sh
+chmod +x scripts/docker-prod.sh
+
 cp .env.docker.example .env.docker
 chmod 600 .env.docker
 nano .env.docker
+```
+
+最终部署目录只包含运行配置，不包含 Go/React 源码：
+
+```text
+/opt/llmapi-deploy/
+├── .env.docker
+├── .env.docker.example
+├── docker-compose.prod.yml
+├── scripts/
+│   └── docker-prod.sh
+└── certs/
+    ├── fullchain.pem
+    └── privkey.pem
 ```
 
 至少设置以下字段：
@@ -157,44 +187,203 @@ POSTGRES_USER=root
 POSTGRES_PASSWORD=YOUR_URL_SAFE_POSTGRES_PASSWORD
 REDIS_PASSWORD=YOUR_REDIS_PASSWORD
 SESSION_SECRET=YOUR_32_BYTE_OR_LONGER_RANDOM_SECRET
-PUBLIC_PORT=11115
+PUBLIC_PORT=443
 TZ=Asia/Shanghai
 NODE_NAME=new-api-node-1
-SESSION_COOKIE_SECURE=false
-SESSION_COOKIE_TRUSTED_URL=
+GATEWAY_TLS_CERT_DIR=/opt/llmapi-deploy/certs
+GATEWAY_TLS_CERT_FILE=/certs/fullchain.pem
+GATEWAY_TLS_KEY_FILE=/certs/privkey.pem
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_TRUSTED_URL=https://YOUR_DOMAIN
 TRUSTED_PROXIES=
 APP_IMAGE=jingquanliang/new-api-platform:latest
 GATEWAY_IMAGE=jingquanliang/new-api-platform-gateway:latest
 ```
 
-生产 HTTPS 环境应改为：
+如果前面还有负责 TLS 终止的可信负载均衡器，再设置其内网网段：
 
 ```dotenv
-SESSION_COOKIE_SECURE=true
-SESSION_COOKIE_TRUSTED_URL=https://YOUR_DOMAIN
 TRUSTED_PROXIES=YOUR_LOAD_BALANCER_CIDR
 ```
 
+准备域名并将 DNS 指向服务器。证书保存在宿主机部署目录中，由 Compose 以只读方式
+挂载到 gateway 容器。容器删除或升级不会删除这些证书：
+
+```text
+/opt/llmapi-deploy/certs/fullchain.pem
+/opt/llmapi-deploy/certs/privkey.pem
+```
+
+#### 方法一：使用 Let's Encrypt 生成正式证书（推荐）
+
+前提条件：拥有域名，域名的 A/AAAA 记录已经指向该服务器公网地址，并且公网、云
+安全组和本机防火墙允许 TCP `80` 和 `443`。Certbot standalone 申请时会临时监听
+`80`；如果该端口已被其他程序占用，需要先停止占用程序。
+
+Ubuntu/Debian 执行：
+
+```bash
+sudo apt update
+sudo apt install -y certbot
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ss -lntp | grep -E ':80|:443' || true
+
+sudo certbot certonly --standalone \
+  --domain api.example.com \
+  --email admin@example.com \
+  --agree-tos \
+  --no-eff-email
+```
+
+将 `api.example.com` 和邮箱替换为实际值。成功后 Certbot 文件位于
+`/etc/letsencrypt/live/api.example.com/`。不要直接只挂载这个 `live` 目录，因为其中
+包含指向 `archive` 目录的相对符号链接。把证书内容复制到部署目录：
+
+```bash
+cd /opt/llmapi-deploy
+mkdir -p /opt/llmapi-deploy/certs
+sudo cp --dereference \
+  /etc/letsencrypt/live/api.example.com/fullchain.pem \
+  /opt/llmapi-deploy/certs/fullchain.pem
+sudo cp --dereference \
+  /etc/letsencrypt/live/api.example.com/privkey.pem \
+  /opt/llmapi-deploy/certs/privkey.pem
+sudo chmod 644 /opt/llmapi-deploy/certs/fullchain.pem
+sudo chmod 600 /opt/llmapi-deploy/certs/privkey.pem
+sudo openssl x509 -in /opt/llmapi-deploy/certs/fullchain.pem \
+  -noout -subject -issuer -dates
+```
+
+`.env.docker` 中的域名必须与证书域名一致：
+
+```dotenv
+SESSION_COOKIE_TRUSTED_URL=https://api.example.com
+HOST_DB_SESSION_COOKIE_TRUSTED_URL=https://api.example.com
+```
+
+Certbot 通常会安装自动续期定时器，可检查和模拟续期：
+
+```bash
+systemctl status certbot.timer
+sudo certbot renew --dry-run
+```
+
+证书续期后必须再次执行上面的两条 `cp --dereference`，然后根据运行方式重启门户：
+
+```bash
+# 方式 2：全部 Docker
+cd /opt/llmapi-deploy
+docker compose --env-file .env.docker -f docker-compose.prod.yml restart gateway
+
+# 方式 4：只启动主程序 Docker
+docker compose --env-file .env.docker -f docker-compose.host-db.yml \
+  restart host-db-gateway
+```
+
+#### 方法二：生成内网测试用自签名证书
+
+自签名证书不会被浏览器自动信任，只适合开发或内网验证。将域名和 IP 替换为测试机
+的实际值：
+
+```bash
+cd /opt/llmapi-deploy
+mkdir -p /opt/llmapi-deploy/certs
+openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 365 \
+  -keyout /opt/llmapi-deploy/certs/privkey.pem \
+  -out /opt/llmapi-deploy/certs/fullchain.pem \
+  -subj '/CN=llmapi.example.local' \
+  -addext 'subjectAltName=DNS:llmapi.example.local,IP:192.168.1.10'
+chmod 644 /opt/llmapi-deploy/certs/fullchain.pem
+chmod 600 /opt/llmapi-deploy/certs/privkey.pem
+openssl x509 -in /opt/llmapi-deploy/certs/fullchain.pem \
+  -noout -subject -dates
+```
+
+客户端需要信任该证书，或者测试时接受浏览器警告。使用 IP 访问时，IP 必须包含在
+`subjectAltName` 中；仅设置 `CN` 不够。
+
+检查证书文件并开放 HTTPS 端口：
+
+```bash
+cd /opt/llmapi-deploy
+sudo chmod 644 /opt/llmapi-deploy/certs/fullchain.pem
+sudo chmod 600 /opt/llmapi-deploy/certs/privkey.pem
+sudo test -s /opt/llmapi-deploy/certs/fullchain.pem
+sudo test -s /opt/llmapi-deploy/certs/privkey.pem
+sudo ufw allow 443/tcp
+sudo ss -lntp | grep ':443' || true
+```
+
+如果 `443` 已被其他服务占用，需要先停止冲突服务，或者将 `PUBLIC_PORT` 改为
+`8443` 并通过 `https://YOUR_DOMAIN:8443/` 访问。只修改端口但不提供证书，门户
+无法启动。
+
+#### 使用脚本启动生产环境（推荐）
+
+`docker-prod.sh` 会自动读取同一部署目录下的 `.env.docker` 和
+`docker-compose.prod.yml`，同时兼容 `docker compose` 和旧版 `docker-compose`。
 下载两个项目镜像以及官方 PostgreSQL、Redis 镜像并启动：
 
 ```bash
+cd /opt/llmapi-deploy
+./scripts/docker-prod.sh config
 ./scripts/docker-prod.sh pull
 ./scripts/docker-prod.sh start
 ./scripts/docker-prod.sh ps
 ```
 
 `ps` 中 `postgres`、`redis`、`new-api` 应为 healthy，`gateway` 应为 running。
-如需先检查 Compose 展开结果而不启动：
+
+访问 `https://YOUR_DOMAIN/`，并验证 API：
 
 ```bash
-docker compose --env-file .env.docker -f docker-compose.prod.yml config -q
+curl -I https://YOUR_DOMAIN/
+curl https://YOUR_DOMAIN/api/status
 ```
 
-访问 `http://SERVER_IP:11115/`。查看日志或停止：
+查看日志或停止：
 
 ```bash
 ./scripts/docker-prod.sh logs
 ./scripts/docker-prod.sh down
+```
+
+Docker Hub 发布新版本后，更新并重建容器：
+
+```bash
+cd /opt/llmapi-deploy
+./scripts/docker-prod.sh pull
+./scripts/docker-prod.sh start
+./scripts/docker-prod.sh ps
+```
+
+脚本命令含义：
+
+| 命令 | 作用 |
+| --- | --- |
+| `config` | 检查环境变量和 Compose 配置，不启动容器 |
+| `pull` | 拉取应用、门户、PostgreSQL 和 Redis 镜像 |
+| `start` | 使用已有镜像创建或更新并启动全部容器，不在生产机编译源码 |
+| `ps` | 查看容器状态和健康状态 |
+| `logs` | 持续查看应用和门户日志，按 `Ctrl+C` 退出查看但不停止容器 |
+| `down` | 停止并删除容器和网络，保留数据卷 |
+
+如需排查脚本问题，可以直接执行完全等价的 Compose 命令：
+
+```bash
+cd /opt/llmapi-deploy
+docker compose --env-file .env.docker -f docker-compose.prod.yml pull
+docker compose --env-file .env.docker -f docker-compose.prod.yml config -q
+docker compose --env-file .env.docker -f docker-compose.prod.yml up -d --no-build
+docker compose --env-file .env.docker -f docker-compose.prod.yml ps
+```
+
+证书续期或替换后，重启门户以重新读取证书：
+
+```bash
+cd /opt/llmapi-deploy
+docker compose --env-file .env.docker -f docker-compose.prod.yml restart gateway
 ```
 
 数据保存在 Compose volumes：`postgres_data`、`redis_data`、`app_data`、
@@ -294,13 +483,19 @@ POSTGRES_USER=root
 POSTGRES_PASSWORD=与已有PostgreSQL实际密码一致
 REDIS_PASSWORD=与已有Redis实际密码一致
 SESSION_SECRET=与源码core/new-api/.env一致
-HOST_DB_PUBLIC_PORT=11116
+HOST_DB_PUBLIC_PORT=443
 EXISTING_SERVICES_HOST=host.docker.internal
 HOST_POSTGRES_PORT=5432
 HOST_REDIS_PORT=6379
 HOST_DB_NODE_NAME=docker-host-db-node
+GATEWAY_TLS_CERT_DIR=./certs
+GATEWAY_TLS_CERT_FILE=/certs/fullchain.pem
+GATEWAY_TLS_KEY_FILE=/certs/privkey.pem
 APP_IMAGE=jingquanliang/new-api-platform:latest
 GATEWAY_IMAGE=jingquanliang/new-api-platform-gateway:latest
+HOST_DB_SESSION_COOKIE_SECURE=true
+HOST_DB_SESSION_COOKIE_TRUSTED_URL=https://YOUR_DOMAIN
+TRUSTED_PROXIES=
 ```
 
 字段含义：
@@ -310,9 +505,61 @@ GATEWAY_IMAGE=jingquanliang/new-api-platform-gateway:latest
 | `.env.docker` | `EXISTING_SERVICES_HOST` | 数据库与应用 Docker 同机时填 `host.docker.internal`；数据库在另一台机器时填其内网 IP 或域名 |
 | `.env.docker` | `HOST_POSTGRES_PORT` | PostgreSQL 对外端口，默认 `5432` |
 | `.env.docker` | `HOST_REDIS_PORT` | Redis 对外端口，默认 `6379` |
-| `.env.docker` | `HOST_DB_PUBLIC_PORT` | 门户在应用机发布的端口，默认 `11116` |
+| `.env.docker` | `HOST_DB_PUBLIC_PORT` | 门户在应用机发布的 HTTPS 端口，默认 `443` |
 | `.env.docker` | `POSTGRES_USER`、`POSTGRES_PASSWORD` | 必须与已有 PostgreSQL 的实际凭据一致 |
 | `.env.docker` | `REDIS_PASSWORD` | 必须与已有 Redis 的实际密码一致 |
+| `.env.docker` | `GATEWAY_TLS_CERT_DIR` | 应用机上的证书目录，默认项目根目录 `./certs` |
+| `.env.docker` | `GATEWAY_TLS_CERT_FILE` | 容器内证书链路径，保持 `/certs/fullchain.pem` |
+| `.env.docker` | `GATEWAY_TLS_KEY_FILE` | 容器内私钥路径，保持 `/certs/privkey.pem` |
+| `.env.docker` | `HOST_DB_SESSION_COOKIE_SECURE` | 使用 HTTPS 时必须为 `true` |
+| `.env.docker` | `HOST_DB_SESSION_COOKIE_TRUSTED_URL` | 填完整外部地址，如 `https://api.example.com`，不要添加末尾 `/` |
+
+#### 配置 443 和 HTTPS 证书
+
+`443` 是标准 HTTPS 端口，不能只修改端口而仍使用明文 HTTP。准备域名，并让域名的
+DNS A/AAAA 记录指向应用服务器。证书生成、复制和续期方法见方式 2 中的
+“方法一：使用 Let's Encrypt 生成正式证书”和“方法二：生成内网测试用自签名证书”。
+最终应存在：
+
+```text
+new-api-platform/certs/fullchain.pem
+new-api-platform/certs/privkey.pem
+```
+
+设置权限并确认文件存在：
+
+```bash
+cd /path/to/new-api-platform
+mkdir -p certs
+# 将证书复制到上述两个路径后执行：
+sudo chmod 644 certs/fullchain.pem
+sudo chmod 600 certs/privkey.pem
+test -s certs/fullchain.pem && test -s certs/privkey.pem
+```
+
+证书必须包含所访问的域名。生产环境应使用受信任 CA（例如 Let's Encrypt）签发的
+证书；自签名证书只适合测试，浏览器会显示安全警告。服务器防火墙和云安全组需要
+允许入站 TCP `443`，不要对公网开放 PostgreSQL `5432` 或 Redis `6379`：
+
+```bash
+sudo ufw allow 443/tcp
+```
+
+绑定宿主机 `443` 通常不要求容器进程拥有 root 权限，因为 Docker 负责端口映射；
+但当前用户必须有运行 Docker 的权限。如果 `443` 已被其他程序占用，先用
+`sudo ss -lntp | grep ':443'` 查明占用，或者临时把 `HOST_DB_PUBLIC_PORT` 改成
+`8443`，此时访问地址为 `https://YOUR_DOMAIN:8443/`。
+
+门户进程在启动时读取证书。证书续期或替换后需要重启门户容器：
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.host-db.yml \
+  restart host-db-gateway
+```
+
+TLS 是门户镜像中的功能。修改源码后必须先按方式 5 重新构建并推送 gateway 镜像；
+部署机器再执行下方 `pull` 和 `up -d`。只修改 Compose 而继续使用旧 gateway 镜像，
+无法在 `443` 上提供 HTTPS。
 
 已有 PostgreSQL 必须同时包含 `new-api` 和 `platform_db`。启动应用和门户，不会
 创建新的数据库或 Redis 容器：
@@ -324,7 +571,7 @@ docker compose --env-file .env.docker -f docker-compose.host-db.yml up -d
 docker compose --env-file .env.docker -f docker-compose.host-db.yml ps
 ```
 
-Docker 应用访问 `http://SERVER_IP:11116/`，源码应用继续使用 `11115`。两者的修改
+Docker 应用访问 `https://YOUR_DOMAIN/`，源码应用继续使用 `11115`。两者的修改
 会立即写入同一数据库。停止只会删除应用/门户容器，不影响 PostgreSQL 和 Redis：
 
 ```bash

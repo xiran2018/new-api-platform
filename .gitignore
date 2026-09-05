@@ -5,3 +5,6 @@ core/new-api/web/src/platform/
 # Build reports
 artifacts/
 .env.docker
+
+# Local TLS certificates and private keys
+certs/
