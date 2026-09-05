@@ -26,12 +26,12 @@ const dropdown = document.querySelector('.language-dropdown')
 let currentLanguage = 'zhCN'
 
 function normalizeLanguage(value) {
-  if (!value) return 'zhCN'
+  if (!value) return 'en'
   const normalized = value.trim().replaceAll('_', '-').toLowerCase()
   if (['zh-tw', 'zh-hk', 'zh-mo', 'zhtw'].includes(normalized) || normalized.startsWith('zh-hant')) return 'zhTW'
   if (['zh', 'zh-cn', 'zh-hans', 'zhcn'].includes(normalized)) return 'zhCN'
   const primary = normalized.split('-')[0]
-  return languages.some(([code]) => code === primary) ? primary : 'zhCN'
+  return languages.some(([code]) => code === primary) ? primary : 'en'
 }
 
 function closeMenu() {
@@ -93,7 +93,14 @@ document.querySelector('.next').addEventListener('click', () => document.querySe
 document.getElementById('year').textContent = new Date().getFullYear()
 
 const requested = new URLSearchParams(location.search).get('lang')
-setLanguage(requested || localStorage.getItem('i18nextLng') || navigator.language || 'zhCN', Boolean(requested))
+setLanguage(
+  requested ||
+    localStorage.getItem('i18nextLng') ||
+    navigator.languages?.[0] ||
+    navigator.language ||
+    'en',
+  Boolean(requested),
+)
 document.querySelectorAll('[data-documentation-link]').forEach((link) => {
   link.hidden = !documentationEnabled
 })
