@@ -12,24 +12,23 @@ container_id() { "${compose[@]}" ps --all --quiet "$1" 2>/dev/null || "${compose
 
 usage() {
   cat <<EOF
-Usage: $0 [NoPull]
+Usage: $0 [--NoPull]
 
   $0          Pull configured images, then recreate new-api and gateway (default)
-  $0 NoPull   Use existing local images without pulling, then recreate both
-  $0 --no-pull  Alias for NoPull
+  $0 --NoPull Use existing local images without pulling, then recreate both
   $0 --help   Show this help without changing containers
 EOF
 }
 
 while (($#)); do
   case "$1" in
-    NoPull|--no-pull) pull_images=false; shift ;;
+    --NoPull) pull_images=false; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option: $1" ;;
   esac
 done
 
-echo "Options: default=pull images; NoPull/--no-pull=use local images; --help=show help"
+echo "Options: default=pull images; --NoPull=use local images; --help=show help"
 
 command -v docker >/dev/null 2>&1 || die "Docker is not installed"
 docker info >/dev/null 2>&1 || die "Docker daemon is unavailable to the current user"
@@ -60,7 +59,7 @@ if [[ "$pull_images" == true ]]; then
   echo "==> Pulling application images only"
   "${compose[@]}" pull new-api gateway
 else
-  echo "==> Using existing local application images (omit NoPull next time to update them)"
+  echo "==> Using existing local application images (omit --NoPull next time to update them)"
 fi
 
 echo "==> Recreating new-api without its dependencies"

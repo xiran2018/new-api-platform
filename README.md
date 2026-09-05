@@ -215,15 +215,15 @@ cd /opt/llmapi-deploy
 ```
 
 只修改了 `.env.docker`、gateway 配置或 TLS 证书，希望使用本机已有镜像重建时，
-增加 `NoPull`（也支持别名 `--no-pull`）：
+增加 `--NoPull`：
 
 ```bash
-./scripts/update-production-app.sh NoPull
+./scripts/update-production-app.sh --NoPull
 ```
 
 脚本兼容 `docker compose` v2 和 `docker-compose` v1。它会先确认 PostgreSQL、Redis
 容器正在运行，重建 `new-api` 后等待健康检查通过，再重建 `gateway`，最后核对两个
-数据服务的容器 ID 没有变化。默认模式和 `NoPull` 模式除是否先拉取镜像外，后续步骤完全相同。
+数据服务的容器 ID 没有变化。默认模式和 `--NoPull` 模式除是否先拉取镜像外，后续步骤完全相同。
 该脚本不会拉取、停止或重建 PostgreSQL 和 Redis，也不会删除数据卷。查看日志：
 
 ```bash
