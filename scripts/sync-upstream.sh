@@ -5,6 +5,21 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 core_dir="$repo_root/core/new-api"
 upstream_url="https://github.com/QuantumNous/new-api.git"
 
+usage() {
+  cat <<EOF
+Usage: $0 [--check|--merge|--sync|--help]
+
+  --check   Fetch and report merge safety without changing files (default)
+  --merge   Merge upstream/main and run builds, without pushing
+  --sync    Merge, verify, push the core fork, and commit/push submodule pointer
+  --help    Show this help without fetching or changing files
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 if [[ ! -e "$core_dir/.git" ]]; then
   echo "core/new-api must be a Git checkout or submodule" >&2
   exit 1
@@ -18,9 +33,10 @@ fi
 
 mode="${1:---check}"
 if [[ "$mode" != "--check" && "$mode" != "--merge" && "$mode" != "--sync" ]]; then
-  echo "Usage: $0 [--check|--merge|--sync]" >&2
+  usage >&2
   exit 1
 fi
+echo "Mode: $mode. Available: --check --merge --sync; use --help for details."
 
 if [[ -n "$(git -C "$core_dir" status --porcelain)" ]]; then
   echo "Refusing to sync: core/new-api has uncommitted changes." >&2

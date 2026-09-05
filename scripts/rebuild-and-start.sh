@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<EOF
+Usage: $0 [--help]
+
+Builds the web UI, starts new-api using core/new-api/.env, then starts gateway.
+Environment:
+  PLATFORM_GATEWAY_PORT   Public gateway port (default: 11115)
+  --help                  Show this help without building or starting
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  "") ;;
+  *) usage >&2; exit 1 ;;
+esac
+echo "Options: PLATFORM_GATEWAY_PORT=public port (default 11115); --help=show help"
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 core_dir="$repo_root/core/new-api"
 gateway_dir="$repo_root/extensions/gateway"

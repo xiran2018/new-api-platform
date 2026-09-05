@@ -1,13 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<EOF
+Usage: $0 ARCHIVE [DEPLOY_DIR]
+
+Arguments:
+  ARCHIVE      Migration .tar.gz whose PostgreSQL restore already completed
+  DEPLOY_DIR   Production deployment directory (default: /opt/llmapi-deploy)
+  --help       Show this help without restoring data
+
+Resumes only Redis and application /data restore, then starts the full stack.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 archive="${1:-}"
 deploy_dir="${2:-/opt/llmapi-deploy}"
 
 if [[ -z "$archive" || ! -f "$archive" ]]; then
-  echo "Usage: $0 /tmp/llmapi-migration-YYYYMMDD-HHMMSS.tar.gz [/opt/llmapi-deploy]" >&2
+  usage >&2
   exit 1
 fi
+[[ $# -le 2 ]] || { usage >&2; exit 1; }
+echo "Arguments: ARCHIVE=$archive; DEPLOY_DIR=$deploy_dir; use --help for details."
 
 env_file="$deploy_dir/.env.docker"
 compose_file="$deploy_dir/docker-compose.prod.yml"

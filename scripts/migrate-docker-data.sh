@@ -306,8 +306,8 @@ restore_data() {
 }
 
 case "${1:-}" in
-  export) shift; export_data "$@" ;;
-  restore) shift; restore_data "$@" ;;
+  export) echo "Mode: export. Options: --output-dir --env-file --postgres-container --redis-container --app-container --postgres-user --no-redis --no-app-data --keep-app-running; use --help for details."; shift; export_data "$@" ;;
+  restore) echo "Mode: restore. Options: --archive --deploy-dir --postgres-user --no-redis --no-app-data --confirm-empty-target; use --help for details."; shift; restore_data "$@" ;;
   -h|--help) usage ;;
   *) usage; exit 1 ;;
 esac

@@ -93,7 +93,7 @@ document.querySelector('.next').addEventListener('click', () => document.querySe
 document.getElementById('year').textContent = new Date().getFullYear()
 
 const requested = new URLSearchParams(location.search).get('lang')
-setLanguage(requested || localStorage.getItem('i18nextLng') || 'zhCN', Boolean(requested))
+setLanguage(requested || localStorage.getItem('i18nextLng') || navigator.language || 'zhCN', Boolean(requested))
 document.querySelectorAll('[data-documentation-link]').forEach((link) => {
   link.hidden = !documentationEnabled
 })

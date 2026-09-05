@@ -5,9 +5,31 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deploy_dir="$(cd "$script_dir/.." && pwd)"
 env_file="${ENV_FILE:-$deploy_dir/.env.docker}"
 compose_file="${COMPOSE_FILE:-$deploy_dir/docker-compose.prod.yml}"
+pull_images=true
 
 die() { echo "Error: $*" >&2; exit 1; }
 container_id() { "${compose[@]}" ps --all --quiet "$1" 2>/dev/null || "${compose[@]}" ps -q "$1" 2>/dev/null || true; }
+
+usage() {
+  cat <<EOF
+Usage: $0 [NoPull]
+
+  $0          Pull configured images, then recreate new-api and gateway (default)
+  $0 NoPull   Use existing local images without pulling, then recreate both
+  $0 --no-pull  Alias for NoPull
+  $0 --help   Show this help without changing containers
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    NoPull|--no-pull) pull_images=false; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; die "unknown option: $1" ;;
+  esac
+done
+
+echo "Options: default=pull images; NoPull/--no-pull=use local images; --help=show help"
 
 command -v docker >/dev/null 2>&1 || die "Docker is not installed"
 docker info >/dev/null 2>&1 || die "Docker daemon is unavailable to the current user"
@@ -34,8 +56,12 @@ redis_before="$(container_id redis)"
 [[ "$(docker inspect -f '{{.State.Running}}' "$postgres_before")" == true ]] || die "PostgreSQL container is not running"
 [[ "$(docker inspect -f '{{.State.Running}}' "$redis_before")" == true ]] || die "Redis container is not running"
 
-echo "==> Pulling application images only"
-"${compose[@]}" pull new-api gateway
+if [[ "$pull_images" == true ]]; then
+  echo "==> Pulling application images only"
+  "${compose[@]}" pull new-api gateway
+else
+  echo "==> Using existing local application images (omit NoPull next time to update them)"
+fi
 
 echo "==> Recreating new-api without its dependencies"
 "${compose[@]}" up -d --no-deps --force-recreate new-api
@@ -53,9 +79,12 @@ done
 
 echo "==> Recreating gateway without its dependencies"
 "${compose[@]}" up -d --no-deps --force-recreate gateway
+gateway_id="$(container_id gateway)"
+[[ -n "$gateway_id" ]] || die "gateway container was not created"
+[[ "$(docker inspect -f '{{.State.Running}}' "$gateway_id")" == true ]] || die "gateway container is not running"
 
 [[ "$(container_id postgres)" == "$postgres_before" ]] || die "PostgreSQL container changed unexpectedly"
 [[ "$(container_id redis)" == "$redis_before" ]] || die "Redis container changed unexpectedly"
 
-echo "==> Application update complete; PostgreSQL and Redis were not recreated"
+echo "==> Application containers recreated; PostgreSQL and Redis were not recreated"
 "${compose[@]}" ps

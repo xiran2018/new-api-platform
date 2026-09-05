@@ -6,6 +6,7 @@ RUN bun install --frozen-lockfile
 COPY core/new-api/web/ ./
 COPY extensions/frontend/ ./src/platform/
 COPY extensions/frontend-routes/ ./src/routes/
+COPY extensions/frontend-overrides/ ./
 COPY core/new-api/VERSION /build/VERSION
 RUN DISABLE_ESLINT_PLUGIN=true VITE_REACT_APP_VERSION="$(cat /build/VERSION)" bun run build
 

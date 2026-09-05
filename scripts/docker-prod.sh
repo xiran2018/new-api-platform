@@ -5,6 +5,28 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_file="${ENV_FILE:-$repo_root/.env.docker}"
 compose_file="$repo_root/docker-compose.prod.yml"
 
+usage() {
+  cat <<EOF
+Usage: $0 [COMMAND]
+
+Commands:
+  config   Validate Compose configuration
+  build    Build new-api and gateway locally
+  pull     Pull PostgreSQL, Redis, new-api, and gateway images
+  up       Build and start the complete stack (default)
+  start    Start the complete stack without building
+  down     Stop and remove containers, preserving volumes
+  logs     Follow new-api and gateway logs
+  ps       Show service status
+  --help   Show this help without changing services
+EOF
+}
+
+case "${1:-up}" in
+  -h|--help) usage; exit 0 ;;
+esac
+echo "Command: ${1:-up}. Available: config build pull up start down logs ps; use --help for details."
+
 if [[ ! -f "$env_file" ]]; then
   echo "Missing $env_file. Create it from .env.docker.example and set strong secrets." >&2
   exit 1
@@ -40,5 +62,5 @@ case "${1:-up}" in
   down) "${compose[@]}" down ;;
   logs) "${compose[@]}" logs -f new-api gateway ;;
   ps) "${compose[@]}" ps ;;
-  *) echo "Usage: $0 [config|build|pull|up|start|down|logs|ps]" >&2; exit 1 ;;
+  *) usage >&2; exit 1 ;;
 esac

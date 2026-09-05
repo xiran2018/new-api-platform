@@ -8,8 +8,8 @@ See `docs/extension-architecture.md` for the stable integration seams and upgrad
 
 For a complete Docker deployment with the application, portal gateway,
 PostgreSQL and Redis, see [docs/docker-production-deployment.md](docs/docker-production-deployment.md).
-Use `./scripts/publish-docker-images.sh` to build and publish both project
-images to Docker Hub with `latest` and immutable version tags.
+Use `./scripts/publish-docker-images.sh` to build both project images locally.
+Pass `--token` only when they should also be published to Docker Hub.
 
 ## 五种运行方式
 
@@ -204,19 +204,27 @@ APP_IMAGE=jingquanliang/new-api-platform:latest
 GATEWAY_IMAGE=jingquanliang/new-api-platform-gateway:latest
 ```
 
-#### 只更新生产应用镜像
+#### 重建或更新生产应用容器
 
-Docker Hub 中的应用和门户镜像发布新版本后，执行以下命令。脚本只拉取并重建
-`new-api`、`gateway`，不会拉取、停止或重建 PostgreSQL 和 Redis，也不会删除数据卷：
+Docker Hub 已发布新镜像时，直接执行脚本。默认先拉取 `.env.docker` 中 `APP_IMAGE`、
+`GATEWAY_IMAGE` 指向的镜像，再依次重建 `new-api`、`gateway`：
 
 ```bash
 cd /opt/llmapi-deploy
 ./scripts/update-production-app.sh
 ```
 
+只修改了 `.env.docker`、gateway 配置或 TLS 证书，希望使用本机已有镜像重建时，
+增加 `NoPull`（也支持别名 `--no-pull`）：
+
+```bash
+./scripts/update-production-app.sh NoPull
+```
+
 脚本兼容 `docker compose` v2 和 `docker-compose` v1。它会先确认 PostgreSQL、Redis
-容器正在运行，更新 `new-api` 后等待健康检查通过，再更新 `gateway`，最后核对两个
-数据服务的容器 ID 没有变化。查看应用更新日志：
+容器正在运行，重建 `new-api` 后等待健康检查通过，再重建 `gateway`，最后核对两个
+数据服务的容器 ID 没有变化。默认模式和 `NoPull` 模式除是否先拉取镜像外，后续步骤完全相同。
+该脚本不会拉取、停止或重建 PostgreSQL 和 Redis，也不会删除数据卷。查看日志：
 
 ```bash
 ./scripts/docker-prod.sh logs
@@ -615,15 +623,16 @@ docker compose --env-file .env.docker -f docker-compose.host-db.yml logs -f
 
 ### 方式 5：生成并发布 Docker 镜像
 
-本地构建需要 Docker、可访问 Docker Hub/Go/Bun 依赖网络，以及完整 core 子模块。
-只生成本地镜像、不上传 Docker Hub：
+本地构建需要 Docker、构建依赖网络以及完整 core 子模块。运行脚本但不传 `--token`，
+只生成本地的版本标签和 `latest` 镜像，不登录或推送 Docker Hub：
 
 ```bash
 cd /path/to/new-api-platform
-docker build --pull -t new-api-platform:local -f Dockerfile .
-docker build --pull -t new-api-platform-gateway:local -f Dockerfile.gateway .
-docker image ls new-api-platform new-api-platform-gateway
+./scripts/publish-docker-images.sh
 ```
+
+脚本会在构建每张镜像前输出名称和标签，完成后输出镜像 ID 与大小。默认复用本地基础
+镜像；需要主动拉取最新基础镜像时添加 `--pull`。
 
 构建并上传时，创建具有 Read/Write 权限的 Docker Hub Access Token 后运行：
 
@@ -635,6 +644,9 @@ cd /path/to/new-api-platform
   --version v1.0.0
 ```
 
+脚本总是先完成本地构建，再登录和推送。如果 Docker Hub DNS 或推送失败，本地已经
+生成的镜像仍会保留，可在网络恢复后重新执行带 `--token` 的命令。
+
 脚本使用根目录 `Dockerfile` 构建应用镜像，使用 `Dockerfile.gateway` 构建门户镜像，
 并推送版本标签和 `latest`：
 
@@ -643,6 +655,43 @@ jingquanliang/new-api-platform:v1.0.0
 jingquanliang/new-api-platform:latest
 jingquanliang/new-api-platform-gateway:v1.0.0
 jingquanliang/new-api-platform-gateway:latest
+```
+
+未指定 `--version` 时，版本标签取外层 `new-api-platform` Git 仓库当前提交的短 SHA，
+例如当前提交为 `70e421c...`，标签就是 `70e421c`。标签的优先级为：命令行
+`--version`、环境变量 `IMAGE_VERSION`、当前 Git 短 SHA。`latest` 始终同时生成，
+表示最近一次构建的版本；生产环境需要严格锁定版本时，应在 `.env.docker` 中填写
+明确版本标签，不要使用 `latest`。
+
+`--pull` 会要求 Docker 在构建前检查并拉取 `Dockerfile` 使用的最新基础镜像，例如
+Go、Bun 和 Debian 镜像。它不会拉取或更新正在运行的 PostgreSQL、Redis 容器。
+不加 `--pull` 时优先使用本机已有的基础镜像，离线构建更稳定；如果本机没有所需
+基础镜像，Docker 仍会尝试下载缺失镜像。
+
+脚本会在构建完成后检查 token。token 包含中文、空白、示例占位词、异常字符或长度
+不足 20 个字符时，不会登录或推送，只保留已经生成的本地镜像。此检查只能排除明显
+无效输入；Docker Hub 最终仍会验证 token 的真实性和 Read/Write 权限。
+
+`--version` 是可选的命令行参数，不是必填项；`IMAGE_VERSION` 是作用相同的可选环境
+变量。三种常用写法如下：
+
+```bash
+# 不指定版本：自动使用当前 Git 短 SHA，同时生成 latest
+./scripts/publish-docker-images.sh
+
+# 使用可选的 --version 参数指定版本，同时生成 latest
+./scripts/publish-docker-images.sh --version v1.0.1
+
+# 也可以通过可选环境变量指定版本
+IMAGE_VERSION=v1.0.1 ./scripts/publish-docker-images.sh
+```
+
+需要推送时，在任意一种写法中增加 `--token`；例如指定版本并推送：
+
+```bash
+./scripts/publish-docker-images.sh \
+  --version v1.0.1 \
+  --token 'YOUR_DOCKER_HUB_ACCESS_TOKEN'
 ```
 
 若本机无法访问 Docker Hub，在 GitHub 仓库的 Actions Repository secrets 添加
