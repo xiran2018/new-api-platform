@@ -624,6 +624,258 @@ jingquanliang/new-api-platform-gateway:latest
 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN`，再运行 `Publish Docker images`
 workflow。Token 必须是具有 Read/Write 权限的 Access Token，不能提交到 Git。
 
+## 从实验服务器迁移到全 Docker 新服务器
+
+目标：将实验服务器中的 `new-api`、`platform_db`、Redis 状态和应用 `/data` 文件
+迁移到新服务器；新服务器最终使用 `docker-compose.prod.yml` 运行应用、门户、
+PostgreSQL 和 Redis。数据库必须使用逻辑备份迁移，不要复制正在运行的 PostgreSQL
+数据目录或 Docker volume 物理目录。
+
+以下命令假设实验机容器名为 `postgres`、`redis`。先执行 `docker ps` 核对；如果名称
+不同，只修改下面的 `POSTGRES_CONTAINER`、`REDIS_CONTAINER`。
+
+### 1. 在实验服务器停止写入
+
+先进入维护窗口，避免备份期间继续产生订单、充值、发票或配置修改。
+
+如果实验机应用也是完整 Docker：
+
+```bash
+cd /path/to/experiment-deployment
+docker compose --env-file .env.docker -f docker-compose.prod.yml \
+  stop gateway new-api
+```
+
+如果应用通过 `./scripts/rebuild-and-start.sh` 从源码运行，在其终端按 `Ctrl+C` 停止。
+此时不要停止 PostgreSQL 和 Redis，因为备份命令仍需连接它们。
+
+### 2. 在实验服务器导出 PostgreSQL
+
+```bash
+mkdir -p /tmp/llmapi-migration
+POSTGRES_CONTAINER=postgres
+REDIS_CONTAINER=redis
+
+docker inspect "$POSTGRES_CONTAINER" >/dev/null
+docker inspect "$REDIS_CONTAINER" >/dev/null
+docker exec "$POSTGRES_CONTAINER" postgres --version
+docker exec "$REDIS_CONTAINER" redis-server --version
+
+docker exec "$POSTGRES_CONTAINER" \
+  pg_dump -U root -Fc --no-owner --no-acl new-api \
+  > /tmp/llmapi-migration/new-api.dump
+
+docker exec "$POSTGRES_CONTAINER" \
+  pg_dump -U root -Fc --no-owner --no-acl platform_db \
+  > /tmp/llmapi-migration/platform_db.dump
+
+test -s /tmp/llmapi-migration/new-api.dump
+test -s /tmp/llmapi-migration/platform_db.dump
+```
+
+如果 PostgreSQL 用户不是 `root`，将两处 `-U root` 改为实际用户。检查备份目录：
+
+```bash
+docker exec -i "$POSTGRES_CONTAINER" pg_restore -l \
+  < /tmp/llmapi-migration/new-api.dump | head
+docker exec -i "$POSTGRES_CONTAINER" pg_restore -l \
+  < /tmp/llmapi-migration/platform_db.dump | head
+```
+
+目标 Compose 当前使用 PostgreSQL 15。如果实验机输出的 PostgreSQL 主版本高于 15，
+先将 `docker-compose.prod.yml` 的 `postgres:15` 调整为相同或更高主版本，再初始化
+目标数据卷。不要把高版本 PostgreSQL 的备份恢复到更低主版本后直接上线。
+
+### 3. 在实验服务器导出 Redis
+
+从实际环境文件读取 Redis 密码，不要把密码直接写进 README 或迁移包：
+
+```bash
+# 完整 Docker 实验环境使用根目录 .env.docker：
+cd /path/to/experiment-deployment
+set -a
+source .env.docker
+set +a
+
+# 如果是“源码应用 + Docker 数据库”，改为：
+# cd /path/to/new-api-platform/core/new-api
+# set -a; source .env; set +a
+
+docker exec "$REDIS_CONTAINER" rm -f /data/llmapi-migration.rdb
+docker exec "$REDIS_CONTAINER" redis-cli \
+  -a "$REDIS_PASSWORD" --no-auth-warning \
+  --rdb /data/llmapi-migration.rdb
+docker cp "$REDIS_CONTAINER":/data/llmapi-migration.rdb \
+  /tmp/llmapi-migration/redis.rdb
+docker exec "$REDIS_CONTAINER" rm -f /data/llmapi-migration.rdb
+test -s /tmp/llmapi-migration/redis.rdb
+unset REDIS_PASSWORD POSTGRES_PASSWORD SESSION_SECRET
+```
+
+Redis 主要保存缓存和运行状态，通常可以不迁移；但执行以上步骤可保留当前键值数据。
+
+### 4. 导出应用文件
+
+用户、订单、FAQ、发票等结构化数据已包含在两个 PostgreSQL 备份中。若实验应用以
+Docker 运行，还要备份应用容器 `/data`，其中可能包含上传文件或运行期文件：
+
+```bash
+cd /path/to/experiment-deployment
+APP_CONTAINER="$(docker compose --env-file .env.docker \
+  -f docker-compose.prod.yml ps -q new-api)"
+test -n "$APP_CONTAINER"
+mkdir -p /tmp/llmapi-migration/app-data
+docker cp "$APP_CONTAINER":/data/. /tmp/llmapi-migration/app-data/
+```
+
+若实验应用从源码运行，检查 `core/new-api/data/`；存在且非空时复制：
+
+```bash
+mkdir -p /tmp/llmapi-migration/app-data
+cp -a /path/to/new-api-platform/core/new-api/data/. \
+  /tmp/llmapi-migration/app-data/
+```
+
+应用日志不影响恢复。确需留档时单独复制 `/app/logs`，不要覆盖新服务器日志卷。
+
+### 5. 打包、校验并传输
+
+```bash
+cd /tmp
+tar -czf llmapi-migration.tar.gz llmapi-migration
+sha256sum llmapi-migration.tar.gz > llmapi-migration.tar.gz.sha256
+
+scp llmapi-migration.tar.gz llmapi-migration.tar.gz.sha256 \
+  NEW_SERVER_USER@NEW_SERVER_IP:/tmp/
+```
+
+在新服务器验证并解压：
+
+```bash
+cd /tmp
+sha256sum -c llmapi-migration.tar.gz.sha256
+tar -xzf llmapi-migration.tar.gz
+```
+
+迁移包包含业务数据，应通过可信内网或 SSH 传输，恢复完成后安全删除，不要上传 Git、
+对象存储公开桶或聊天工具。
+
+### 6. 准备新服务器的全 Docker 部署
+
+按照“方式 2：应用、PostgreSQL 和 Redis 全部由 Docker 启动”创建：
+
+```text
+/opt/llmapi-deploy/docker-compose.prod.yml
+/opt/llmapi-deploy/.env.docker
+/opt/llmapi-deploy/scripts/docker-prod.sh
+/opt/llmapi-deploy/certs/fullchain.pem
+/opt/llmapi-deploy/certs/privkey.pem
+```
+
+新服务器 `.env.docker` 可使用新的 PostgreSQL、Redis 密码；备份文件不绑定旧密码。
+域名和证书则必须与新服务器最终访问地址一致。先检查配置并拉取镜像：
+
+```bash
+cd /opt/llmapi-deploy
+./scripts/docker-prod.sh config
+./scripts/docker-prod.sh pull
+```
+
+以下恢复步骤要求目标数据卷为空。先确认没有旧的同名生产数据；如果目标机曾运行过
+该 Compose，不要继续覆盖，应先备份原有数据并确认 Compose 项目名和 volumes。
+
+### 7. 创建数据库并恢复 PostgreSQL
+
+只启动 PostgreSQL，随后创建独立的 `platform_db`：
+
+```bash
+cd /opt/llmapi-deploy
+docker compose --env-file .env.docker -f docker-compose.prod.yml up -d postgres
+docker compose --env-file .env.docker -f docker-compose.prod.yml \
+  run --rm platform-db-init
+```
+
+恢复两个数据库：
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
+  pg_restore -U root -d new-api --clean --if-exists --no-owner --no-acl \
+  --exit-on-error \
+  < /tmp/llmapi-migration/new-api.dump
+
+docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
+  pg_restore -U root -d platform_db --clean --if-exists --no-owner --no-acl \
+  --exit-on-error \
+  < /tmp/llmapi-migration/platform_db.dump
+```
+
+如果新服务器的 `POSTGRES_USER` 不是 `root`，将 `-U root` 改为对应用户。验证：
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
+  psql -U root -d new-api -c 'SELECT current_database();'
+docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
+  psql -U root -d platform_db -c 'SELECT current_database();'
+```
+
+### 8. 恢复 Redis 和应用文件
+
+以下 Redis 恢复方法只适用于全新的空 Redis volume。先创建但不启动 Redis，把 RDB
+放入 `/data/dump.rdb`，首次启动时 Redis 会加载它并生成新的 AOF：
+
+```bash
+cd /opt/llmapi-deploy
+docker compose --env-file .env.docker -f docker-compose.prod.yml create redis
+TARGET_REDIS_CONTAINER="$(docker compose --env-file .env.docker \
+  -f docker-compose.prod.yml ps --all --quiet redis)"
+test -n "$TARGET_REDIS_CONTAINER"
+docker cp /tmp/llmapi-migration/redis.rdb \
+  "$TARGET_REDIS_CONTAINER":/data/dump.rdb
+docker exec --user root "$TARGET_REDIS_CONTAINER" \
+  chown redis:redis /data/dump.rdb
+docker compose --env-file .env.docker -f docker-compose.prod.yml start redis
+set -a; source .env.docker; set +a
+docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T redis \
+  redis-cli -a "$REDIS_PASSWORD" --no-auth-warning DBSIZE
+unset REDIS_PASSWORD POSTGRES_PASSWORD SESSION_SECRET
+```
+
+恢复应用 `/data`（如果备份目录存在且非空）：
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.prod.yml \
+  create --no-deps new-api
+TARGET_APP_CONTAINER="$(docker compose --env-file .env.docker \
+  -f docker-compose.prod.yml ps --all --quiet new-api)"
+test -n "$TARGET_APP_CONTAINER"
+docker cp /tmp/llmapi-migration/app-data/. "$TARGET_APP_CONTAINER":/data/
+```
+
+### 9. 启动并验证新服务器
+
+```bash
+cd /opt/llmapi-deploy
+./scripts/docker-prod.sh start
+./scripts/docker-prod.sh ps
+./scripts/docker-prod.sh logs
+```
+
+另开终端验证 HTTPS 和 API：
+
+```bash
+curl -I https://YOUR_DOMAIN/
+curl https://YOUR_DOMAIN/api/status
+```
+
+登录后重点核对用户、余额、充值订单、FAQ、更新日志、发票申请及上传文件。确认无误
+后再切换域名 DNS 或负载均衡流量。旧服务器和迁移包至少保留到验收完成；不要让新旧
+应用同时向同一个数据库写入。验收完成后安全清理临时迁移文件：
+
+```bash
+rm -rf /tmp/llmapi-migration /tmp/llmapi-migration.tar.gz \
+  /tmp/llmapi-migration.tar.gz.sha256
+```
+
 ## Updating new-api upstream
 
 The upstream sync helper fetches the official repository, assembles extensions,
