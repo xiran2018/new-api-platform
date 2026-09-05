@@ -159,7 +159,10 @@ curl -fL \
 curl -fL \
   https://raw.githubusercontent.com/xiran2018/new-api-platform/main/scripts/docker-prod.sh \
   -o scripts/docker-prod.sh
-chmod +x scripts/docker-prod.sh
+curl -fL \
+  https://raw.githubusercontent.com/xiran2018/new-api-platform/main/scripts/update-production-app.sh \
+  -o scripts/update-production-app.sh
+chmod +x scripts/docker-prod.sh scripts/update-production-app.sh
 
 cp .env.docker.example .env.docker
 chmod 600 .env.docker
@@ -174,7 +177,8 @@ nano .env.docker
 ├── .env.docker.example
 ├── docker-compose.prod.yml
 ├── scripts/
-│   └── docker-prod.sh
+│   ├── docker-prod.sh
+│   └── update-production-app.sh
 └── certs/
     ├── fullchain.pem
     └── privkey.pem
@@ -199,6 +203,27 @@ TRUSTED_PROXIES=
 APP_IMAGE=jingquanliang/new-api-platform:latest
 GATEWAY_IMAGE=jingquanliang/new-api-platform-gateway:latest
 ```
+
+#### 只更新生产应用镜像
+
+Docker Hub 中的应用和门户镜像发布新版本后，执行以下命令。脚本只拉取并重建
+`new-api`、`gateway`，不会拉取、停止或重建 PostgreSQL 和 Redis，也不会删除数据卷：
+
+```bash
+cd /opt/llmapi-deploy
+./scripts/update-production-app.sh
+```
+
+脚本兼容 `docker compose` v2 和 `docker-compose` v1。它会先确认 PostgreSQL、Redis
+容器正在运行，更新 `new-api` 后等待健康检查通过，再更新 `gateway`，最后核对两个
+数据服务的容器 ID 没有变化。查看应用更新日志：
+
+```bash
+./scripts/docker-prod.sh logs
+```
+
+不要使用 `docker compose down -v` 或 `docker-compose down -v`；`-v` 会删除数据库、
+Redis 和应用文件对应的数据卷。
 
 如果前面还有负责 TLS 终止的可信负载均衡器，再设置其内网网段：
 
@@ -634,6 +659,108 @@ PostgreSQL 和 Redis。数据库必须使用逻辑备份迁移，不要复制正
 以下命令假设实验机容器名为 `postgres`、`redis`。先执行 `docker ps` 核对；如果名称
 不同，只修改下面的 `POSTGRES_CONTAINER`、`REDIS_CONTAINER`。
 
+### 使用迁移脚本（推荐）
+
+脚本将下方手工步骤固化为 `export` 和 `restore` 两个阶段。实验服务器在完整仓库中
+直接执行：
+
+```bash
+cd /home/jing/new-api-platform
+chmod +x scripts/migrate-docker-data.sh
+./scripts/migrate-docker-data.sh export \
+  --output-dir /home/jing/new-api-platform-transfer \
+  --env-file /home/jing/new-api-platform/core/new-api/.env
+```
+
+脚本会停止已知的 new-api/gateway 容器，但保留 PostgreSQL 和 Redis；随后导出两个
+数据库、刷新并导出 Redis `/data/dump.rdb`、复制应用 `/data`，最后生成：
+
+```text
+llmapi-migration-YYYYMMDD-HHMMSS.tar.gz
+llmapi-migration-YYYYMMDD-HHMMSS.tar.gz.sha256
+```
+
+将这两个文件传到新服务器：
+
+```bash
+scp /home/jing/new-api-platform-transfer/llmapi-migration-*.tar.gz* \
+  NEW_SERVER_USER@NEW_SERVER_IP:/tmp/
+```
+
+新服务器完成“方式 2”的 `/opt/llmapi-deploy`、`.env.docker`、证书和镜像准备后，
+下载迁移脚本：
+
+```bash
+curl -fL \
+  https://raw.githubusercontent.com/xiran2018/new-api-platform/main/scripts/migrate-docker-data.sh \
+  -o /opt/llmapi-deploy/scripts/migrate-docker-data.sh
+chmod +x /opt/llmapi-deploy/scripts/migrate-docker-data.sh
+```
+
+迁移脚本不会自动申请证书。新服务器必须严格按以下顺序准备：
+
+1. 安装 Docker Engine、Docker Compose、OpenSSL。
+2. 创建 `/opt/llmapi-deploy` 并下载 Compose、`.env.docker` 和脚本。
+3. 完整填写 `.env.docker` 中数据库、Redis、会话、域名和 `443` 配置。
+4. 完成域名 DNS 解析，使用 Certbot 申请正式证书，或为内网测试生成自签名证书。
+5. 将 `fullchain.pem`、`privkey.pem` 放入 `GATEWAY_TLS_CERT_DIR`。
+6. 执行 `./scripts/docker-prod.sh pull`，提前拉取四个所需镜像。
+7. 把迁移压缩包和同名 `.sha256` 文件放到新服务器同一目录。
+8. 确认目标 Compose 尚未创建容器，`443` 没有被其他服务占用。
+9. 最后执行迁移恢复脚本。
+
+`restore` 在修改目标数据前会自动探测上述步骤，包括：
+
+- Docker daemon 和 Compose 是否可用；
+- `.env.docker` 必填密钥是否仍为空或占位符；
+- `PUBLIC_PORT=443`、HTTPS Cookie 和可信访问地址是否正确；
+- TLS 证书是否存在、是否有效、是否即将过期、是否与私钥及访问域名/IP匹配；
+- 应用、gateway、PostgreSQL、Redis 四个镜像是否已经拉取；
+- 迁移包和 SHA-256 是否存在且校验通过；
+- 目标 Compose 是否为空；
+- 宿主机 `443` 是否空闲。
+
+任一检查失败，脚本会在创建数据库或写入数据之前退出，并明确显示需要修复的项目。
+修复后重新执行同一条命令即可。
+
+确认新服务器尚未创建这套 Compose 的容器和数据卷，然后一键恢复并启动：
+
+```bash
+/opt/llmapi-deploy/scripts/migrate-docker-data.sh restore \
+  --archive /tmp/llmapi-migration-YYYYMMDD-HHMMSS.tar.gz \
+  --deploy-dir /opt/llmapi-deploy \
+  --confirm-empty-target
+```
+
+`--confirm-empty-target` 是必需的安全确认。脚本检测到目标 Compose 已有容器时会拒绝
+恢复，避免覆盖生产数据。Redis 或应用 `/data` 不需要迁移时，可在对应命令添加
+`--no-redis` 或 `--no-app-data`。查看全部参数：
+
+```bash
+./scripts/migrate-docker-data.sh --help
+```
+
+如果完整恢复已经成功完成 PostgreSQL，但在“Restoring Redis”后提示
+`cannot find target Redis container`，不要删除数据库或重新恢复 PostgreSQL。下载修复
+脚本并从断点一键继续：
+
+```bash
+curl -fL \
+  https://raw.githubusercontent.com/xiran2018/new-api-platform/main/scripts/resume-migration-restore.sh \
+  -o /opt/llmapi-deploy/scripts/resume-migration-restore.sh
+chmod +x /opt/llmapi-deploy/scripts/resume-migration-restore.sh
+
+/opt/llmapi-deploy/scripts/resume-migration-restore.sh \
+  /tmp/llmapi-migration-YYYYMMDD-HHMMSS.tar.gz
+```
+
+该脚本会先自动确认 PostgreSQL 容器正在运行、`new-api` 和 `platform_db` 均可连接且
+已经包含业务表，然后识别上次中断时留下的“已创建但未运行”Redis 容器。检查通过后，
+它只恢复 Redis、应用 `/data` 并启动完整服务，不会再次修改 PostgreSQL。如果数据库
+恢复并未完成，或 Redis/new-api 已经运行，脚本会拒绝继续，防止覆盖现有数据。
+
+下面保留完整手工步骤，用于理解流程和出现异常时逐步排查。
+
 ### 1. 在实验服务器停止写入
 
 先进入维护窗口，避免备份期间继续产生订单、充值、发票或配置修改。
@@ -701,18 +828,20 @@ set +a
 # cd /path/to/new-api-platform/core/new-api
 # set -a; source .env; set +a
 
-docker exec "$REDIS_CONTAINER" rm -f /data/llmapi-migration.rdb
 docker exec "$REDIS_CONTAINER" redis-cli \
-  -a "$REDIS_PASSWORD" --no-auth-warning \
-  --rdb /data/llmapi-migration.rdb
-docker cp "$REDIS_CONTAINER":/data/llmapi-migration.rdb \
+  -a "$REDIS_PASSWORD" --no-auth-warning SAVE
+
+docker exec "$REDIS_CONTAINER" test -s /data/dump.rdb
+docker cp "$REDIS_CONTAINER":/data/dump.rdb \
   /tmp/llmapi-migration/redis.rdb
-docker exec "$REDIS_CONTAINER" rm -f /data/llmapi-migration.rdb
 test -s /tmp/llmapi-migration/redis.rdb
 unset REDIS_PASSWORD POSTGRES_PASSWORD SESSION_SECRET
 ```
 
 Redis 主要保存缓存和运行状态，通常可以不迁移；但执行以上步骤可保留当前键值数据。
+`SAVE` 会短暂阻塞 Redis，迁移前已经停止应用写入，因此可以获得确定的完整快照；
+命令返回 `OK` 后再复制标准快照 `/data/dump.rdb`。不要把 `redis-cli --rdb` 的输出
+路径当作容器内路径。
 
 ### 4. 导出应用文件
 
@@ -831,8 +960,6 @@ TARGET_REDIS_CONTAINER="$(docker compose --env-file .env.docker \
 test -n "$TARGET_REDIS_CONTAINER"
 docker cp /tmp/llmapi-migration/redis.rdb \
   "$TARGET_REDIS_CONTAINER":/data/dump.rdb
-docker exec --user root "$TARGET_REDIS_CONTAINER" \
-  chown redis:redis /data/dump.rdb
 docker compose --env-file .env.docker -f docker-compose.prod.yml start redis
 set -a; source .env.docker; set +a
 docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T redis \

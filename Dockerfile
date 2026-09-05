@@ -5,6 +5,7 @@ COPY core/new-api/web/package.json core/new-api/web/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY core/new-api/web/ ./
 COPY extensions/frontend/ ./src/platform/
+COPY extensions/frontend-routes/ ./src/routes/
 COPY core/new-api/VERSION /build/VERSION
 RUN DISABLE_ESLINT_PLUGIN=true VITE_REACT_APP_VERSION="$(cat /build/VERSION)" bun run build
 
@@ -35,4 +36,3 @@ COPY core/new-api/LICENSE core/new-api/NOTICE core/new-api/THIRD-PARTY-LICENSES.
 WORKDIR /data
 EXPOSE 7000
 ENTRYPOINT ["/new-api"]
-
