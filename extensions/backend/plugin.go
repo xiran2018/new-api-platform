@@ -71,7 +71,7 @@ func platformDatabase() (*gorm.DB, error) {
 		if platformDBErr != nil {
 			return
 		}
-		platformDBErr = platformDB.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{}, &invoiceProfile{}, &platformFile{}, &invoiceRequest{}, &invoiceRequestOrder{}, &reimbursementRequest{}, &invoiceSample{}, &invoiceAuditLog{}, &platformFileVersion{})
+		platformDBErr = platformDB.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{}, &modelPriceCatalog{}, &invoiceProfile{}, &platformFile{}, &invoiceRequest{}, &invoiceRequestOrder{}, &reimbursementRequest{}, &invoiceSample{}, &invoiceAuditLog{}, &platformFileVersion{})
 		if platformDBErr == nil {
 			platformDBErr = backfillInvoiceMoney(platformDB)
 		}
@@ -115,6 +115,7 @@ func RegisterRoutes(apiRouter *gin.RouterGroup) {
 	publicRouter.GET("/updates", getPublicUpdates)
 	publicRouter.GET("/updates/settings", getPublicUpdateSettings)
 	publicRouter.GET("/faq", getPublicFAQ)
+	publicRouter.GET("/model-prices", getPublicModelPrices)
 	registerInvoiceRoutes(apiRouter)
 
 	adminRouter := apiRouter.Group("/platform/admin")
@@ -134,6 +135,7 @@ func RegisterRoutes(apiRouter *gin.RouterGroup) {
 	adminRouter.POST("/faq/items", saveFAQItem)
 	adminRouter.PUT("/faq/items/:id", saveFAQItem)
 	adminRouter.DELETE("/faq/items/:id", deleteFAQItem)
+	registerModelPriceRoutes(adminRouter)
 }
 
 func getPublicFAQ(c *gin.Context) {

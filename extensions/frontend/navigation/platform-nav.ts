@@ -3,6 +3,7 @@ import { api } from '@/lib/api'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import '../i18n/invoice-translations'
+import '../i18n/model-price-translations'
 
 export type PlatformNavItem = {
   id: string
@@ -14,11 +15,13 @@ export type PlatformNavItem = {
 
 // The core navigation seam imports this registry after assembly.
 export const platformPublicNav: PlatformNavItem[] = [
+  { id: 'model-prices', title: 'Model prices', href: '/model-prices', order: 60 },
   { id: 'updates', title: 'Changelog', href: '/updates', order: 75 },
   { id: 'faq', title: 'FAQ', href: '/faq', order: 70 },
 ]
 
 export const platformAdminNav: PlatformNavItem[] = [
+  { id: 'model-price-management', title: 'Model price management', href: '/platform/model-prices', order: 69, requiresAuth: true },
   {
     id: 'content-management',
     title: 'Content management',

@@ -6,17 +6,17 @@ diff --git a/web/src/hooks/use-sidebar-data.ts b/web/src/hooks/use-sidebar-data.
  import { ROLE } from '@/lib/roles'
 +import { platformAdminNav } from '@/platform/navigation/platform-nav'
 @@
-           {
-             title: t('System Settings'),
-             url: '/system-settings/site',
-             activeUrls: ['/system-settings'],
-             icon: Settings,
-           },
 +          ...platformAdminNav.map((item) => ({
 +            title: t(item.title),
 +            url: item.href,
 +            icon: LayoutDashboard,
 +            requiredRole: ROLE.ADMIN,
 +          })),
+           {
+             title: t('System Settings'),
+             url: '/system-settings/site',
+             activeUrls: ['/system-settings'],
+             icon: Settings,
+           },
          ],
        },
