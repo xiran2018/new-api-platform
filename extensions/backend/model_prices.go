@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // modelPriceCatalog is a presentation and comparison record. Runtime billing
@@ -63,6 +65,10 @@ func getPublicModelPrices(c *gin.Context) {
 		c.JSON(500, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	if err = syncExistingModelPrices(db); err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	var rows []modelPriceCatalog
 	q := strings.TrimSpace(c.Query("q"))
 	query := db.Where("published = ?", true)
@@ -79,6 +85,10 @@ func listAdminModelPrices(c *gin.Context) {
 		c.JSON(500, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	if err = syncExistingModelPrices(db); err != nil {
+		c.JSON(500, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	var rows []modelPriceCatalog
 	q := strings.TrimSpace(c.Query("q"))
 	query := db
@@ -87,6 +97,119 @@ func listAdminModelPrices(c *gin.Context) {
 	}
 	err = query.Order("sort_order asc, id asc").Find(&rows).Error
 	c.JSON(200, gin.H{"success": err == nil, "data": rows})
+}
+
+func syncExistingModelPrices(db *gorm.DB) error {
+	vendorNames := make(map[int]string)
+	vendors, err := model.GetAllVendors(0, 100000)
+	if err != nil {
+		return err
+	}
+	for _, vendor := range vendors {
+		vendorNames[vendor.Id] = vendor.Name
+	}
+	pricingByName := make(map[string]model.Pricing)
+	for _, pricing := range model.GetPricing() {
+		pricingByName[pricing.ModelName] = pricing
+	}
+	models, err := model.GetAllModels(0, 100000)
+	if err != nil {
+		return err
+	}
+	rows := make([]modelPriceCatalog, 0, len(models))
+	seen := make(map[string]struct{}, len(models))
+	for index, metadata := range models {
+		name := strings.TrimSpace(metadata.ModelName)
+		if name == "" {
+			continue
+		}
+		seen[name] = struct{}{}
+		pricing, hasPricing := pricingByName[name]
+		vendorID := metadata.VendorID
+		if vendorID == 0 {
+			vendorID = pricing.VendorID
+		}
+		vendor := vendorNames[vendorID]
+		if vendor == "" {
+			vendor = strings.TrimSpace(pricing.OwnerBy)
+		}
+		if vendor == "" {
+			vendor = "Other"
+		}
+		tagsRaw := metadata.Tags
+		if tagsRaw == "" {
+			tagsRaw = pricing.Tags
+		}
+		tags := splitModelTags(tagsRaw)
+		tagsJSON, _ := json.Marshal(tags)
+		priceSpec := json.RawMessage(`{}`)
+		if hasPricing {
+			priceSpec, _ = json.Marshal(runtimePriceSpec(pricing))
+		}
+		rows = append(rows, modelPriceCatalog{
+			ModelKey: name, DisplayName: name, Vendor: vendor,
+			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
+			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
+			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
+			Published:         true, SortOrder: index,
+		})
+	}
+	for name, pricing := range pricingByName {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		vendor := vendorNames[pricing.VendorID]
+		if vendor == "" {
+			vendor = strings.TrimSpace(pricing.OwnerBy)
+		}
+		if vendor == "" {
+			vendor = "Other"
+		}
+		tagsJSON, _ := json.Marshal(splitModelTags(pricing.Tags))
+		priceSpec, _ := json.Marshal(runtimePriceSpec(pricing))
+		rows = append(rows, modelPriceCatalog{
+			ModelKey: name, DisplayName: name, Vendor: vendor,
+			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
+			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
+			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
+			Published:         true, SortOrder: len(rows),
+		})
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "model_key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"llm_api_price_spec", "runtime_pricing_ref"}),
+	}).CreateInBatches(rows, 200).Error
+}
+
+func splitModelTags(raw string) []string {
+	var tags []string
+	if json.Unmarshal([]byte(raw), &tags) == nil {
+		return tags
+	}
+	for _, value := range strings.Split(raw, ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			tags = append(tags, value)
+		}
+	}
+	return tags
+}
+
+func runtimePriceSpec(pricing model.Pricing) map[string]any {
+	if pricing.BillingMode == "tiered_expr" && pricing.BillingExpr != "" {
+		return map[string]any{"mode": "expression", "blocks": []any{map[string]any{"label": "Expression", "note": pricing.BillingExpr}}}
+	}
+	if pricing.ModelPrice > 0 {
+		return map[string]any{"mode": "request", "blocks": []any{map[string]any{"price": pricing.ModelPrice, "unit": "request"}}}
+	}
+	input := pricing.ModelRatio * 2
+	return map[string]any{"mode": "token", "blocks": []any{map[string]any{"input": input, "output": input * pricing.CompletionRatio, "unit": "1M tokens"}}}
 }
 
 func getAdminModelPrice(c *gin.Context) {
@@ -175,7 +298,7 @@ func updateModelPrice(c *gin.Context) {
 		db, e := platformDatabase()
 		err = e
 		if err == nil {
-			err = db.Model(&modelPriceCatalog{}).Where("id = ?", c.Param("id")).Updates(map[string]any{"model_key": row.ModelKey, "display_name": row.DisplayName, "vendor": row.Vendor, "tags": row.Tags, "currency": row.Currency, "timezone": row.Timezone, "vendor_price_spec": row.VendorPriceSpec, "llmapi_price_spec": row.LLMAPIPriceSpec, "runtime_pricing_ref": row.RuntimePricingRef, "published": row.Published, "sort_order": row.SortOrder}).Error
+			err = db.Model(&modelPriceCatalog{}).Where("id = ?", c.Param("id")).Updates(map[string]any{"model_key": row.ModelKey, "display_name": row.DisplayName, "vendor": row.Vendor, "tags": row.Tags, "currency": row.Currency, "timezone": row.Timezone, "vendor_price_spec": row.VendorPriceSpec, "llm_api_price_spec": row.LLMAPIPriceSpec, "runtime_pricing_ref": row.RuntimePricingRef, "published": row.Published, "sort_order": row.SortOrder}).Error
 		}
 	}
 	if err != nil {
@@ -200,6 +323,7 @@ func saveModelPriceSyncPreview(c *gin.Context) {
 		Items  []struct {
 			ModelKey string          `json:"modelKey"`
 			Spec     json.RawMessage `json:"spec"`
+			Source   string          `json:"source"`
 		} `json:"items"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -219,16 +343,24 @@ func saveModelPriceSyncPreview(c *gin.Context) {
 				var row modelPriceCatalog
 				if e = tx.Where("model_key = ?", item.ModelKey).First(&row).Error; e != nil {
 					if e == gorm.ErrRecordNotFound {
-						continue
+						row = modelPriceCatalog{ModelKey: item.ModelKey, DisplayName: item.ModelKey, Vendor: "Upstream", Tags: json.RawMessage(`[]`), Currency: "USD", Timezone: "Asia/Shanghai", VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: json.RawMessage(`{}`), RuntimePricingRef: json.RawMessage(`{"source":"upstream"}`), Published: false}
+						if e = tx.Create(&row).Error; e != nil {
+							return e
+						}
+					} else {
+						return e
 					}
-					return e
 				}
 				status := "same"
 				if string(row.VendorPriceSpec) != string(spec) {
 					status = "changed"
 					changed++
 				}
-				if e = tx.Model(&row).Updates(map[string]any{"pending_vendor_spec": spec, "upstream_source": input.Source, "sync_status": status, "last_synced_at": now}).Error; e != nil {
+				source := strings.TrimSpace(item.Source)
+				if source == "" {
+					source = input.Source
+				}
+				if e = tx.Model(&row).Updates(map[string]any{"pending_vendor_spec": spec, "upstream_source": source, "sync_status": status, "last_synced_at": now}).Error; e != nil {
 					return e
 				}
 			}

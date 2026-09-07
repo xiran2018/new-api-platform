@@ -219,6 +219,36 @@ cd /opt/llmapi-deploy
 
 ```bash
 ./scripts/update-production-app.sh --NoPull
+
+如果应用使用 `docker-compose.host-db.yml` 连接已有 PostgreSQL 和 Redis，使用：
+
+```bash
+./scripts/update-production-app.sh --HostDB --NoPull
+```
+
+省略 `--NoPull` 时会先拉取应用和 gateway 镜像。脚本检测到当前正在运行的
+`host-db-new-api` 容器时也会自动进入 `--HostDB` 模式；显式指定参数更便于确认部署目标。
+
+本机开发环境需要连续执行“构建 latest 镜像”和“用本地镜像重建应用”时，可使用组合脚本：
+
+```bash
+chmod +x scripts/rebuild-local-production.sh
+./scripts/rebuild-local-production.sh
+```
+
+它默认使用 `latest`、Docker `host` 构建网络和
+`https://goproxy.cn,direct`，且不会重建 PostgreSQL、Redis。显式使用已有宿主机数据库部署：
+
+```bash
+./scripts/rebuild-local-production.sh --HostDB
+```
+
+查看或覆盖默认参数：
+
+```bash
+./scripts/rebuild-local-production.sh --help
+./scripts/rebuild-local-production.sh --version v1.0.1
+```
 ```
 
 脚本兼容 `docker compose` v2 和 `docker-compose` v1。它会先确认 PostgreSQL、Redis
@@ -684,6 +714,18 @@ Go、Bun 和 Debian 镜像。它不会拉取或更新正在运行的 PostgreSQL�
 
 # 也可以通过可选环境变量指定版本
 IMAGE_VERSION=v1.0.1 ./scripts/publish-docker-images.sh
+
+如果构建容器无法解析 `proxy.golang.org`，可让构建过程使用宿主机网络并指定国内 Go 模块代理：
+
+```bash
+./scripts/publish-docker-images.sh \
+  --version latest \
+  --build-network host \
+  --goproxy https://goproxy.cn,direct
+```
+
+也可以通过环境变量配置：`DOCKER_BUILD_NETWORK=host` 和
+`GOPROXY=https://goproxy.cn,direct`。这两个设置只影响镜像构建，不会写入运行中的应用配置。
 ```
 
 需要推送时，在任意一种写法中增加 `--token`；例如指定版本并推送：

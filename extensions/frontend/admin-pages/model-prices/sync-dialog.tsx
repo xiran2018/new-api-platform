@@ -3,7 +3,78 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import type { PriceBlock, PriceSpec } from "../../model-prices/types";
 type Channel = { id: number; name: string; base_url: string };
+type UpstreamPrice = Record<string, unknown>;
+
+const numeric = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+function sourceLabel(source: string, values: UpstreamPrice) {
+  const provider =
+    typeof values._source_provider === "string"
+      ? values._source_provider
+      : "";
+  return provider ? `${source} / ${provider}` : source;
+}
+
+function upstreamPriceSpec(
+  upstreams: Record<string, UpstreamPrice>,
+): PriceSpec {
+  const blocks: PriceBlock[] = [];
+  let mode: PriceSpec["mode"] = "token";
+  for (const [source, values] of Object.entries(upstreams)) {
+    const label = sourceLabel(source, values);
+    const sourceURL =
+      typeof values._source_url === "string" ? values._source_url : undefined;
+    const table = {
+      headers: ["Price field", "Upstream value"],
+      rows: Object.entries(values)
+        .filter(([field]) => !field.startsWith("_source_"))
+        .map(([field, value]) => [
+          field,
+          typeof value === "string" ? value : JSON.stringify(value),
+        ]),
+    };
+    const requestPrice = numeric(values.model_price);
+    if (requestPrice != null) {
+      mode = "request";
+      blocks.push({
+        label,
+        price: requestPrice,
+        unit: "request",
+        table,
+        note: sourceURL,
+      });
+      continue;
+    }
+    const ratio = numeric(values.model_ratio);
+    if (ratio != null) {
+      const input = ratio * 2;
+      const completion = numeric(values.completion_ratio);
+      blocks.push({
+        label,
+        input,
+        output: completion == null ? undefined : input * completion,
+        unit: "1M tokens",
+        table,
+        note: sourceURL,
+      });
+      continue;
+    }
+    if (typeof values.billing_expr === "string" && values.billing_expr) {
+      mode = "expression";
+      blocks.push({
+        label,
+        unit: "1M tokens",
+        note: [sourceURL, values.billing_expr].filter(Boolean).join("\n"),
+        table,
+      });
+    }
+  }
+  return { mode, blocks };
+}
+
 export function ModelPriceSyncDialog({
   open,
   onClose,
@@ -45,36 +116,20 @@ export function ModelPriceSyncDialog({
         })),
         timeout: 15,
       });
-      const differences = result.data?.data?.differences || {};
-      const items = Object.entries(differences)
+      const prices = (result.data?.data?.prices || {}) as Record<
+        string,
+        { upstreams?: Record<string, UpstreamPrice> }
+      >;
+      const items = Object.entries(prices)
         .filter(([model]) => !modelKey || model === modelKey)
-        .map(([model, fields]) => ({
+        .map(([model, price]) => ({
           modelKey: model,
-          spec: {
-            mode: "table",
-            blocks: [
-              {
-                label: chosen.map((x) => x.name).join(", "),
-                table: {
-                  headers: ["Price field", "Upstream value"],
-                  rows: Object.entries(
-                    fields as Record<
-                      string,
-                      { upstreams: Record<string, unknown> }
-                    >,
-                  ).map(([field, d]) => [
-                    field,
-                    String(
-                      Object.values(d.upstreams || {}).find(
-                        (v) => v !== "same",
-                      ) ?? "-",
-                    ),
-                  ]),
-                },
-              },
-            ],
-          },
-        }));
+          spec: upstreamPriceSpec(price.upstreams || {}),
+          source: Object.entries(price.upstreams || {})
+            .map(([source, values]) => sourceLabel(source, values))
+            .join(", "),
+        }))
+        .filter((item) => item.spec.blocks?.length);
       await api.post("/api/platform/admin/model-prices/sync-preview", {
         source: chosen.map((x) => x.name).join(", "),
         items,

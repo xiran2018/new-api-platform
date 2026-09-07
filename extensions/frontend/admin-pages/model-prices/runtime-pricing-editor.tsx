@@ -16,6 +16,55 @@ import {
 } from "@/features/system-settings/models/model-pricing-sheet";
 import type { PriceSpec } from "../../model-prices/types";
 
+type PriceComparison = Partial<
+  Record<
+    | "input"
+    | "completion"
+    | "cache"
+    | "createCache"
+    | "image"
+    | "audioInput"
+    | "audioOutput"
+    | "request",
+    number
+  >
+>;
+
+function vendorComparison(spec?: PriceSpec): PriceComparison {
+  const block = spec?.blocks?.find(
+    (item) =>
+      item.input != null || item.price != null || item.table?.rows?.length,
+  );
+  if (!block) return {};
+  const fields = Object.fromEntries(block.table?.rows || []);
+  const numeric = (key: string) => {
+    const value = Number(fields[key]);
+    return Number.isFinite(value) ? value : undefined;
+  };
+  const request = block.price ?? numeric("model_price");
+  if (request != null) return { request };
+  const input = block.input ?? ((numeric("model_ratio") ?? 0) * 2 || undefined);
+  if (input == null) return {};
+  const ratioPrice = (key: string) => {
+    const ratio = numeric(key);
+    return ratio == null ? undefined : input * ratio;
+  };
+  const audioInput = ratioPrice("audio_ratio");
+  const audioOutputRatio = numeric("audio_completion_ratio");
+  return {
+    input,
+    completion: block.output ?? ratioPrice("completion_ratio"),
+    cache: ratioPrice("cache_ratio"),
+    createCache: ratioPrice("create_cache_ratio"),
+    image: ratioPrice("image_ratio"),
+    audioInput,
+    audioOutput:
+      audioInput == null || audioOutputRatio == null
+        ? undefined
+        : audioInput * audioOutputRatio,
+  };
+}
+
 function editorData(entry: ModelPricingEntry): ModelRatioData {
   const values = { ...entry.configured };
   if (entry.effective["billing_setting.billing_mode"] === "tiered_expr") {
@@ -62,9 +111,11 @@ function displaySpec(data: ModelRatioData): PriceSpec {
 
 export function RuntimePricingEditor({
   modelKey,
+  vendorPriceSpec,
   onSaved,
 }: {
   modelKey: string;
+  vendorPriceSpec?: PriceSpec;
   onSaved: (spec: PriceSpec) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
@@ -122,6 +173,7 @@ export function RuntimePricingEditor({
           editData={editorData(entry)}
           usageSchema={entry.usage_schema}
           isSaving={saving}
+          priceComparison={vendorComparison(vendorPriceSpec)}
         />
       </div>
       <div className="flex justify-end">

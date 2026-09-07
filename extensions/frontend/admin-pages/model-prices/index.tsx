@@ -12,10 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import {
-  numericDifference,
-  PriceRenderer,
-} from "../../model-prices/price-renderer";
+import { PriceRenderer } from "../../model-prices/price-renderer";
 import type { ModelPrice, PriceSpec } from "../../model-prices/types";
 import { ModelPriceSyncDialog } from "./sync-dialog";
 import { RuntimePricingEditor } from "./runtime-pricing-editor";
@@ -215,6 +212,7 @@ export function ModelPriceManagementPage() {
   const { t } = useTranslation();
   const [rows, setRows] = useState<ModelPrice[]>([]),
     [q, setQ] = useState(""),
+    [filter, setFilter] = useState<"all" | "local" | "unset">("all"),
     [edit, setEdit] = useState<ModelPrice | null>(null),
     [tab, setTab] = useState<"vendor" | "ours">("vendor"),
     [syncOpen, setSyncOpen] = useState(false),
@@ -224,7 +222,19 @@ export function ModelPriceManagementPage() {
       .get("/api/platform/admin/model-prices", { params: { q } })
       .then((r) => setRows(r.data.data || []));
   useEffect(load, [q]);
-  const shown = useMemo(() => rows, [rows]);
+  const shown = useMemo(
+    () =>
+      rows.filter((row) => {
+        const local = row.runtimePricingRef?.source === "new-api";
+        const unset = !row.llmapiPriceSpec?.blocks?.length;
+        return (
+          filter === "all" ||
+          (filter === "local" && local) ||
+          (filter === "unset" && local && unset)
+        );
+      }),
+    [rows, filter],
+  );
   const save = async () => {
     if (!edit) return;
     if (edit.id)
@@ -266,37 +276,48 @@ export function ModelPriceManagementPage() {
           </Button>
         </div>
       </div>
-      <div className="relative mb-4 max-w-lg">
-        <Input
-          className="pr-10"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("Search models")}
-        />
-        <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="relative w-full max-w-lg">
+          <Input
+            className="pr-10"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("Search models")}
+          />
+          <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        </div>
+        <select
+          className="h-10 rounded-md border bg-background px-3"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as typeof filter)}
+        >
+          <option value="all">{t("All models")}</option>
+          <option value="local">{t("Existing local models")}</option>
+          <option value="unset">{t("Models without pricing")}</option>
+        </select>
+        <span className="self-center text-sm text-muted-foreground">
+          {shown.length} {t("models")}
+        </span>
       </div>
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[1100px] text-sm">
-          <thead className="bg-muted">
+      <div className="max-h-[calc(100vh-19rem)] overflow-auto rounded-lg border [scrollbar-gutter:stable]">
+        <table className="w-full min-w-[1500px] table-fixed text-sm">
+          <thead className="sticky top-0 z-10 bg-muted">
             <tr>
-              <th className="p-3 text-left">{t("Model name")}</th>
-              <th className="p-3 text-left">{t("Vendor")}</th>
-              <th className="p-3 text-left">{t("Vendor original price")}</th>
-              <th className="p-3 text-left">
+              <th className="w-[24%] p-3 text-left">{t("Model name")}</th>
+              <th className="w-[10%] p-3 text-left">{t("Vendor")}</th>
+              <th className="w-[28%] p-3 text-left">{t("Vendor original price")}</th>
+              <th className="w-[30%] p-3 text-left">
                 {t("LLMAPI price (tax included 6%)")}
               </th>
-              <th className="p-3">{t("Difference")}</th>
-              <th className="p-3">{t("Actions")}</th>
+              <th className="w-[8%] p-3">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((r) => {
-              const d = numericDifference(r.vendorPriceSpec, r.llmapiPriceSpec);
               return (
                 <tr
                   key={r.id}
-                  onClick={() => setEdit(r)}
-                  className="cursor-pointer border-t align-top hover:bg-muted/30"
+                  className="border-t align-top hover:bg-muted/30"
                 >
                   <td className="p-3 font-medium">
                     {r.displayName}
@@ -313,24 +334,22 @@ export function ModelPriceManagementPage() {
                   <td className="max-w-sm p-3">
                     <PriceRenderer
                       spec={r.vendorPriceSpec}
-                      currency={r.currency}
                       timezone={r.timezone}
                     />
                   </td>
                   <td className="max-w-sm p-3">
                     <PriceRenderer
                       spec={r.llmapiPriceSpec}
-                      currency={r.currency}
                       timezone={r.timezone}
+                      compareSpec={r.vendorPriceSpec}
                     />
                   </td>
-                  <td
-                    className={`p-3 text-center font-semibold ${d == null ? "" : d >= 0 ? "text-rose-600" : "text-emerald-600"}`}
-                  >
-                    {d == null ? "-" : `${d >= 0 ? "+" : ""}${d}`}
-                  </td>
                   <td className="p-3 text-center">
-                    <Button size="icon" variant="ghost">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setEdit(r)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -473,6 +492,7 @@ export function ModelPriceManagementPage() {
               ) : (
                 <RuntimePricingEditor
                   modelKey={edit.modelKey}
+                  vendorPriceSpec={edit.vendorPriceSpec}
                   onSaved={async (spec) => {
                     const next = { ...edit, llmapiPriceSpec: spec };
                     if (edit.id) {
@@ -498,7 +518,6 @@ export function ModelPriceManagementPage() {
                   </div>
                   <PriceRenderer
                     spec={edit.pendingVendorSpec}
-                    currency={edit.currency}
                     timezone={edit.timezone}
                   />
                   <Button

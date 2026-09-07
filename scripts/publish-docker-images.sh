@@ -6,6 +6,8 @@ registry_user="${DOCKERHUB_USERNAME:-jingquanliang}"
 version="${IMAGE_VERSION:-$(git -C "$repo_root" rev-parse --short HEAD)}"
 token="${DOCKERHUB_TOKEN:-}"
 pull_base=false
+go_proxy="${GOPROXY:-https://proxy.golang.org,direct}"
+build_network="${DOCKER_BUILD_NETWORK:-}"
 
 token_looks_valid() {
   local candidate="$1"
@@ -19,9 +21,12 @@ token_looks_valid() {
 usage() {
   cat >&2 <<EOF
 Usage: $0 [--token TOKEN] [--username USERNAME] [--version VERSION] [--pull]
+          [--goproxy URLS] [--build-network NETWORK]
 
 Without --token (or DOCKERHUB_TOKEN), images are built locally but not pushed.
 Use --pull to refresh base images before building.
+Use --goproxy to select the Go module proxy used inside the build.
+Use --build-network host when Docker's internal DNS cannot resolve package hosts.
 EOF
 }
 
@@ -46,6 +51,16 @@ while [[ $# -gt 0 ]]; do
       pull_base=true
       shift
       ;;
+    --goproxy)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      go_proxy="$2"
+      shift 2
+      ;;
+    --build-network)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      build_network="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -57,7 +72,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "Options: --version=tag, --username=registry user, --pull=refresh base images, --token=enable push, --help=show help"
+echo "Options: --version=tag, --username=registry user, --pull=refresh base images, --goproxy=Go module proxy, --build-network=Docker build network, --token=enable push, --help=show help"
 
 app_image="${registry_user}/new-api-platform"
 gateway_image="${registry_user}/new-api-platform-gateway"
@@ -72,11 +87,12 @@ if ! docker info >/dev/null 2>&1; then
 fi
 build_options=()
 [[ "$pull_base" == false ]] || build_options+=(--pull)
+[[ -z "$build_network" ]] || build_options+=(--network "$build_network")
 
 echo "==> Building application image"
 echo "    ${app_image}:${version}"
 echo "    ${app_image}:latest"
-docker build "${build_options[@]}" -t "${app_image}:${version}" -t "${app_image}:latest" -f "$repo_root/Dockerfile" "$repo_root"
+docker build "${build_options[@]}" --build-arg "GOPROXY=$go_proxy" -t "${app_image}:${version}" -t "${app_image}:latest" -f "$repo_root/Dockerfile" "$repo_root"
 
 echo "==> Building gateway image"
 echo "    ${gateway_image}:${version}"

@@ -5,6 +5,7 @@ const resources: Record<string, Record<string, string>> = {
     "Model prices": "模型价格",
     "Model price management": "模型价格管理",
     "Vendor original price": "厂商原价",
+    "Vendor price": "原厂价格",
     "LLMAPI price (tax included 6%)": "LLMAPI价格（含税6%）",
     "Model name": "模型名称",
     Vendor: "厂商",
@@ -69,6 +70,7 @@ const resources: Record<string, Record<string, string>> = {
     "Model prices": "模型價格",
     "Model price management": "模型價格管理",
     "Vendor original price": "廠商原價",
+    "Vendor price": "原廠價格",
     "LLMAPI price (tax included 6%)": "LLMAPI價格（含稅6%）",
     "Model name": "模型名稱",
     Vendor: "廠商",
@@ -98,30 +100,29 @@ const resources: Record<string, Record<string, string>> = {
   en: {
     "Model prices": "Model prices",
     "Model price management": "Model price management",
+    "Vendor price": "Vendor price",
   },
   fr: {
     "Model prices": "Prix des modèles",
     "Model price management": "Gestion des prix des modèles",
+    "Vendor price": "Prix fournisseur",
   },
   ja: {
     "Model prices": "モデル価格",
     "Model price management": "モデル価格管理",
+    "Vendor price": "ベンダー価格",
   },
   ru: {
     "Model prices": "Цены моделей",
     "Model price management": "Управление ценами моделей",
+    "Vendor price": "Цена поставщика",
   },
   vi: {
     "Model prices": "Giá mô hình",
     "Model price management": "Quản lý giá mô hình",
+    "Vendor price": "Giá nhà cung cấp",
   },
 };
-
-for (const [language, translation] of Object.entries(resources)) {
-  const locale =
-    language === "zh" ? "zhCN" : language === "zh-TW" ? "zhTW" : language;
-  i18n.addResourceBundle(locale, "translation", translation, true, true);
-}
 
 Object.assign(resources.zh, {
   "Product prices may change. Please check this page regularly for the latest pricing.":
@@ -136,4 +137,59 @@ Object.assign(resources.zh, {
     "在这里保存后，该模型将立即按照新价格进行实际计费。",
   "Save runtime pricing": "保存实际计费价格",
   "Runtime pricing saved": "实际计费价格已保存并生效",
+  "All models": "全部模型",
+  "Existing local models": "本机已有模型",
+  "Models without pricing": "未设置价格的模型",
 });
+
+Object.assign(resources["zh-TW"], {
+  "Product prices may change. Please check this page regularly for the latest pricing.":
+    "產品價格可能發生變動，請定期查看本頁以取得最新價格資訊。",
+  "All vendors": "全部廠商",
+  models: "個模型",
+  "All models": "全部模型",
+  "Existing local models": "本機已有模型",
+  "Models without pricing": "未設定價格的模型",
+});
+Object.assign(resources.fr, {
+  "Product prices may change. Please check this page regularly for the latest pricing.":
+    "Les prix peuvent évoluer. Consultez régulièrement cette page pour connaître les derniers tarifs.",
+  "All vendors": "Tous les fournisseurs",
+  models: "modèles",
+  "All models": "Tous les modèles",
+  "Existing local models": "Modèles locaux",
+  "Models without pricing": "Modèles sans prix",
+});
+Object.assign(resources.ja, {
+  "Product prices may change. Please check this page regularly for the latest pricing.":
+    "製品価格は変更される場合があります。最新価格はこのページで定期的にご確認ください。",
+  "All vendors": "すべてのプロバイダー",
+  models: "モデル",
+  "All models": "すべてのモデル",
+  "Existing local models": "ローカルモデル",
+  "Models without pricing": "価格未設定モデル",
+});
+Object.assign(resources.ru, {
+  "Product prices may change. Please check this page regularly for the latest pricing.":
+    "Цены могут изменяться. Регулярно проверяйте актуальные цены на этой странице.",
+  "All vendors": "Все поставщики",
+  models: "моделей",
+  "All models": "Все модели",
+  "Existing local models": "Локальные модели",
+  "Models without pricing": "Модели без цены",
+});
+Object.assign(resources.vi, {
+  "Product prices may change. Please check this page regularly for the latest pricing.":
+    "Giá sản phẩm có thể thay đổi. Vui lòng kiểm tra trang này thường xuyên để xem giá mới nhất.",
+  "All vendors": "Tất cả nhà cung cấp",
+  models: "mô hình",
+  "All models": "Tất cả mô hình",
+  "Existing local models": "Mô hình cục bộ",
+  "Models without pricing": "Mô hình chưa định giá",
+});
+
+for (const [language, translation] of Object.entries(resources)) {
+  const locale =
+    language === "zh" ? "zhCN" : language === "zh-TW" ? "zhTW" : language;
+  i18n.addResourceBundle(locale, "translation", translation, true, true);
+}

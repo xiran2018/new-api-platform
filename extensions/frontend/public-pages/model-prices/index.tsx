@@ -95,9 +95,9 @@ export function ModelPricesPage() {
             </Button>
           </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-          <table className="w-full min-w-[1050px] table-fixed text-left text-sm">
-            <thead className="bg-muted/60">
+        <div className="max-h-[calc(100vh-16rem)] overflow-auto rounded-lg border bg-card shadow-sm [scrollbar-gutter:stable]">
+          <table className="w-full min-w-[1450px] table-fixed text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-muted">
               <tr>
                 <th className="w-[18%] p-4">{t("Model name")}</th>
                 <th className="w-[10%] p-4">{t("Vendor")}</th>
@@ -133,15 +133,14 @@ export function ModelPricesPage() {
                   <td className="p-4">
                     <PriceRenderer
                       spec={r.vendorPriceSpec}
-                      currency={r.currency}
                       timezone={r.timezone}
                     />
                   </td>
                   <td className="p-4">
                     <PriceRenderer
                       spec={r.llmapiPriceSpec}
-                      currency={r.currency}
                       timezone={r.timezone}
+                      compareSpec={r.vendorPriceSpec}
                     />
                   </td>
                 </tr>
