@@ -8,7 +8,7 @@
 - `ModelRatio`、`CompletionRatio`、`CacheRatio`、`CreateCacheRatio`、`ImageRatio`、`AudioRatio`、`AudioCompletionRatio`：按 Token/模态计费。
 - `billing_setting.billing_mode`、`billing_setting.billing_expr`：表达式、分段、分时和复杂任务计费。
 
-“模型价格管理”复用 upstream 的 `ModelPricingEditorPanel` 及 `/api/option/` 保存接口。因此在新页面保存 LLMAPI 价格后，计费立即生效；原有 `/system-settings/billing/model-pricing` 和 `/models/metadata` 也会读到相同结果。
+“模型价格管理”复用 upstream 的 `ModelPricingEditorPanel` 及 `/api/option/model_pricing` 保存接口。该接口带版本校验，可阻止并发编辑静默覆盖。因此在新页面保存 LLMAPI 价格后，计费立即生效；原有 `/system-settings/billing/model-pricing` 和 `/models/metadata` 也会读到相同结果。
 
 ## 展示与比较数据
 
@@ -30,7 +30,7 @@
 升级 core 后重点验证以下导入契约：
 
 1. `ModelPricingEditorPanel` 和 `ModelPricingEditorPanelHandle` 是否仍从 `model-pricing-sheet.tsx` 导出。
-2. `getSystemOptions`、`updateSystemOption` 的请求与响应结构是否变化。
+2. `getModelPricing`、`saveModelPricing` 的请求与响应结构是否变化。
 3. Option 字段集合是否新增计费倍率或表达式字段。
 4. `combineBillingExpr` 是否仍是表达式合并的官方入口。
 

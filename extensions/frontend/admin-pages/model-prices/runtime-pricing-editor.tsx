@@ -2,81 +2,58 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { combineBillingExpr } from "@/features/pricing/lib/billing-expr";
 import {
-  getSystemOptions,
-  updateSystemOption,
-} from "@/features/system-settings/api";
+  getModelPricing,
+  saveModelPricing,
+  type ModelPricingEntry,
+} from "@/features/model-pricing/api";
+import { pricingFromDraft, pricingRow } from "@/features/model-pricing/pricing";
+import { combineBillingExpr } from "@/features/pricing/lib/billing-expr";
+import type { ModelRatioData } from "@/features/system-settings/models/model-pricing-core";
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
-  type ModelRatioData,
 } from "@/features/system-settings/models/model-pricing-sheet";
 import type { PriceSpec } from "../../model-prices/types";
 
-const fields = [
-  "ModelPrice",
-  "ModelRatio",
-  "CacheRatio",
-  "CreateCacheRatio",
-  "CompletionRatio",
-  "ImageRatio",
-  "AudioRatio",
-  "AudioCompletionRatio",
-  "billing_setting.billing_mode",
-  "billing_setting.billing_expr",
-] as const;
-type Field = (typeof fields)[number];
-type Maps = Record<Field, Record<string, number | string>>;
-const parse = (raw?: string) => {
-  try {
-    return JSON.parse(raw || "{}") as Record<string, number | string>;
-  } catch {
-    return {};
+function editorData(entry: ModelPricingEntry): ModelRatioData {
+  const values = { ...entry.configured };
+  if (entry.effective["billing_setting.billing_mode"] === "tiered_expr") {
+    values["billing_setting.billing_mode"] = "tiered_expr";
+    values["billing_setting.billing_expr"] =
+      entry.effective["billing_setting.billing_expr"];
   }
-};
-const editData = (name: string, m: Maps): ModelRatioData => ({
-  name,
-  price: String(m.ModelPrice[name] ?? ""),
-  ratio: String(m.ModelRatio[name] ?? ""),
-  cacheRatio: String(m.CacheRatio[name] ?? ""),
-  createCacheRatio: String(m.CreateCacheRatio[name] ?? ""),
-  completionRatio: String(m.CompletionRatio[name] ?? ""),
-  imageRatio: String(m.ImageRatio[name] ?? ""),
-  audioRatio: String(m.AudioRatio[name] ?? ""),
-  audioCompletionRatio: String(m.AudioCompletionRatio[name] ?? ""),
-  billingMode:
-    (m["billing_setting.billing_mode"][
-      name
-    ] as ModelRatioData["billingMode"]) || "per-token",
-  billingExpr: String(m["billing_setting.billing_expr"][name] ?? ""),
-});
-function displaySpec(d: ModelRatioData): PriceSpec {
-  if (d.billingMode === "tiered_expr")
+  return pricingRow(entry.model_name, values);
+}
+
+function displaySpec(data: ModelRatioData): PriceSpec {
+  if (data.billingMode === "tiered_expr")
     return {
       mode: "expression",
       blocks: [
         {
           label: "Expression",
           note: combineBillingExpr(
-            d.billingExpr || "",
-            d.requestRuleExpr || "",
+            data.billingExpr || "",
+            data.requestRuleExpr || "",
           ),
         },
       ],
     };
-  if (d.price)
+  if (data.price)
     return {
       mode: "request",
-      blocks: [{ price: Number(d.price), unit: "request" }],
+      blocks: [{ price: Number(data.price), unit: "request" }],
     };
-  const base = Number(d.ratio || 0) * 2;
+  const base = Number(data.ratio || 0) * 2;
   return {
     mode: "token",
     blocks: [
       {
         input: base,
-        output: d.completionRatio ? base * Number(d.completionRatio) : null,
+        output: data.completionRatio
+          ? base * Number(data.completionRatio)
+          : null,
         unit: "1M tokens",
       },
     ],
@@ -92,19 +69,20 @@ export function RuntimePricingEditor({
 }) {
   const { t } = useTranslation();
   const ref = useRef<ModelPricingEditorPanelHandle>(null);
-  const [maps, setMaps] = useState<Maps | null>(null);
+  const [entry, setEntry] = useState<ModelPricingEntry | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    void getSystemOptions().then((r) => {
-      const options = Object.fromEntries(
-        (r.data || []).map((x) => [x.key, x.value]),
-      );
-      setMaps(
-        Object.fromEntries(fields.map((k) => [k, parse(options[k])])) as Maps,
-      );
-    });
+    setEntry(null);
+    if (modelKey)
+      void getModelPricing([modelKey])
+        .then((data) =>
+          setEntry(
+            data.entries.find((item) => item.model_name === modelKey) || null,
+          ),
+        )
+        .catch((error) => toast.error(error.message));
   }, [modelKey]);
-  if (!maps)
+  if (!entry)
     return (
       <div className="p-8 text-center text-muted-foreground">
         {t("Loading...")}
@@ -116,43 +94,19 @@ export function RuntimePricingEditor({
     draft.name = modelKey;
     setSaving(true);
     try {
-      const next = structuredClone(maps);
-      for (const k of fields) delete next[k][modelKey];
-      const put = (k: Field, v?: string) => {
-        if (v !== "" && v != null && Number.isFinite(Number(v)))
-          next[k][modelKey] = Number(v);
-      };
-      if (draft.billingMode === "tiered_expr") {
-        next["billing_setting.billing_mode"][modelKey] = "tiered_expr";
-        next["billing_setting.billing_expr"][modelKey] = combineBillingExpr(
-          draft.billingExpr || "",
-          draft.requestRuleExpr || "",
-        );
-        put("ModelPrice", draft.price);
-        put("ModelRatio", draft.ratio);
-        put("CacheRatio", draft.cacheRatio);
-        put("CreateCacheRatio", draft.createCacheRatio);
-        put("CompletionRatio", draft.completionRatio);
-        put("ImageRatio", draft.imageRatio);
-        put("AudioRatio", draft.audioRatio);
-        put("AudioCompletionRatio", draft.audioCompletionRatio);
-      } else if (draft.price) put("ModelPrice", draft.price);
-      else {
-        put("ModelRatio", draft.ratio);
-        put("CacheRatio", draft.cacheRatio);
-        put("CreateCacheRatio", draft.createCacheRatio);
-        put("CompletionRatio", draft.completionRatio);
-        put("ImageRatio", draft.imageRatio);
-        put("AudioRatio", draft.audioRatio);
-        put("AudioCompletionRatio", draft.audioCompletionRatio);
-      }
-      for (const k of fields)
-        await updateSystemOption({ key: k, value: JSON.stringify(next[k]) });
-      setMaps(next);
+      await saveModelPricing([
+        {
+          model_name: modelKey,
+          expected_version: entry.version,
+          pricing: pricingFromDraft(draft),
+        },
+      ]);
+      const refreshed = await getModelPricing([modelKey]);
+      setEntry(refreshed.entries[0] || null);
       await onSaved(displaySpec(draft));
       toast.success(t("Runtime pricing saved"));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : t("Save failed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Save failed"));
     } finally {
       setSaving(false);
     }
@@ -165,7 +119,8 @@ export function RuntimePricingEditor({
       <div className="h-[620px] overflow-auto rounded-lg border">
         <ModelPricingEditorPanel
           ref={ref}
-          editData={editData(modelKey, maps)}
+          editData={editorData(entry)}
+          usageSchema={entry.usage_schema}
           isSaving={saving}
         />
       </div>
