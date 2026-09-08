@@ -304,8 +304,9 @@ export function RuntimePricingEditor({
           {t("Enter 10 for 10% off; saved billing prices become 90% of the entered prices.")}
         </span>
       </label>
-      <div className="h-[620px] overflow-auto rounded-lg border">
+      <div className="min-w-0 rounded-lg border">
         <ModelPricingEditorPanel
+          className="!overflow-visible [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static"
           ref={ref}
           editData={
             hasConfiguredPrice(entry)

@@ -13,10 +13,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  getSitePricingCurrency,
+  isValidPricingCurrency,
+  USD_PRICING_CURRENCY,
+} from "@/features/model-pricing/currency";
+import { PricingAmountInput } from "@/features/model-pricing/pricing-amount-input";
+import { PricingCurrencySelector } from "@/features/model-pricing/pricing-currency-selector";
 import { combineBillingExpr, splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
 import { TieredPricingEditor } from "@/features/system-settings/models/tiered-pricing-editor";
 import { api } from "@/lib/api";
 import { useSystemConfigStore } from "@/stores/system-config-store";
+import { usePricingPreferencesStore } from "@/stores/pricing-preferences-store";
 import { PriceRenderer } from "../../model-prices/price-renderer";
 import type { ModelPrice, PriceSpec } from "../../model-prices/types";
 import { ModelPriceSyncDialog } from "./sync-dialog";
@@ -53,9 +61,22 @@ function SpecEditor({
   source?: string;
 }) {
   const { t } = useTranslation();
-  const cnyExchangeRate = useSystemConfigStore(
-    (state) => state.config.currency.usdExchangeRate,
+  const currencyConfig = useSystemConfigStore(
+    (state) => state.config.currency,
   );
+  const currencyPreference = usePricingPreferencesStore(
+    (state) => state.currency,
+  );
+  const siteCurrency = useMemo(
+    () => getSitePricingCurrency(currencyConfig),
+    [currencyConfig],
+  );
+  const pricingCurrency =
+    currencyPreference === "site" && isValidPricingCurrency(siteCurrency)
+      ? siteCurrency
+      : USD_PRICING_CURRENCY;
+  const cnyExchangeRate = currencyConfig.usdExchangeRate;
+  const showCnyHint = pricingCurrency.label === "USD";
   const cnyHint = (usd: number | null | undefined) => {
     const amount = Number(usd);
     const rate = Number(cnyExchangeRate);
@@ -128,6 +149,7 @@ function SpecEditor({
           <a key={url} href={url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-primary underline">{url}</a>
         ))}
       </div>
+      <PricingCurrencySelector siteCurrency={siteCurrency} />
       <Tabs
         value={mode}
         onValueChange={(next) =>
@@ -155,43 +177,42 @@ function SpecEditor({
             <label className="space-y-1 text-sm md:col-span-2">
               <span>{t("Input price")}</span>
               <span className="flex flex-wrap items-center gap-2">
-                <Input
+                <PricingAmountInput
                   className="min-w-56 flex-1"
-                  type="number"
-                  step="any"
+                  currency={pricingCurrency}
                   placeholder={t("Input price")}
                   value={b.input ?? ""}
-                  onChange={(e) => set(i, "input", Number(e.target.value))}
+                  onChange={(next) => set(i, "input", Number(next))}
                 />
-                <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b.input)}</span>
+                {showCnyHint && <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b.input)}</span>}
               </span>
-              <span className="block text-xs text-muted-foreground">USD / 1M tokens</span>
+              <span className="block text-xs text-muted-foreground">{pricingCurrency.label} / 1M tokens</span>
             </label>
           )}
           {mode === "request" && (
             <label className="space-y-1 text-sm md:col-span-2">
               <span>{t("Price")}</span>
               <span className="flex flex-wrap items-center gap-2">
-                <Input
+                <PricingAmountInput
                   className="min-w-56 flex-1"
-                  type="number"
-                  step="any"
+                  currency={pricingCurrency}
                   placeholder={t("Price")}
                   value={b.price ?? ""}
-                  onChange={(e) => set(i, "price", Number(e.target.value))}
+                  onChange={(next) => set(i, "price", Number(next))}
                 />
-                <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b.price)}</span>
+                {showCnyHint && <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b.price)}</span>}
               </span>
-              <span className="block text-xs text-muted-foreground">USD / request</span>
+              <span className="block text-xs text-muted-foreground">{pricingCurrency.label} / request</span>
             </label>
           )}
           {mode === "expression" && (
-            <div className="space-y-2 md:col-span-2">
+            <div className="space-y-2 overflow-visible md:col-span-2 [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static">
               <div className="text-sm font-medium">{t("Pricing expression")}</div>
               {(() => {
                 const expression = splitBillingExprAndRequestRules(b.note || "");
                 return (
                   <TieredPricingEditor
+                    currency={pricingCurrency}
                     modelName={value.blocks?.[i]?.label}
                     billingExpr={expression.billingExpr}
                     requestRuleExpr={expression.requestRuleExpr}
@@ -201,7 +222,7 @@ function SpecEditor({
                     onRequestRuleExprChange={(next) =>
                       set(i, "note", combineBillingExpr(expression.billingExpr, next))
                     }
-                    cnyExchangeRate={cnyExchangeRate}
+                    cnyExchangeRate={showCnyHint ? cnyExchangeRate : undefined}
                   />
                 );
               })()}
@@ -219,10 +240,10 @@ function SpecEditor({
                   <Switch checked={enabled} onCheckedChange={(checked) => set(i, field, checked ? 0 : null)} />
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Input className="min-w-40 flex-1" type="number" step="any" disabled={!enabled} value={b[field] ?? ""} onChange={(e) => set(i, field, Number(e.target.value))} />
-                  {enabled && <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b[field])}</span>}
+                  <PricingAmountInput className="min-w-40 flex-1" currency={pricingCurrency} disabled={!enabled} value={b[field] ?? ""} onChange={(next) => set(i, field, Number(next))} />
+                  {enabled && showCnyHint && <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b[field])}</span>}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">USD / 1M tokens</div>
+                <div className="mt-1 text-xs text-muted-foreground">{pricingCurrency.label} / 1M tokens</div>
               </div>
             );
           })}
@@ -440,9 +461,9 @@ export function ModelPriceManagementPage() {
         modelKey={syncModel}
       />
       {edit && (
-        <div className="fixed inset-0 z-50 overflow-auto bg-black/55 p-4 md:p-8">
-          <div className="mx-auto max-w-6xl rounded-lg bg-background shadow-xl">
-            <div className="flex items-center justify-between border-b bg-background p-5">
+        <div className="fixed inset-0 z-50 flex min-h-0 justify-center overflow-hidden bg-black/55 p-4 md:p-8">
+          <div className="flex max-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-lg bg-background shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b bg-background p-5">
               <h2 className="text-xl font-semibold">
                 {edit.id ? edit.displayName : t("Add model")}
               </h2>
@@ -465,7 +486,7 @@ export function ModelPriceManagementPage() {
                 <Button onClick={save}>{t("Save")}</Button>
               </div>
             </div>
-            <div className="space-y-6 p-5">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]">
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="space-y-1 text-sm"><span>{t("Model key")}</span><Input
                   placeholder={t("Model key")}

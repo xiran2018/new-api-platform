@@ -13,6 +13,22 @@ const money = (value: number | null | undefined) =>
     abbreviate: false,
   });
 
+const hasNonZeroPrice = (value: number | null | undefined) =>
+  typeof value === "number" && Number.isFinite(value) && value !== 0;
+
+const blockHasVisiblePrice = (block: PriceBlock, requestMode: boolean) =>
+  requestMode
+    ? hasNonZeroPrice(block.price)
+    : [
+        block.input,
+        block.output,
+        block.cache,
+        block.createCache,
+        block.image,
+        block.audioInput,
+        block.audioOutput,
+      ].some(hasNonZeroPrice);
+
 function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
   if (!spec?.blocks?.length) return spec;
   if (spec.mode === "expression") {
@@ -107,7 +123,12 @@ export function PriceRenderer({
   useSystemConfigStore((state) => state.config.currency);
   const displayedSpec = withDerivedPrices(spec);
   const displayedCompareSpec = withDerivedPrices(compareSpec);
-  const blocks = displayedSpec?.blocks || [];
+  const requestMode = displayedSpec?.mode === "request";
+  const blocks = (displayedSpec?.blocks || []).filter(
+    (block) =>
+      displayedSpec?.mode === "table" ||
+      blockHasVisiblePrice(block, requestMode),
+  );
   const expression =
     spec?.mode === "expression"
       ? spec.blocks?.[0]?.baseExpression || spec.blocks?.[0]?.note || ""
@@ -183,21 +204,21 @@ export function PriceRenderer({
             </div>
             {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.image != null || b.audioInput != null || b.audioOutput != null)) || (showRequestPrice && b.price != null)) && (
               <div className="space-y-1.5 text-sm">
-                {showTokenPrices && b.input != null && (
+                {showTokenPrices && hasNonZeroPrice(b.input) && (
                   <div>
                     {t("Input price")}: <b>{money(b.input)}</b>
                     {delta(b.input, compared?.input)}
                     {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
                   </div>
                 )}
-                {showTokenPrices && b.output != null && (
+                {showTokenPrices && hasNonZeroPrice(b.output) && (
                   <div>
                     {t("Output price")}: <b>{money(b.output)}</b>
                     {delta(b.output, compared?.output)}
                     {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
                   </div>
                 )}
-                {showRequestPrice && b.price != null && (
+                {showRequestPrice && hasNonZeroPrice(b.price) && (
                   <div>
                     <b>{money(b.price)}</b>
                     {delta(b.price, compared?.price)}
@@ -211,7 +232,7 @@ export function PriceRenderer({
                   ["audioInput", "Audio input price"],
                   ["audioOutput", "Audio output price"],
                 ] as const).map(([field, label]) =>
-                  b[field] != null ? <div key={field}>{t(label)}: <b>{money(b[field])}</b>{delta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
+                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field])}</b>{delta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
                 )}
               </div>
             )}

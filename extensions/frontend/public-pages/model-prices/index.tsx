@@ -39,7 +39,7 @@ export function ModelPricesPage() {
   );
   return (
     <PublicLayout showMainContainer={false}>
-      <main className="min-w-full px-4 pb-12 pt-24 text-foreground sm:px-6">
+      <main className="w-full min-w-0 max-w-full overflow-x-hidden px-4 pb-12 pt-24 text-foreground sm:px-6">
         <div className="mb-5 text-center">
           <div>
             <h1 className="text-3xl font-semibold tracking-normal">
@@ -95,8 +95,15 @@ export function ModelPricesPage() {
             </Button>
           </div>
         </div>
-        <div className="rounded-lg border bg-card shadow-sm">
-          <table className="w-max min-w-full table-auto text-left text-sm">
+        <div className="max-w-full overflow-x-auto rounded-lg border bg-card shadow-sm [scrollbar-gutter:stable]">
+          <table className="w-full min-w-[1280px] table-fixed text-left text-sm">
+            <colgroup>
+              <col className="w-[16%]" />
+              <col className="w-[14%]" />
+              <col className="w-[16%]" />
+              <col className="w-[27%]" />
+              <col className="w-[27%]" />
+            </colgroup>
             <thead className="sticky top-0 z-10 bg-muted">
               <tr>
                 <th className="p-4">{t("Model name")}</th>
@@ -117,9 +124,9 @@ export function ModelPricesPage() {
                       {r.modelKey}
                     </div>
                   </td>
-                  <td className="p-4">{r.vendor}</td>
-                  <td className="whitespace-nowrap p-4">
-                    <div className="flex flex-wrap gap-1">
+                  <td className="break-words p-4">{r.vendor}</td>
+                  <td className="p-4">
+                    <div className="flex max-w-48 flex-wrap gap-1">
                       {(r.tags || []).map((x) => (
                         <span
                           key={x}
@@ -130,7 +137,7 @@ export function ModelPricesPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap p-4">
+                  <td className="p-4">
                     <PriceRenderer
                       spec={r.vendorPriceSpec}
                       timezone={r.timezone}
