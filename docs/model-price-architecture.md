@@ -39,6 +39,7 @@
 - `ModelPricingEditorPanel.priceMultiplier`：让输入差值和预览按优惠比例实时计算。
 - `ModelPricingEditorPanel.expressionComparison`：向表达式编辑器传入厂商表达式。
 - `TieredPricingEditor.comparisonExpr` / `priceMultiplier`：逐档显示厂商价格、折后价格和差值，并比较成本预估。
+- `TieredPricingEditor.cnyExchangeRate`：仅在厂商原价编辑器中逐档显示 USD 对应的人民币参考值；底层表达式仍保存 USD。
 
 对应文件为 `model-pricing-inputs.tsx`、`model-pricing-sheet.tsx` 和
 `tiered-pricing-editor.tsx`。同步 upstream 发生冲突时，应将这些参数重新接入新版组件，

@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { combineBillingExpr, splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
 import { TieredPricingEditor } from "@/features/system-settings/models/tiered-pricing-editor";
 import { api } from "@/lib/api";
+import { useSystemConfigStore } from "@/stores/system-config-store";
 import { PriceRenderer } from "../../model-prices/price-renderer";
 import type { ModelPrice, PriceSpec } from "../../model-prices/types";
 import { ModelPriceSyncDialog } from "./sync-dialog";
@@ -52,6 +53,22 @@ function SpecEditor({
   source?: string;
 }) {
   const { t } = useTranslation();
+  const cnyExchangeRate = useSystemConfigStore(
+    (state) => state.config.currency.usdExchangeRate,
+  );
+  const cnyHint = (usd: number | null | undefined) => {
+    const amount = Number(usd);
+    const rate = Number(cnyExchangeRate);
+    if (!Number.isFinite(amount) || !Number.isFinite(rate) || rate <= 0) {
+      return t("CNY conversion unavailable");
+    }
+    return `${t("Approximate CNY")}: ${new Intl.NumberFormat("zh-CN", {
+      style: "currency",
+      currency: "CNY",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 6,
+    }).format(amount * rate)}`;
+  };
   const blocks = (value.blocks?.length ? value.blocks : [{}]).map((block) => {
     if (block.input != null || !block.table?.rows?.length) return block;
     const fields = Object.fromEntries(block.table.rows);
@@ -137,24 +154,36 @@ function SpecEditor({
           {mode === "token" && (
             <label className="space-y-1 text-sm md:col-span-2">
               <span>{t("Input price")}</span>
-              <Input
-                type="number"
-                step="any"
-                placeholder={t("Input price")}
-                value={b.input ?? ""}
-                onChange={(e) => set(i, "input", Number(e.target.value))}
-              />
+              <span className="flex flex-wrap items-center gap-2">
+                <Input
+                  className="min-w-56 flex-1"
+                  type="number"
+                  step="any"
+                  placeholder={t("Input price")}
+                  value={b.input ?? ""}
+                  onChange={(e) => set(i, "input", Number(e.target.value))}
+                />
+                <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b.input)}</span>
+              </span>
               <span className="block text-xs text-muted-foreground">USD / 1M tokens</span>
             </label>
           )}
           {mode === "request" && (
-            <Input
-              type="number"
-              step="any"
-              placeholder={t("Price")}
-              value={b.price ?? ""}
-              onChange={(e) => set(i, "price", Number(e.target.value))}
-            />
+            <label className="space-y-1 text-sm md:col-span-2">
+              <span>{t("Price")}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                <Input
+                  className="min-w-56 flex-1"
+                  type="number"
+                  step="any"
+                  placeholder={t("Price")}
+                  value={b.price ?? ""}
+                  onChange={(e) => set(i, "price", Number(e.target.value))}
+                />
+                <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b.price)}</span>
+              </span>
+              <span className="block text-xs text-muted-foreground">USD / request</span>
+            </label>
           )}
           {mode === "expression" && (
             <div className="space-y-2 md:col-span-2">
@@ -172,6 +201,7 @@ function SpecEditor({
                     onRequestRuleExprChange={(next) =>
                       set(i, "note", combineBillingExpr(expression.billingExpr, next))
                     }
+                    cnyExchangeRate={cnyExchangeRate}
                   />
                 );
               })()}
@@ -188,7 +218,10 @@ function SpecEditor({
                   {t(title)}
                   <Switch checked={enabled} onCheckedChange={(checked) => set(i, field, checked ? 0 : null)} />
                 </label>
-                <Input type="number" step="any" disabled={!enabled} value={b[field] ?? ""} onChange={(e) => set(i, field, Number(e.target.value))} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input className="min-w-40 flex-1" type="number" step="any" disabled={!enabled} value={b[field] ?? ""} onChange={(e) => set(i, field, Number(e.target.value))} />
+                  {enabled && <span className="shrink-0 text-xs font-medium text-foreground/75">{cnyHint(b[field])}</span>}
+                </div>
                 <div className="mt-1 text-xs text-muted-foreground">USD / 1M tokens</div>
               </div>
             );
