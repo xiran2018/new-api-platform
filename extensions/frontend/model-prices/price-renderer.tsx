@@ -1,6 +1,6 @@
 import { Clock3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { formatPricingAmount, type PricingCurrency } from "@/features/model-pricing/currency";
+import type { PricingCurrency } from "@/features/model-pricing/currency";
 import { useSystemConfigStore } from "@/stores/system-config-store";
 import { splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
 import { tryParseVisualConfig } from "@/features/pricing/lib/tier-expr";
@@ -9,7 +9,16 @@ import type { PriceBlock, PriceSpec } from "./types";
 const money = (
   value: number | null | undefined,
   currency: PricingCurrency,
-) => value == null ? "-" : formatPricingAmount(value, currency);
+) => {
+  if (value == null) return "-";
+  const converted = value * currency.exchangeRate;
+  if (!Number.isFinite(converted)) return "-";
+  const rounded = Math.abs(converted) < 0.005 ? 0 : converted;
+  return `${currency.symbol}${new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(rounded)}`;
+};
 
 const hasNonZeroPrice = (value: number | null | undefined) =>
   typeof value === "number" && Number.isFinite(value) && value !== 0;
@@ -176,6 +185,7 @@ export function PriceRenderer({
         ) => {
           if (value == null || other == null) return null;
           const difference = value - other;
+          if (Math.abs(difference * currency.exchangeRate) < 0.005) return null;
           return (
             <small
               className={`ml-1 text-[11px] font-medium ${difference > 0 ? "text-rose-500" : difference < 0 ? "text-emerald-500" : "text-muted-foreground"}`}
