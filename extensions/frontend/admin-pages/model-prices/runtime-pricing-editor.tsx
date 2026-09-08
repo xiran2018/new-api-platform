@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   getModelPricing,
   saveModelPricing,
   type ModelPricingEntry,
 } from "@/features/model-pricing/api";
 import { pricingFromDraft, pricingRow } from "@/features/model-pricing/pricing";
-import { combineBillingExpr } from "@/features/pricing/lib/billing-expr";
+import {
+  combineBillingExpr,
+  splitBillingExprAndRequestRules,
+} from "@/features/pricing/lib/billing-expr";
 import type { ModelRatioData } from "@/features/system-settings/models/model-pricing-core";
 import {
   ModelPricingEditorPanel,
@@ -54,28 +59,104 @@ function vendorComparison(spec?: PriceSpec): PriceComparison {
   return {
     input,
     completion: block.output ?? ratioPrice("completion_ratio"),
-    cache: ratioPrice("cache_ratio"),
-    createCache: ratioPrice("create_cache_ratio"),
-    image: ratioPrice("image_ratio"),
-    audioInput,
+    cache: block.cache ?? ratioPrice("cache_ratio"),
+    createCache: block.createCache ?? ratioPrice("create_cache_ratio"),
+    image: block.image ?? ratioPrice("image_ratio"),
+    audioInput: block.audioInput ?? audioInput,
     audioOutput:
-      audioInput == null || audioOutputRatio == null
+      block.audioOutput ?? (audioInput == null || audioOutputRatio == null
         ? undefined
-        : audioInput * audioOutputRatio,
+        : audioInput * audioOutputRatio),
   };
 }
 
-function editorData(entry: ModelPricingEntry): ModelRatioData {
+function editorData(
+  entry: ModelPricingEntry,
+  savedDiscount = 0,
+  currentPriceSpec?: PriceSpec,
+): ModelRatioData {
   const values = { ...entry.configured };
   if (entry.effective["billing_setting.billing_mode"] === "tiered_expr") {
     values["billing_setting.billing_mode"] = "tiered_expr";
     values["billing_setting.billing_expr"] =
       entry.effective["billing_setting.billing_expr"];
   }
-  return pricingRow(entry.model_name, values);
+  const data = pricingRow(entry.model_name, values);
+  const savedBaseExpression = currentPriceSpec?.blocks?.[0]?.baseExpression;
+  if (data.billingMode === "tiered_expr" && savedBaseExpression) {
+    const expression = splitBillingExprAndRequestRules(savedBaseExpression);
+    data.billingExpr = expression.billingExpr;
+    data.requestRuleExpr = expression.requestRuleExpr;
+  }
+  const factor = 1 - savedDiscount / 100;
+  if (savedDiscount > 0 && factor > 0) {
+    if (data.billingMode === "per-request" && data.price) {
+      data.price = String(Number(data.price) / factor);
+    } else if (data.billingMode === "per-token" && data.ratio) {
+      data.ratio = String(Number(data.ratio) / factor);
+    }
+  }
+  return data;
 }
 
-function displaySpec(data: ModelRatioData): PriceSpec {
+function vendorEditorData(modelKey: string, spec?: PriceSpec): ModelRatioData | null {
+  if (spec?.mode === "expression" && spec.blocks?.[0]?.note) {
+    const expression = splitBillingExprAndRequestRules(spec.blocks[0].note);
+    return {
+      name: modelKey,
+      billingMode: "tiered_expr",
+      billingExpr: expression.billingExpr,
+      requestRuleExpr: expression.requestRuleExpr,
+    };
+  }
+  const price = vendorComparison(spec);
+  if (price.request != null) {
+    return { name: modelKey, billingMode: "per-request", price: String(price.request) };
+  }
+  if (price.input == null || price.input <= 0) return null;
+  const ratio = (value: number | undefined, base: number) =>
+    value == null ? undefined : String(value / base);
+  return {
+    name: modelKey,
+    billingMode: "per-token",
+    ratio: String(price.input / 2),
+    completionRatio: ratio(price.completion, price.input),
+    cacheRatio: ratio(price.cache, price.input),
+    createCacheRatio: ratio(price.createCache, price.input),
+    imageRatio: ratio(price.image, price.input),
+    audioRatio: ratio(price.audioInput, price.input),
+    audioCompletionRatio:
+      price.audioInput && price.audioOutput != null
+        ? String(price.audioOutput / price.audioInput)
+        : undefined,
+  };
+}
+
+function hasConfiguredPrice(entry: ModelPricingEntry) {
+  return Object.keys(entry.configured).some((key) =>
+    ["ModelPrice", "ModelRatio", "billing_setting.billing_expr"].includes(key),
+  );
+}
+
+function applyDiscount(data: ModelRatioData, discount: number): ModelRatioData {
+  const factor = 1 - discount / 100;
+  const scaled = (value?: string) =>
+    value === undefined || value === "" ? value : String(Number(value) * factor);
+  if (data.billingMode === "tiered_expr") {
+    return discount > 0
+      ? { ...data, billingExpr: `(${data.billingExpr || "p * 0 + c * 0"}) * ${factor}` }
+      : data;
+  }
+  return data.billingMode === "per-request"
+    ? { ...data, price: scaled(data.price) }
+    : { ...data, ratio: scaled(data.ratio) };
+}
+
+function displaySpec(
+  data: ModelRatioData,
+  discount?: number,
+  baseData?: ModelRatioData,
+): PriceSpec {
   if (data.billingMode === "tiered_expr")
     return {
       mode: "expression",
@@ -86,24 +167,43 @@ function displaySpec(data: ModelRatioData): PriceSpec {
             data.billingExpr || "",
             data.requestRuleExpr || "",
           ),
+          baseExpression: baseData
+            ? combineBillingExpr(
+                baseData.billingExpr || "",
+                baseData.requestRuleExpr || "",
+              )
+            : undefined,
+          discount,
         },
       ],
     };
   if (data.price)
     return {
       mode: "request",
-      blocks: [{ price: Number(data.price), unit: "request" }],
+      blocks: [{ price: Number(data.price), unit: "request", discount }],
     };
   const base = Number(data.ratio || 0) * 2;
+  const scaled = (value?: string) =>
+    value === undefined || value === "" ? null : base * Number(value);
+  const audioInput = scaled(data.audioRatio);
   return {
     mode: "token",
     blocks: [
-      {
-        input: base,
-        output: data.completionRatio
+        {
+          input: base,
+          output: data.completionRatio
           ? base * Number(data.completionRatio)
           : null,
-        unit: "1M tokens",
+          cache: scaled(data.cacheRatio),
+          createCache: scaled(data.createCacheRatio),
+          image: scaled(data.imageRatio),
+          audioInput,
+          audioOutput:
+            audioInput == null || !data.audioCompletionRatio
+              ? null
+              : audioInput * Number(data.audioCompletionRatio),
+          unit: "1M tokens",
+          discount,
       },
     ],
   };
@@ -112,18 +212,22 @@ function displaySpec(data: ModelRatioData): PriceSpec {
 export function RuntimePricingEditor({
   modelKey,
   vendorPriceSpec,
+  currentPriceSpec,
   onSaved,
 }: {
   modelKey: string;
   vendorPriceSpec?: PriceSpec;
+  currentPriceSpec?: PriceSpec;
   onSaved: (spec: PriceSpec) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
   const ref = useRef<ModelPricingEditorPanelHandle>(null);
   const [entry, setEntry] = useState<ModelPricingEntry | null>(null);
   const [saving, setSaving] = useState(false);
+  const [discount, setDiscount] = useState(0);
   useEffect(() => {
     setEntry(null);
+    setDiscount(currentPriceSpec?.blocks?.[0]?.discount ?? 0);
     if (modelKey)
       void getModelPricing([modelKey])
         .then((data) =>
@@ -132,7 +236,7 @@ export function RuntimePricingEditor({
           ),
         )
         .catch((error) => toast.error(error.message));
-  }, [modelKey]);
+  }, [modelKey, currentPriceSpec?.blocks?.[0]?.discount]);
   if (!entry)
     return (
       <div className="p-8 text-center text-muted-foreground">
@@ -143,18 +247,19 @@ export function RuntimePricingEditor({
     const draft = await ref.current?.commitDraft();
     if (!draft) return;
     draft.name = modelKey;
+    const billedDraft = applyDiscount(draft, discount);
     setSaving(true);
     try {
       await saveModelPricing([
         {
           model_name: modelKey,
           expected_version: entry.version,
-          pricing: pricingFromDraft(draft),
+          pricing: pricingFromDraft(billedDraft),
         },
       ]);
       const refreshed = await getModelPricing([modelKey]);
       setEntry(refreshed.entries[0] || null);
-      await onSaved(displaySpec(draft));
+      await onSaved(displaySpec(billedDraft, discount || undefined, draft));
       toast.success(t("Runtime pricing saved"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Save failed"));
@@ -164,22 +269,65 @@ export function RuntimePricingEditor({
   };
   return (
     <div className="space-y-3">
-      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-        {t("Saving here immediately changes actual billing for this model.")}
+      <div className="flex flex-col gap-3 rounded-lg border-2 border-primary/60 bg-primary/10 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="font-semibold">{t("Save runtime pricing")}</div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            {t("Saving here immediately changes actual billing for this model.")}
+          </div>
+        </div>
+        <Button
+          size="lg"
+          className="shrink-0 shadow-md"
+          disabled={saving || !modelKey}
+          onClick={save}
+        >
+          <Save className="mr-2 size-5" />
+          {saving ? t("Saving...") : t("Save runtime pricing")}
+        </Button>
       </div>
+      <label className="block max-w-sm space-y-1 text-sm">
+        <span className="font-medium">{t("Discount percentage")}</span>
+        <Input
+          type="number"
+          min={0}
+          max={99.99}
+          step="any"
+          value={discount || ""}
+          placeholder="0"
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            setDiscount(Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0);
+          }}
+        />
+        <span className="block text-xs text-muted-foreground">
+          {t("Enter 10 for 10% off; saved billing prices become 90% of the entered prices.")}
+        </span>
+      </label>
       <div className="h-[620px] overflow-auto rounded-lg border">
         <ModelPricingEditorPanel
           ref={ref}
-          editData={editorData(entry)}
+          editData={
+            hasConfiguredPrice(entry)
+              ? editorData(
+                  entry,
+                  currentPriceSpec?.blocks?.[0]?.discount ?? 0,
+                  currentPriceSpec,
+                )
+              : vendorEditorData(modelKey, vendorPriceSpec) || editorData(entry)
+          }
           usageSchema={entry.usage_schema}
           isSaving={saving}
           priceComparison={vendorComparison(vendorPriceSpec)}
+          priceMultiplier={1 - discount / 100}
+          expressionComparison={
+            vendorPriceSpec?.mode === "expression"
+              ? splitBillingExprAndRequestRules(
+                  vendorPriceSpec.blocks?.[0]?.note || "",
+                ).billingExpr
+              : undefined
+          }
         />
-      </div>
-      <div className="flex justify-end">
-        <Button disabled={saving || !modelKey} onClick={save}>
-          {t("Save runtime pricing")}
-        </Button>
       </div>
     </div>
   );

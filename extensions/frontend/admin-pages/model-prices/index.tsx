@@ -11,6 +11,10 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { combineBillingExpr, splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
+import { TieredPricingEditor } from "@/features/system-settings/models/tiered-pricing-editor";
 import { api } from "@/lib/api";
 import { PriceRenderer } from "../../model-prices/price-renderer";
 import type { ModelPrice, PriceSpec } from "../../model-prices/types";
@@ -41,13 +45,56 @@ const empty: ModelPrice = {
 function SpecEditor({
   value,
   onChange,
+  source,
 }: {
   value: PriceSpec;
   onChange: (v: PriceSpec) => void;
+  source?: string;
 }) {
   const { t } = useTranslation();
-  const blocks = value.blocks || [];
-  const mode = value.mode || "token";
+  const blocks = (value.blocks?.length ? value.blocks : [{}]).map((block) => {
+    if (block.input != null || !block.table?.rows?.length) return block;
+    const fields = Object.fromEntries(block.table.rows);
+    const number = (key: string) => {
+      const parsed = Number(fields[key]);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+    const input = (number("model_ratio") ?? 0) * 2 || undefined;
+    if (input == null) return block;
+    const scaled = (key: string) => {
+      const ratio = number(key);
+      return ratio == null ? null : input * ratio;
+    };
+    const audioInput = scaled("audio_ratio");
+    const audioOutputRatio = number("audio_completion_ratio");
+    return {
+      ...block,
+      input,
+      output: scaled("completion_ratio"),
+      cache: scaled("cache_ratio"),
+      createCache: scaled("create_cache_ratio"),
+      image: scaled("image_ratio"),
+      audioInput,
+      audioOutput:
+        audioInput == null || audioOutputRatio == null
+          ? null
+          : audioInput * audioOutputRatio,
+    };
+  });
+  const mode =
+    value.mode === "request"
+      ? "request"
+      : value.mode === "expression"
+        ? "expression"
+        : "token";
+  const lanes = [
+    ["output", "Completion price"],
+    ["cache", "Cache read price"],
+    ["createCache", "Cache write price"],
+    ["image", "Image input price"],
+    ["audioInput", "Audio input price"],
+    ["audioOutput", "Audio output price"],
+  ] as const;
   const set = (i: number, key: string, v: unknown) =>
     onChange({
       ...value,
@@ -55,71 +102,41 @@ function SpecEditor({
     });
   return (
     <div className="space-y-3">
-      <select
-        className="h-10 rounded-md border bg-background px-3"
+      <div className="rounded-md border bg-muted/20 p-3 text-sm">
+        <div className="font-medium">{t("Upstream source")}</div>
+        <div className="mt-1 text-muted-foreground">
+          {source || t("Manually maintained")}
+        </div>
+        {Array.from(new Set(blocks.map((block) => block.note?.startsWith("http") ? block.note.split("\n")[0] : "").filter(Boolean))).map((url) => (
+          <a key={url} href={url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-primary underline">{url}</a>
+        ))}
+      </div>
+      <Tabs
         value={mode}
-        onChange={(e) =>
-          onChange({ mode: e.target.value as PriceSpec["mode"], blocks })
+        onValueChange={(next) =>
+          onChange({ mode: next as PriceSpec["mode"], blocks })
         }
       >
-        {["token", "request", "time", "tiered", "table"].map((m) => (
-          <option key={m} value={m}>
-            {t(
-              (
-                {
-                  token: "Token pricing",
-                  request: "Per request",
-                  time: "Time windows",
-                  tiered: "Tiered pricing",
-                  table: "Custom table",
-                } as Record<string, string>
-              )[m],
-            )}
-          </option>
-        ))}
-      </select>
+        <TabsList className="grid w-full max-w-xl grid-cols-3">
+          <TabsTrigger value="token">{t("Per-token")}</TabsTrigger>
+          <TabsTrigger value="request">{t("Per-request")}</TabsTrigger>
+          <TabsTrigger value="expression">{t("Expression")}</TabsTrigger>
+        </TabsList>
+      </Tabs>
       {blocks.map((b, i) => (
         <div
-          className="grid gap-2 rounded-md border bg-muted/20 p-3 md:grid-cols-4"
+          className="grid gap-3 rounded-md border bg-muted/20 p-4 md:grid-cols-2"
           key={i}
         >
-          <Input
-            placeholder={t("Label")}
-            value={b.label || ""}
-            onChange={(e) => set(i, "label", e.target.value)}
-          />
-          {mode === "time" && (
-            <>
-              <Input
-                type="time"
-                value={b.start || ""}
-                onChange={(e) => set(i, "start", e.target.value)}
-              />
-              <Input
-                type="time"
-                value={b.end || ""}
-                onChange={(e) => set(i, "end", e.target.value)}
-              />
-            </>
-          )}
-          {mode === "tiered" && (
-            <>
-              <Input
-                type="number"
-                placeholder={t("Minimum")}
-                value={b.min ?? ""}
-                onChange={(e) => set(i, "min", Number(e.target.value))}
-              />
-              <Input
-                type="number"
-                placeholder={t("Maximum")}
-                value={b.max ?? ""}
-                onChange={(e) => set(i, "max", Number(e.target.value))}
-              />
-            </>
+          {blocks.length > 1 && b.label && (
+            <div className="rounded-md border bg-muted px-3 py-2 text-sm md:col-span-2">
+              <div className="text-xs text-muted-foreground">{t("Price source")}</div>
+              <div className="mt-1 font-medium">{b.label}</div>
+            </div>
           )}
           {mode === "token" && (
-            <>
+            <label className="space-y-1 text-sm md:col-span-2">
+              <span>{t("Input price")}</span>
               <Input
                 type="number"
                 step="any"
@@ -127,16 +144,10 @@ function SpecEditor({
                 value={b.input ?? ""}
                 onChange={(e) => set(i, "input", Number(e.target.value))}
               />
-              <Input
-                type="number"
-                step="any"
-                placeholder={t("Output price")}
-                value={b.output ?? ""}
-                onChange={(e) => set(i, "output", Number(e.target.value))}
-              />
-            </>
+              <span className="block text-xs text-muted-foreground">USD / 1M tokens</span>
+            </label>
           )}
-          {mode !== "token" && mode !== "table" && (
+          {mode === "request" && (
             <Input
               type="number"
               step="any"
@@ -145,21 +156,46 @@ function SpecEditor({
               onChange={(e) => set(i, "price", Number(e.target.value))}
             />
           )}
-          <Input
-            placeholder={t("Unit")}
-            value={b.unit || ""}
-            onChange={(e) => set(i, "unit", e.target.value)}
-          />
-          <Input
-            type="number"
-            step="any"
-            placeholder={t("Discount")}
-            value={b.discount ?? ""}
-            onChange={(e) => set(i, "discount", Number(e.target.value))}
-          />
-          {mode === "table" && (
+          {mode === "expression" && (
+            <div className="space-y-2 md:col-span-2">
+              <div className="text-sm font-medium">{t("Pricing expression")}</div>
+              {(() => {
+                const expression = splitBillingExprAndRequestRules(b.note || "");
+                return (
+                  <TieredPricingEditor
+                    modelName={value.blocks?.[i]?.label}
+                    billingExpr={expression.billingExpr}
+                    requestRuleExpr={expression.requestRuleExpr}
+                    onBillingExprChange={(next) =>
+                      set(i, "note", combineBillingExpr(next, expression.requestRuleExpr))
+                    }
+                    onRequestRuleExprChange={(next) =>
+                      set(i, "note", combineBillingExpr(expression.billingExpr, next))
+                    }
+                  />
+                );
+              })()}
+              <div className="text-xs text-muted-foreground">
+                {t("Use the same billing expression syntax as actual pricing.")}
+              </div>
+            </div>
+          )}
+          {mode === "token" && lanes.map(([field, title]) => {
+            const enabled = b[field] != null;
+            return (
+              <div className="rounded-md border bg-background p-3" key={field}>
+                <label className="mb-3 flex items-center justify-between gap-2 font-medium">
+                  {t(title)}
+                  <Switch checked={enabled} onCheckedChange={(checked) => set(i, field, checked ? 0 : null)} />
+                </label>
+                <Input type="number" step="any" disabled={!enabled} value={b[field] ?? ""} onChange={(e) => set(i, field, Number(e.target.value))} />
+                <div className="mt-1 text-xs text-muted-foreground">USD / 1M tokens</div>
+              </div>
+            );
+          })}
+          {b.table?.rows?.length ? (
             <textarea
-              className="min-h-24 rounded-md border bg-background p-2 md:col-span-4"
+              className="min-h-24 rounded-md border bg-muted p-2 md:col-span-2"
               placeholder={t("One line per item, separated by |")}
               value={[
                 b.table?.headers?.join("|"),
@@ -167,27 +203,21 @@ function SpecEditor({
               ]
                 .filter(Boolean)
                 .join("\n")}
-              onChange={(e) => {
-                const lines = e.target.value
-                  .split("\n")
-                  .map((x) => x.split("|"));
-                set(i, "table", {
-                  headers: lines[0] || [],
-                  rows: lines.slice(1),
-                });
-              }}
+              readOnly
             />
-          )}
-          <Input
-            className="md:col-span-3"
+          ) : null}
+          {mode !== "expression" && <label className="space-y-1 text-sm md:col-span-2">
+            <span>{t("Notes")}</span>
+            <Input
             placeholder={t("Note")}
             value={b.note || ""}
             onChange={(e) => set(i, "note", e.target.value)}
           />
+          </label>}
           <Button
             type="button"
             variant="destructive"
-            size="sm"
+            size="sm" className="md:col-span-2"
             onClick={() =>
               onChange({ ...value, blocks: blocks.filter((_, j) => j !== i) })
             }
@@ -196,14 +226,6 @@ function SpecEditor({
           </Button>
         </div>
       ))}
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => onChange({ ...value, blocks: [...blocks, {}] })}
-      >
-        <Plus className="mr-2 size-4" />
-        {t("Add model")}
-      </Button>
     </div>
   );
 }
@@ -237,15 +259,18 @@ export function ModelPriceManagementPage() {
   );
   const save = async () => {
     if (!edit) return;
-    if (edit.id)
+    if (edit.id) {
       await api.put(`/api/platform/admin/model-prices/${edit.id}`, edit);
-    else await api.post("/api/platform/admin/model-prices", edit);
+      setEdit({ ...edit });
+    } else {
+      const response = await api.post("/api/platform/admin/model-prices", edit);
+      setEdit({ ...edit, id: response.data?.data?.id || 0 });
+    }
     toast.success(t("Save"));
-    setEdit(null);
     load();
   };
   return (
-    <div className="h-[calc(100vh-4rem)] overflow-auto p-5">
+    <div className="min-h-0 w-full min-w-0 flex-1 overflow-auto p-5 [scrollbar-gutter:stable]">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">
           {t("Model price management")}
@@ -299,17 +324,17 @@ export function ModelPriceManagementPage() {
           {shown.length} {t("models")}
         </span>
       </div>
-      <div className="max-h-[calc(100vh-19rem)] overflow-auto rounded-lg border [scrollbar-gutter:stable]">
-        <table className="w-full min-w-[1500px] table-fixed text-sm">
+      <div className="w-max min-w-full rounded-lg border">
+        <table className="w-max min-w-full table-auto text-sm">
           <thead className="sticky top-0 z-10 bg-muted">
             <tr>
-              <th className="w-[24%] p-3 text-left">{t("Model name")}</th>
-              <th className="w-[10%] p-3 text-left">{t("Vendor")}</th>
-              <th className="w-[28%] p-3 text-left">{t("Vendor original price")}</th>
-              <th className="w-[30%] p-3 text-left">
-                {t("LLMAPI price (tax included 6%)")}
+              <th className="p-3 text-left">{t("Model name")}</th>
+              <th className="p-3 text-left">{t("Vendor")}</th>
+              <th className="p-3 text-left">{t("Vendor original price")}</th>
+              <th className="p-3 text-left">
+                {t("Actual price")}
               </th>
-              <th className="w-[8%] p-3">{t("Actions")}</th>
+              <th className="p-3">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -331,20 +356,21 @@ export function ModelPriceManagementPage() {
                     )}
                   </td>
                   <td className="p-3">{r.vendor}</td>
-                  <td className="max-w-sm p-3">
+                  <td className="whitespace-nowrap p-3">
                     <PriceRenderer
                       spec={r.vendorPriceSpec}
                       timezone={r.timezone}
+                      pricesOnly
                     />
                   </td>
-                  <td className="max-w-sm p-3">
+                  <td className="whitespace-nowrap p-3">
                     <PriceRenderer
                       spec={r.llmapiPriceSpec}
                       timezone={r.timezone}
                       compareSpec={r.vendorPriceSpec}
                     />
                   </td>
-                  <td className="p-3 text-center">
+                  <td className="whitespace-nowrap p-3 text-center">
                     <Button
                       size="icon"
                       variant="ghost"
@@ -383,7 +409,7 @@ export function ModelPriceManagementPage() {
       {edit && (
         <div className="fixed inset-0 z-50 overflow-auto bg-black/55 p-4 md:p-8">
           <div className="mx-auto max-w-6xl rounded-lg bg-background shadow-xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background p-5">
+            <div className="flex items-center justify-between border-b bg-background p-5">
               <h2 className="text-xl font-semibold">
                 {edit.id ? edit.displayName : t("Add model")}
               </h2>
@@ -407,27 +433,27 @@ export function ModelPriceManagementPage() {
               </div>
             </div>
             <div className="space-y-6 p-5">
-              <div className="grid gap-3 md:grid-cols-3">
-                <Input
+              <div className="grid gap-4 md:grid-cols-3">
+                <label className="space-y-1 text-sm"><span>{t("Model key")}</span><Input
                   placeholder={t("Model key")}
                   value={edit.modelKey}
                   onChange={(e) =>
                     setEdit({ ...edit, modelKey: e.target.value })
                   }
-                />
-                <Input
+                /></label>
+                <label className="space-y-1 text-sm"><span>{t("Display name")}</span><Input
                   placeholder={t("Display name")}
                   value={edit.displayName}
                   onChange={(e) =>
                     setEdit({ ...edit, displayName: e.target.value })
                   }
-                />
-                <Input
+                /></label>
+                <label className="space-y-1 text-sm"><span>{t("Vendor")}</span><Input
                   placeholder={t("Vendor")}
                   value={edit.vendor}
                   onChange={(e) => setEdit({ ...edit, vendor: e.target.value })}
-                />
-                <Input
+                /></label>
+                <label className="space-y-1 text-sm"><span>{t("Tags")}</span><Input
                   placeholder={t("Tags")}
                   value={(edit.tags || []).join(",")}
                   onChange={(e) =>
@@ -439,22 +465,10 @@ export function ModelPriceManagementPage() {
                         .filter(Boolean),
                     })
                   }
-                />
-                <Input
-                  placeholder={t("Currency")}
-                  value={edit.currency}
-                  onChange={(e) =>
-                    setEdit({ ...edit, currency: e.target.value })
-                  }
-                />
-                <Input
-                  placeholder={t("Timezone")}
-                  value={edit.timezone}
-                  onChange={(e) =>
-                    setEdit({ ...edit, timezone: e.target.value })
-                  }
-                />
-                <label className="flex items-center gap-2">
+                /></label>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm"><div className="text-xs text-muted-foreground">{t("Base currency")}</div><div className="mt-1 font-medium">USD</div></div>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm"><div className="text-xs text-muted-foreground">{t("Pricing timezone")}</div><div className="mt-1 font-medium">{edit.timezone}</div></div>
+                <label className="flex items-center gap-2 rounded-md border px-3 py-2">
                   <input
                     type="checkbox"
                     checked={edit.published}
@@ -463,12 +477,14 @@ export function ModelPriceManagementPage() {
                     }
                   />
                   {t("Published")}
+                  <span className="text-xs text-muted-foreground">{t("Controls public price page visibility only")}</span>
                 </label>
               </div>
               <div className="rounded-md border p-3 text-sm text-muted-foreground">
                 {t(
                   "Vendor pricing is for comparison. LLMAPI pricing writes to the active runtime billing configuration.",
                 )}
+                <div className="mt-1">{t("USD is the storage currency; displayed amounts follow the system exchange rate. The timezone is used only for active time-window pricing.")}</div>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -481,18 +497,20 @@ export function ModelPriceManagementPage() {
                   variant={tab === "ours" ? "default" : "outline"}
                   onClick={() => setTab("ours")}
                 >
-                  {t("LLMAPI price (tax included 6%)")}
+                  {t("Actual price")}
                 </Button>
               </div>
               {tab === "vendor" ? (
                 <SpecEditor
                   value={edit.vendorPriceSpec}
                   onChange={(v) => setEdit({ ...edit, vendorPriceSpec: v })}
+                  source={edit.upstreamSource}
                 />
               ) : (
                 <RuntimePricingEditor
                   modelKey={edit.modelKey}
                   vendorPriceSpec={edit.vendorPriceSpec}
+                  currentPriceSpec={edit.llmapiPriceSpec}
                   onSaved={async (spec) => {
                     const next = { ...edit, llmapiPriceSpec: spec };
                     if (edit.id) {
@@ -516,23 +534,32 @@ export function ModelPriceManagementPage() {
                   <div className="mb-3 font-medium">
                     {t("Upstream price changed")}
                   </div>
-                  <PriceRenderer
-                    spec={edit.pendingVendorSpec}
-                    timezone={edit.timezone}
-                  />
-                  <Button
-                    className="mt-3"
-                    onClick={async () => {
-                      await api.post(
-                        `/api/platform/admin/model-prices/${edit.id}/apply-sync`,
-                      );
-                      toast.success(t("Save"));
-                      setEdit(null);
-                      load();
-                    }}
-                  >
-                    {t("Apply new vendor price")}
-                  </Button>
+                  <div className="space-y-3">
+                    {(edit.pendingVendorSpec.blocks || []).map((block, blockIndex) => (
+                      <div className="rounded-md border bg-background p-3" key={`${block.label || "source"}-${blockIndex}`}>
+                        <PriceRenderer spec={{ mode: edit.pendingVendorSpec?.mode, blocks: [block] }} timezone={edit.timezone} />
+                        <Button className="mt-3" onClick={async () => {
+                          await api.post(`/api/platform/admin/model-prices/${edit.id}/apply-sync`, { blockIndex });
+                          toast.success(t("Save"));
+                          const mode = block.price != null
+                            ? "request"
+                            : block.input != null
+                              ? "token"
+                              : edit.pendingVendorSpec?.mode;
+                          setEdit({
+                            ...edit,
+                            vendorPriceSpec: { mode, blocks: [block] },
+                            pendingVendorSpec: null,
+                            upstreamSource: block.label?.trim() || edit.upstreamSource,
+                            syncStatus: "applied",
+                          });
+                          load();
+                        }}>
+                          {t("Apply this vendor price")}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

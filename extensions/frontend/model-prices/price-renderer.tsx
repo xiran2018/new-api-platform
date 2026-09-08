@@ -1,7 +1,9 @@
-import { Clock3, Percent } from "lucide-react";
+import { Clock3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatBillingCurrencyFromUSD } from "@/lib/currency";
 import { useSystemConfigStore } from "@/stores/system-config-store";
+import { splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
+import { tryParseVisualConfig } from "@/features/pricing/lib/tier-expr";
 import type { PriceBlock, PriceSpec } from "./types";
 
 const money = (value: number | null | undefined) =>
@@ -13,6 +15,33 @@ const money = (value: number | null | undefined) =>
 
 function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
   if (!spec?.blocks?.length) return spec;
+  if (spec.mode === "expression") {
+    const source = spec.blocks[0];
+    const baseExpression = source.baseExpression || source.note || "";
+    const config = tryParseVisualConfig(
+      splitBillingExprAndRequestRules(baseExpression).billingExpr,
+    );
+    if (!config) return spec;
+    const multiplier = source.baseExpression && source.discount
+      ? 1 - source.discount / 100
+      : 1;
+    return {
+      ...spec,
+      blocks: config.tiers.map((tier) => ({
+        label: tier.label,
+        input: tier.input_unit_cost * multiplier,
+        output: tier.output_unit_cost * multiplier,
+        cache: tier.cache_read_unit_cost == null ? null : tier.cache_read_unit_cost * multiplier,
+        createCache: tier.cache_create_unit_cost == null ? null : tier.cache_create_unit_cost * multiplier,
+        image: tier.image_unit_cost == null ? null : tier.image_unit_cost * multiplier,
+        audioInput: tier.audio_input_unit_cost == null ? null : tier.audio_input_unit_cost * multiplier,
+        audioOutput: tier.audio_output_unit_cost == null ? null : tier.audio_output_unit_cost * multiplier,
+        unit: "1M tokens",
+        discount: source.discount,
+        note: pricesOnlyExpressionNote(tier.conditions),
+      })),
+    };
+  }
   return {
     ...spec,
     blocks: spec.blocks.map((block) => {
@@ -44,6 +73,12 @@ function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
     }),
   };
 }
+
+function pricesOnlyExpressionNote(
+  conditions: Array<{ var: string; op: string; value: string | number }>,
+) {
+  return conditions.map((condition) => `${condition.var} ${condition.op} ${condition.value}`).join(" && ");
+}
 const activeWindow = (b: PriceBlock, timezone: string) => {
   if (!b.start || !b.end) return false;
   const now = new Intl.DateTimeFormat("en-GB", {
@@ -60,10 +95,12 @@ export function PriceRenderer({
   spec,
   timezone,
   compareSpec,
+  pricesOnly = false,
 }: {
   spec?: PriceSpec;
   timezone: string;
   compareSpec?: PriceSpec;
+  pricesOnly?: boolean;
 }) {
   const { t } = useTranslation();
   // Currency settings live in a global store; subscribing keeps prices current.
@@ -71,10 +108,36 @@ export function PriceRenderer({
   const displayedSpec = withDerivedPrices(spec);
   const displayedCompareSpec = withDerivedPrices(compareSpec);
   const blocks = displayedSpec?.blocks || [];
+  const expression =
+    spec?.mode === "expression"
+      ? spec.blocks?.[0]?.baseExpression || spec.blocks?.[0]?.note || ""
+      : "";
+  const expressionUsesTime =
+    /\b(?:hour|minute|weekday|month|day)\s*\(/.test(expression);
+  const modeLabel = t(
+    ({
+      token: "Token pricing",
+      request: "Per request",
+      expression: expressionUsesTime ? "Time-based pricing" : "Tiered pricing",
+      time: "Time windows",
+      tiered: "Tiered pricing",
+      table: "Custom table",
+    } as Record<string, string>)[spec?.mode || "token"] || "Token pricing",
+  );
   if (!blocks.length) return <span className="text-muted-foreground">-</span>;
   return (
     <div className="space-y-2">
+      <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+        <span>{t("Pricing mode")}: {modeLabel}</span>
+        {blocks[0]?.discount != null && (
+          <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
+            {t("Discount")} {blocks[0].discount}%
+          </span>
+        )}
+      </div>
       {blocks.map((b, i) => {
+        const showRequestPrice = displayedSpec?.mode === "request";
+        const showTokenPrices = !showRequestPrice && displayedSpec?.mode !== "table";
         const compared = displayedCompareSpec?.blocks?.[i];
         const delta = (
           value: number | null | undefined,
@@ -93,13 +156,14 @@ export function PriceRenderer({
         };
         const current =
           displayedSpec?.mode === "time" && activeWindow(b, timezone);
+        const unit = b.unit === "request" ? t("Per request") : b.unit;
         return (
           <div
             key={i}
             className={`rounded-md border p-2.5 ${current ? "border-emerald-500/50 bg-emerald-500/10" : "bg-muted/25"}`}
           >
-            <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs font-medium">
-              {b.label && <span>{b.label}</span>}
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs font-medium">
+              {(!pricesOnly || spec?.mode === "expression") && b.label && <span>{b.label}</span>}
               {b.start && (
                 <span className="inline-flex items-center gap-1 text-muted-foreground">
                   <Clock3 className="size-3" />
@@ -116,39 +180,42 @@ export function PriceRenderer({
                   {t("Current")}
                 </span>
               )}
-              {b.discount != null && (
-                <span className="inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
-                  <Percent className="size-3" />
-                  {b.discount}%
-                </span>
-              )}
             </div>
-            {(b.input != null || b.output != null || b.price != null) && (
-              <div className="mb-2 flex flex-wrap gap-x-3 text-sm">
-                {b.input != null && (
-                  <span>
+            {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.image != null || b.audioInput != null || b.audioOutput != null)) || (showRequestPrice && b.price != null)) && (
+              <div className="space-y-1.5 text-sm">
+                {showTokenPrices && b.input != null && (
+                  <div>
                     {t("Input price")}: <b>{money(b.input)}</b>
                     {delta(b.input, compared?.input)}
-                  </span>
+                    {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
+                  </div>
                 )}
-                {b.output != null && (
-                  <span>
+                {showTokenPrices && b.output != null && (
+                  <div>
                     {t("Output price")}: <b>{money(b.output)}</b>
                     {delta(b.output, compared?.output)}
-                  </span>
+                    {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
+                  </div>
                 )}
-                {b.price != null && (
-                  <span>
+                {showRequestPrice && b.price != null && (
+                  <div>
                     <b>{money(b.price)}</b>
                     {delta(b.price, compared?.price)}
-                  </span>
+                    <span className="ml-1 text-muted-foreground">/ {unit || t("Per request")}</span>
+                  </div>
                 )}
-                {b.unit && (
-                  <span className="text-muted-foreground">/ {b.unit}</span>
+                {showTokenPrices && ([
+                  ["cache", "Cache read price"],
+                  ["createCache", "Cache write price"],
+                  ["image", "Image input price"],
+                  ["audioInput", "Audio input price"],
+                  ["audioOutput", "Audio output price"],
+                ] as const).map(([field, label]) =>
+                  b[field] != null ? <div key={field}>{t(label)}: <b>{money(b[field])}</b>{delta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
                 )}
               </div>
             )}
-            {b.table?.headers?.length && (
+            {!pricesOnly && displayedSpec?.mode === "table" && b.table?.headers?.length && (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -174,7 +241,7 @@ export function PriceRenderer({
                 </table>
               </div>
             )}
-            {b.note && (
+            {(!pricesOnly || spec?.mode === "expression") && b.note && (
               <div className="mt-1 text-xs text-muted-foreground">{b.note}</div>
             )}
           </div>

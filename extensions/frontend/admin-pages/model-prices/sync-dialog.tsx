@@ -52,10 +52,24 @@ function upstreamPriceSpec(
     if (ratio != null) {
       const input = ratio * 2;
       const completion = numeric(values.completion_ratio);
+      const scaled = (field: string) => {
+        const ratio = numeric(values[field]);
+        return ratio == null ? undefined : input * ratio;
+      };
+      const audioInput = scaled("audio_ratio");
+      const audioOutputRatio = numeric(values.audio_completion_ratio);
       blocks.push({
         label,
         input,
         output: completion == null ? undefined : input * completion,
+        cache: scaled("cache_ratio"),
+        createCache: scaled("create_cache_ratio"),
+        image: scaled("image_ratio"),
+        audioInput,
+        audioOutput:
+          audioInput == null || audioOutputRatio == null
+            ? undefined
+            : audioInput * audioOutputRatio,
         unit: "1M tokens",
         table,
         note: sourceURL,
@@ -120,6 +134,25 @@ export function ModelPriceSyncDialog({
         string,
         { upstreams?: Record<string, UpstreamPrice> }
       >;
+      const modelsDevChannel = chosen.find((channel) => channel.id === -101);
+      if (modelsDevChannel) {
+        const matched = await api.post(
+          "/api/platform/admin/model-prices/models-dev-preview",
+        );
+        for (const [model, values] of Object.entries(
+          (matched.data?.data || {}) as Record<string, UpstreamPrice>,
+        )) {
+          const row = prices[model] || { upstreams: {} };
+          row.upstreams ||= {};
+          for (const source of Object.keys(row.upstreams)) {
+            if (source.toLowerCase().includes("models.dev")) {
+              delete row.upstreams[source];
+            }
+          }
+          row.upstreams[modelsDevChannel.name] = values;
+          prices[model] = row;
+        }
+      }
       const items = Object.entries(prices)
         .filter(([model]) => !modelKey || model === modelKey)
         .map(([model, price]) => ({
@@ -164,7 +197,7 @@ export function ModelPriceSyncDialog({
                   setSelected(
                     e.target.checked
                       ? [...selected, c.id]
-                      : selected.filter((x) => x !== c.id),
+                      : selected.filter((id) => id !== c.id),
                   )
                 }
               />

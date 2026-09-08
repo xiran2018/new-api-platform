@@ -4,6 +4,11 @@ export type PriceBlock = {
   note?: string;
   input?: number | null;
   output?: number | null;
+  cache?: number | null;
+  createCache?: number | null;
+  image?: number | null;
+  audioInput?: number | null;
+  audioOutput?: number | null;
   price?: number | null;
   unit?: string;
   start?: string;
@@ -11,6 +16,7 @@ export type PriceBlock = {
   min?: number | null;
   max?: number | null;
   discount?: number | null;
+  baseExpression?: string;
   table?: PriceTable;
 };
 export type PriceSpec = {

@@ -121,6 +121,7 @@ func RegisterRoutes(apiRouter *gin.RouterGroup) {
 	adminRouter := apiRouter.Group("/platform/admin")
 	adminRouter.Use(middleware.AdminAuth())
 	adminRouter.GET("/content", listContent)
+	adminRouter.POST("/model-prices/models-dev-preview", previewModelsDevPrices)
 	adminRouter.GET("/updates", listUpdates)
 	adminRouter.POST("/updates", createUpdate)
 	adminRouter.PUT("/updates/:id", updateUpdate)

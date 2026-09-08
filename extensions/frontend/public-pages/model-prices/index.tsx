@@ -39,14 +39,14 @@ export function ModelPricesPage() {
   );
   return (
     <PublicLayout showMainContainer={false}>
-      <main className="mx-auto max-w-[1500px] px-4 pb-12 pt-24 text-foreground sm:px-6">
+      <main className="min-w-full px-4 pb-12 pt-24 text-foreground sm:px-6">
         <div className="mb-5 text-center">
           <div>
             <h1 className="text-3xl font-semibold tracking-normal">
               LLMAPI {t("Model prices")}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              LLMAPI · {t("LLMAPI price (tax included 6%)")}
+              LLMAPI · {t("Actual price")}
             </p>
           </div>
         </div>
@@ -95,16 +95,16 @@ export function ModelPricesPage() {
             </Button>
           </div>
         </div>
-        <div className="max-h-[calc(100vh-16rem)] overflow-auto rounded-lg border bg-card shadow-sm [scrollbar-gutter:stable]">
-          <table className="w-full min-w-[1450px] table-fixed text-left text-sm">
+        <div className="rounded-lg border bg-card shadow-sm">
+          <table className="w-max min-w-full table-auto text-left text-sm">
             <thead className="sticky top-0 z-10 bg-muted">
               <tr>
-                <th className="w-[18%] p-4">{t("Model name")}</th>
-                <th className="w-[10%] p-4">{t("Vendor")}</th>
-                <th className="w-[13%] p-4">{t("Tags")}</th>
-                <th className="w-[29.5%] p-4">{t("Vendor original price")}</th>
-                <th className="w-[29.5%] p-4">
-                  {t("LLMAPI price (tax included 6%)")}
+                <th className="p-4">{t("Model name")}</th>
+                <th className="p-4">{t("Vendor")}</th>
+                <th className="p-4">{t("Tags")}</th>
+                <th className="p-4">{t("Vendor original price")}</th>
+                <th className="p-4">
+                  {t("Actual price")}
                 </th>
               </tr>
             </thead>
@@ -118,7 +118,7 @@ export function ModelPricesPage() {
                     </div>
                   </td>
                   <td className="p-4">{r.vendor}</td>
-                  <td className="p-4">
+                  <td className="whitespace-nowrap p-4">
                     <div className="flex flex-wrap gap-1">
                       {(r.tags || []).map((x) => (
                         <span
@@ -130,17 +130,18 @@ export function ModelPricesPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="p-4">
+                  <td className="whitespace-nowrap p-4">
                     <PriceRenderer
                       spec={r.vendorPriceSpec}
                       timezone={r.timezone}
+                      pricesOnly
                     />
                   </td>
                   <td className="p-4">
                     <PriceRenderer
                       spec={r.llmapiPriceSpec}
                       timezone={r.timezone}
-                      compareSpec={r.vendorPriceSpec}
+                      pricesOnly
                     />
                   </td>
                 </tr>

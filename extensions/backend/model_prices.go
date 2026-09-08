@@ -3,6 +3,9 @@ package platform
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -59,6 +62,121 @@ func registerModelPriceRoutes(r *gin.RouterGroup) {
 	r.POST("/model-prices/:id/apply-sync", applyModelPriceSync)
 }
 
+type modelsDevCost struct {
+	Input     *float64 `json:"input"`
+	Output    *float64 `json:"output"`
+	CacheRead *float64 `json:"cache_read"`
+}
+
+type modelsDevModel struct {
+	Cost modelsDevCost `json:"cost"`
+}
+
+type modelsDevProvider struct {
+	Models map[string]modelsDevModel `json:"models"`
+}
+
+func normalizedVendor(value string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, value)
+}
+
+func preferredModelsDevProvider(vendor string, candidates map[string]modelsDevCost) string {
+	wanted := normalizedVendor(vendor)
+	names := make([]string, 0, len(candidates))
+	for name := range candidates {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if wanted != "" && wanted != "upstream" && normalizedVendor(name) == wanted {
+			return name
+		}
+	}
+	for _, name := range names {
+		normalized := normalizedVendor(name)
+		if wanted != "" && wanted != "upstream" && (strings.Contains(normalized, wanted) || strings.Contains(wanted, normalized)) {
+			return name
+		}
+	}
+	best := ""
+	bestInput := 0.0
+	for _, name := range names {
+		input := candidates[name].Input
+		if input != nil && *input > 0 && (best == "" || *input < bestInput) {
+			best, bestInput = name, *input
+		}
+	}
+	return best
+}
+
+func previewModelsDevPrices(c *gin.Context) {
+	request, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, "https://models.dev/api.json", nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	client := &http.Client{Timeout: 20 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": response.Status})
+		return
+	}
+	var providers map[string]modelsDevProvider
+	if err = json.NewDecoder(io.LimitReader(response.Body, 32<<20)).Decode(&providers); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	db, err := platformDatabase()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	var rows []modelPriceCatalog
+	if err = db.Select("model_key", "vendor").Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	result := make(map[string]any)
+	for _, row := range rows {
+		candidates := make(map[string]modelsDevCost)
+		for provider, data := range providers {
+			if entry, exists := data.Models[row.ModelKey]; exists && entry.Cost.Input != nil {
+				candidates[provider] = entry.Cost
+			}
+		}
+		provider := preferredModelsDevProvider(row.Vendor, candidates)
+		if provider == "" {
+			continue
+		}
+		cost := candidates[provider]
+		values := map[string]any{"_source_provider": provider, "_source_url": "https://models.dev/api.json", "billing_mode": "ratio"}
+		if cost.Input != nil {
+			values["model_ratio"] = *cost.Input / 2
+			if *cost.Input > 0 && cost.Output != nil {
+				values["completion_ratio"] = *cost.Output / *cost.Input
+			}
+			if *cost.Input > 0 && cost.CacheRead != nil {
+				values["cache_ratio"] = *cost.CacheRead / *cost.Input
+			}
+		}
+		result[row.ModelKey] = values
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
 func getPublicModelPrices(c *gin.Context) {
 	db, err := platformDatabase()
 	if err != nil {
@@ -100,6 +218,41 @@ func listAdminModelPrices(c *gin.Context) {
 }
 
 func syncExistingModelPrices(db *gorm.DB) error {
+	var storedRows []modelPriceCatalog
+	if err := db.Select("model_key", "llm_api_price_spec").Find(&storedRows).Error; err != nil {
+		return err
+	}
+	storedBlockMetadata := make(map[string]map[string]any, len(storedRows))
+	for _, row := range storedRows {
+		var spec struct {
+			Blocks []map[string]any `json:"blocks"`
+		}
+		if json.Unmarshal(row.LLMAPIPriceSpec, &spec) == nil && len(spec.Blocks) > 0 {
+			metadata := make(map[string]any)
+			for _, key := range []string{"discount", "baseExpression"} {
+				if value, exists := spec.Blocks[0][key]; exists {
+					metadata[key] = value
+				}
+			}
+			if len(metadata) > 0 {
+				storedBlockMetadata[row.ModelKey] = metadata
+			}
+		}
+	}
+	priceSpecFor := func(name string, pricing model.Pricing) json.RawMessage {
+		spec := runtimePriceSpec(pricing)
+		if metadata, exists := storedBlockMetadata[name]; exists {
+			if blocks, ok := spec["blocks"].([]any); ok && len(blocks) > 0 {
+				if block, ok := blocks[0].(map[string]any); ok {
+					for key, value := range metadata {
+						block[key] = value
+					}
+				}
+			}
+		}
+		encoded, _ := json.Marshal(spec)
+		return encoded
+	}
 	vendorNames := make(map[int]string)
 	vendors, err := model.GetAllVendors(0, 100000)
 	if err != nil {
@@ -144,7 +297,7 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		tagsJSON, _ := json.Marshal(tags)
 		priceSpec := json.RawMessage(`{}`)
 		if hasPricing {
-			priceSpec, _ = json.Marshal(runtimePriceSpec(pricing))
+			priceSpec = priceSpecFor(name, pricing)
 		}
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
@@ -170,7 +323,7 @@ func syncExistingModelPrices(db *gorm.DB) error {
 			vendor = "Other"
 		}
 		tagsJSON, _ := json.Marshal(splitModelTags(pricing.Tags))
-		priceSpec, _ := json.Marshal(runtimePriceSpec(pricing))
+		priceSpec := priceSpecFor(name, pricing)
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
@@ -374,13 +527,50 @@ func saveModelPriceSyncPreview(c *gin.Context) {
 	c.JSON(200, gin.H{"success": true, "data": gin.H{"changed": changed}})
 }
 func applyModelPriceSync(c *gin.Context) {
+	var input struct {
+		BlockIndex int `json:"blockIndex"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(400, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	}
 	db, err := platformDatabase()
 	var row modelPriceCatalog
 	if err == nil {
 		err = db.First(&row, c.Param("id")).Error
 	}
 	if err == nil && len(row.PendingVendorSpec) > 0 {
-		err = db.Model(&row).Updates(map[string]any{"vendor_price_spec": row.PendingVendorSpec, "pending_vendor_spec": nil, "sync_status": "applied"}).Error
+		var pending struct {
+			Mode   string            `json:"mode"`
+			Blocks []json.RawMessage `json:"blocks"`
+		}
+		if err = json.Unmarshal(row.PendingVendorSpec, &pending); err == nil {
+			if input.BlockIndex < 0 || input.BlockIndex >= len(pending.Blocks) {
+				err = fmt.Errorf("invalid upstream price selection")
+			} else {
+				selectedMode := pending.Mode
+				var selectedFields map[string]any
+				if json.Unmarshal(pending.Blocks[input.BlockIndex], &selectedFields) == nil {
+					if _, exists := selectedFields["price"]; exists {
+						selectedMode = "request"
+					} else if _, exists := selectedFields["input"]; exists {
+						selectedMode = "token"
+					}
+				}
+				selected, marshalErr := json.Marshal(map[string]any{"mode": selectedMode, "blocks": []json.RawMessage{pending.Blocks[input.BlockIndex]}})
+				if marshalErr != nil {
+					err = marshalErr
+				} else {
+					var block struct {
+						Label string `json:"label"`
+					}
+					_ = json.Unmarshal(pending.Blocks[input.BlockIndex], &block)
+					err = db.Model(&row).Updates(map[string]any{"vendor_price_spec": selected, "pending_vendor_spec": nil, "upstream_source": strings.TrimSpace(block.Label), "sync_status": "applied"}).Error
+				}
+			}
+		}
 	}
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "message": err.Error()})

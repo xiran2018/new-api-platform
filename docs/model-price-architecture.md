@@ -34,4 +34,19 @@
 3. Option 字段集合是否新增计费倍率或表达式字段。
 4. `combineBillingExpr` 是否仍是表达式合并的官方入口。
 
+平台还在 upstream 编辑器中保留了三个可选、默认无行为变化的展示接缝：
+
+- `ModelPricingEditorPanel.priceMultiplier`：让输入差值和预览按优惠比例实时计算。
+- `ModelPricingEditorPanel.expressionComparison`：向表达式编辑器传入厂商表达式。
+- `TieredPricingEditor.comparisonExpr` / `priceMultiplier`：逐档显示厂商价格、折后价格和差值，并比较成本预估。
+
+对应文件为 `model-pricing-inputs.tsx`、`model-pricing-sheet.tsx` 和
+`tiered-pricing-editor.tsx`。同步 upstream 发生冲突时，应将这些参数重新接入新版组件，
+不要覆盖 upstream 的其他编辑器改动。
+
+会话恢复还在 `middleware/rate-limit.go` 与 `router/api-router.go` 保留一个小接缝：
+`/api/user/auth/refresh` 使用独立的 `AuthRefreshRateLimit` 限流桶，避免登录、验证码等
+共享的 IP 限流额度耗尽后，浏览器刷新受保护页面被错误地送回登录页。同步 upstream 时
+应保留独立桶，或者采用 upstream 后续提供的等价会话刷新限流机制。
+
 不要把 upstream 计费编辑器复制到 `extensions/`。如接口变化，只修改价格页的适配器 `runtime-pricing-editor.tsx`。
