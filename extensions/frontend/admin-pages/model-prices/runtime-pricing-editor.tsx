@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
@@ -209,17 +209,21 @@ function displaySpec(
   };
 }
 
-export function RuntimePricingEditor({
-  modelKey,
-  vendorPriceSpec,
-  currentPriceSpec,
-  onSaved,
-}: {
+export type RuntimePricingEditorHandle = {
+  save: () => Promise<void>;
+};
+
+export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   modelKey: string;
   vendorPriceSpec?: PriceSpec;
   currentPriceSpec?: PriceSpec;
   onSaved: (spec: PriceSpec) => Promise<void> | void;
-}) {
+}>(function RuntimePricingEditor({
+  modelKey,
+  vendorPriceSpec,
+  currentPriceSpec,
+  onSaved,
+}, forwardedRef) {
   const { t } = useTranslation();
   const ref = useRef<ModelPricingEditorPanelHandle>(null);
   const [entry, setEntry] = useState<ModelPricingEntry | null>(null);
@@ -237,13 +241,8 @@ export function RuntimePricingEditor({
         )
         .catch((error) => toast.error(error.message));
   }, [modelKey, currentPriceSpec?.blocks?.[0]?.discount]);
-  if (!entry)
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        {t("Loading...")}
-      </div>
-    );
   const save = async () => {
+    if (!entry) return;
     const draft = await ref.current?.commitDraft();
     if (!draft) return;
     draft.name = modelKey;
@@ -267,6 +266,13 @@ export function RuntimePricingEditor({
       setSaving(false);
     }
   };
+  useImperativeHandle(forwardedRef, () => ({ save }));
+  if (!entry)
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        {t("Loading...")}
+      </div>
+    );
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-3 rounded-lg border-2 border-primary/60 bg-primary/10 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -332,4 +338,4 @@ export function RuntimePricingEditor({
       </div>
     </div>
   );
-}
+});

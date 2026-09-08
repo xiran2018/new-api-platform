@@ -6,7 +6,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,10 @@ import { usePricingPreferencesStore } from "@/stores/pricing-preferences-store";
 import { PriceRenderer } from "../../model-prices/price-renderer";
 import type { ModelPrice, PriceSpec } from "../../model-prices/types";
 import { ModelPriceSyncDialog } from "./sync-dialog";
-import { RuntimePricingEditor } from "./runtime-pricing-editor";
+import {
+  RuntimePricingEditor,
+  type RuntimePricingEditorHandle,
+} from "./runtime-pricing-editor";
 
 const empty: ModelPrice = {
   id: 0,
@@ -86,8 +89,8 @@ function SpecEditor({
     return `${t("Approximate CNY")}: ${new Intl.NumberFormat("zh-CN", {
       style: "currency",
       currency: "CNY",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 6,
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
     }).format(amount * rate)}`;
   };
   const blocks = (value.blocks?.length ? value.blocks : [{}]).map((block) => {
@@ -286,6 +289,7 @@ function SpecEditor({
 
 export function ModelPriceManagementPage() {
   const { t } = useTranslation();
+  const runtimePricingEditorRef = useRef<RuntimePricingEditorHandle>(null);
   const [rows, setRows] = useState<ModelPrice[]>([]),
     [q, setQ] = useState(""),
     [filter, setFilter] = useState<"all" | "local" | "unset">("all"),
@@ -493,7 +497,15 @@ export function ModelPriceManagementPage() {
                 <Button variant="outline" onClick={() => setEdit(null)}>
                   {t("Cancel")}
                 </Button>
-                <Button onClick={save}>{t("Save")}</Button>
+                <Button
+                  onClick={() =>
+                    tab === "ours"
+                      ? void runtimePricingEditorRef.current?.save()
+                      : void save()
+                  }
+                >
+                  {t("Save")}
+                </Button>
               </div>
             </div>
             <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]">
@@ -587,6 +599,7 @@ export function ModelPriceManagementPage() {
                 />
               ) : (
                 <RuntimePricingEditor
+                  ref={runtimePricingEditorRef}
                   modelKey={edit.modelKey}
                   vendorPriceSpec={edit.vendorPriceSpec}
                   currentPriceSpec={edit.llmapiPriceSpec}
@@ -605,6 +618,7 @@ export function ModelPriceManagementPage() {
                       );
                       setEdit({ ...next, id: response.data?.data?.id || 0 });
                     }
+                    load();
                   }}
                 />
               )}

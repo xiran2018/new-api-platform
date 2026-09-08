@@ -362,7 +362,28 @@ func runtimePriceSpec(pricing model.Pricing) map[string]any {
 		return map[string]any{"mode": "request", "blocks": []any{map[string]any{"price": pricing.ModelPrice, "unit": "request"}}}
 	}
 	input := pricing.ModelRatio * 2
-	return map[string]any{"mode": "token", "blocks": []any{map[string]any{"input": input, "output": input * pricing.CompletionRatio, "unit": "1M tokens"}}}
+	block := map[string]any{
+		"input":  input,
+		"output": input * pricing.CompletionRatio,
+		"unit":   "1M tokens",
+	}
+	if pricing.CacheRatio != nil {
+		block["cache"] = input * *pricing.CacheRatio
+	}
+	if pricing.CreateCacheRatio != nil {
+		block["createCache"] = input * *pricing.CreateCacheRatio
+	}
+	if pricing.ImageRatio != nil {
+		block["image"] = input * *pricing.ImageRatio
+	}
+	if pricing.AudioRatio != nil {
+		audioInput := input * *pricing.AudioRatio
+		block["audioInput"] = audioInput
+		if pricing.AudioCompletionRatio != nil {
+			block["audioOutput"] = audioInput * *pricing.AudioCompletionRatio
+		}
+	}
+	return map[string]any{"mode": "token", "blocks": []any{block}}
 }
 
 func getAdminModelPrice(c *gin.Context) {

@@ -13,10 +13,10 @@ const money = (
   if (value == null) return "-";
   const converted = value * currency.exchangeRate;
   if (!Number.isFinite(converted)) return "-";
-  const rounded = Math.abs(converted) < 0.005 ? 0 : converted;
+  const rounded = Math.abs(converted) < 0.0005 ? 0 : converted;
   return `${currency.symbol}${new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
   }).format(rounded)}`;
 };
 
@@ -185,7 +185,7 @@ export function PriceRenderer({
         ) => {
           if (value == null || other == null) return null;
           const difference = value - other;
-          if (Math.abs(difference * currency.exchangeRate) < 0.005) return null;
+          if (Math.abs(difference * currency.exchangeRate) < 0.0005) return null;
           return (
             <small
               className={`ml-1 text-[11px] font-medium ${difference > 0 ? "text-rose-500" : difference < 0 ? "text-emerald-500" : "text-muted-foreground"}`}
