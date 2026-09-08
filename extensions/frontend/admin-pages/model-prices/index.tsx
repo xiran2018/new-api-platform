@@ -382,8 +382,9 @@ export function ModelPriceManagementPage() {
         <table className="w-max min-w-full table-auto text-sm">
           <thead className="sticky top-0 z-10 bg-muted">
             <tr>
-              <th className="p-3 text-left">{t("Model name")}</th>
+              <th className="w-56 max-w-56 p-3 text-left lg:w-[clamp(14rem,22vw,30rem)] lg:max-w-[clamp(14rem,22vw,30rem)]">{t("Model name")}</th>
               <th className="p-3 text-left">{t("Vendor")}</th>
+              <th className="p-3 text-left">{t("Display currency")}</th>
               <th className="p-3 text-left">{t("Vendor original price")}</th>
               <th className="p-3 text-left">
                 {t("Actual price")}
@@ -398,9 +399,11 @@ export function ModelPriceManagementPage() {
                   key={r.id}
                   className="border-t align-top hover:bg-muted/30"
                 >
-                  <td className="p-3 font-medium">
-                    {r.displayName}
-                    <div className="text-xs text-muted-foreground">
+                  <td className="w-56 max-w-56 overflow-hidden p-3 font-medium lg:w-[clamp(14rem,22vw,30rem)] lg:max-w-[clamp(14rem,22vw,30rem)]">
+                    <div className="truncate" title={r.displayName}>
+                      {r.displayName}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground" title={r.modelKey}>
                       {r.modelKey}
                     </div>
                     {r.syncStatus === "changed" && (
@@ -410,11 +413,17 @@ export function ModelPriceManagementPage() {
                     )}
                   </td>
                   <td className="p-3">{r.vendor}</td>
+                  <td className="p-3">
+                    <span className="inline-flex rounded border bg-muted px-2 py-1 text-xs font-medium">
+                      {r.currency === "USD" ? "USD ($)" : "CNY (¥)"}
+                    </span>
+                  </td>
                   <td className="whitespace-nowrap p-3">
                     <PriceRenderer
                       spec={r.vendorPriceSpec}
                       timezone={r.timezone}
                       pricesOnly
+                      displayCurrency={r.currency}
                     />
                   </td>
                   <td className="whitespace-nowrap p-3">
@@ -422,6 +431,7 @@ export function ModelPriceManagementPage() {
                       spec={r.llmapiPriceSpec}
                       timezone={r.timezone}
                       compareSpec={r.vendorPriceSpec}
+                      displayCurrency={r.currency}
                     />
                   </td>
                   <td className="whitespace-nowrap p-3 text-center">
@@ -520,7 +530,22 @@ export function ModelPriceManagementPage() {
                     })
                   }
                 /></label>
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm"><div className="text-xs text-muted-foreground">{t("Base currency")}</div><div className="mt-1 font-medium">USD</div></div>
+                <label className="space-y-1 text-sm">
+                  <span>{t("Display currency")}</span>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background px-3"
+                    value={edit.currency || "CNY"}
+                    onChange={(event) =>
+                      setEdit({ ...edit, currency: event.target.value })
+                    }
+                  >
+                    <option value="CNY">{t("Chinese yuan (CNY)")}</option>
+                    <option value="USD">{t("US dollar (USD)")}</option>
+                  </select>
+                  <span className="block text-xs text-muted-foreground">
+                    {t("Controls the currency shown on the public model price page.")}
+                  </span>
+                </label>
                 <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm"><div className="text-xs text-muted-foreground">{t("Pricing timezone")}</div><div className="mt-1 font-medium">{edit.timezone}</div></div>
                 <label className="flex items-center gap-2 rounded-md border px-3 py-2">
                   <input
@@ -591,7 +616,11 @@ export function ModelPriceManagementPage() {
                   <div className="space-y-3">
                     {(edit.pendingVendorSpec.blocks || []).map((block, blockIndex) => (
                       <div className="rounded-md border bg-background p-3" key={`${block.label || "source"}-${blockIndex}`}>
-                        <PriceRenderer spec={{ mode: edit.pendingVendorSpec?.mode, blocks: [block] }} timezone={edit.timezone} />
+                        <PriceRenderer
+                          spec={{ mode: edit.pendingVendorSpec?.mode, blocks: [block] }}
+                          timezone={edit.timezone}
+                          displayCurrency={edit.currency}
+                        />
                         <Button className="mt-3" onClick={async () => {
                           await api.post(`/api/platform/admin/model-prices/${edit.id}/apply-sync`, { blockIndex });
                           toast.success(t("Save"));

@@ -142,6 +142,7 @@ export function ModelPricesPage() {
                       spec={r.vendorPriceSpec}
                       timezone={r.timezone}
                       pricesOnly
+                      displayCurrency={r.currency}
                     />
                   </td>
                   <td className="p-4">
@@ -149,6 +150,7 @@ export function ModelPricesPage() {
                       spec={r.llmapiPriceSpec}
                       timezone={r.timezone}
                       pricesOnly
+                      displayCurrency={r.currency}
                     />
                   </td>
                 </tr>

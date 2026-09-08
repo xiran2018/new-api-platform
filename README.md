@@ -651,6 +651,41 @@ docker compose --env-file .env.docker -f docker-compose.host-db.yml logs -f
 直接访问 `EXISTING_SERVICES_HOST`。若数据库没有监听/映射所填端口、凭据不一致，
 或数据库机防火墙拒绝应用机 IP，此方式无法连接。
 
+### 将源码提交并推送到 GitHub
+
+项目包含外层 `new-api-platform` 和 `core/new-api` 子模块两个 Git 仓库。使用脚本可按
+正确顺序完成扩展装配、检查、core 提交与推送，以及外层子模块指针提交与推送：
+
+```bash
+cd /path/to/new-api-platform
+./scripts/push-github.sh \
+  --core-message "feat: update new-api integration" \
+  --platform-message "feat: update platform features"
+```
+
+不确定当前有哪些改动时，先执行只读预览；该模式不会装配文件、提交或推送：
+
+```bash
+./scripts/push-github.sh --dry-run
+```
+
+默认会运行前端类型检查和构建，并测试 Go 的 `router`、`platform` 接缝。已经单独完成
+验证、只希望快速提交时可用：
+
+```bash
+./scripts/push-github.sh --skip-checks
+```
+
+查看全部参数：
+
+```bash
+./scripts/push-github.sh --help
+```
+
+脚本只允许从远端 `origin/main` 快进的普通推送，不执行强制推送；发现分支分叉、未解决
+冲突或 `.env`、私钥、证书等敏感变更时会停止。脚本默认 `git add -A`，运行前应使用
+`--dry-run` 确认列表中没有临时文件和不希望提交的内容。
+
 ### 方式 5：生成并发布 Docker 镜像
 
 本地构建需要 Docker、构建依赖网络以及完整 core 子模块。运行脚本但不传 `--token`，

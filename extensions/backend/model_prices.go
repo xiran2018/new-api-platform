@@ -421,8 +421,12 @@ func bindModelPrice(c *gin.Context) (modelPriceCatalog, error) {
 	if err != nil {
 		return modelPriceCatalog{}, fmt.Errorf("invalid runtime reference: %w", err)
 	}
+	in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
 	if in.Currency == "" {
 		in.Currency = "CNY"
+	}
+	if in.Currency != "USD" && in.Currency != "CNY" {
+		return modelPriceCatalog{}, fmt.Errorf("display currency must be USD or CNY")
 	}
 	if in.Timezone == "" {
 		in.Timezone = "Asia/Shanghai"

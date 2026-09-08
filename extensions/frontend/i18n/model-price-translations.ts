@@ -93,6 +93,10 @@ const resources: Record<string, Record<string, string>> = {
     "Audio output price": "音频输出价格",
     "Base currency": "计价基础币种",
     "Pricing timezone": "分时计价时区",
+    "Display currency": "显示币种",
+    "Chinese yuan (CNY)": "人民币（CNY）",
+    "Controls the currency shown on the public model price page.":
+      "控制该模型在前台模型价格页面中显示的币种；底层价格仍以 USD 保存。",
     "Controls public price page visibility only": "仅控制前台价格页显示",
     "USD is the storage currency; displayed amounts follow the system exchange rate. The timezone is used only for active time-window pricing.":
       "价格以 USD 保存，页面显示金额按系统汇率换算；时区仅用于判断分时价格的当前区间。",
@@ -103,6 +107,10 @@ const resources: Record<string, Record<string, string>> = {
     "Vendor original price": "廠商原價",
     "Vendor price": "原廠價格",
     "Actual price": "實際價格",
+    "Display currency": "顯示幣種",
+    "Chinese yuan (CNY)": "人民幣（CNY）",
+    "Controls the currency shown on the public model price page.":
+      "控制該模型在前台模型價格頁面顯示的幣種；底層價格仍以 USD 儲存。",
     "Approximate CNY": "價格",
     "CNY conversion unavailable": "人民幣換算暫不可用，請檢查系統匯率",
     "Model name": "模型名稱",
@@ -135,6 +143,10 @@ const resources: Record<string, Record<string, string>> = {
     "Model price management": "Model price management",
     "Vendor price": "Vendor price",
     "Actual price": "Actual price",
+    "Display currency": "Display currency",
+    "Chinese yuan (CNY)": "Chinese yuan (CNY)",
+    "Controls the currency shown on the public model price page.":
+      "Controls the currency shown on the public model price page.",
     "Approximate CNY": "Approximate CNY",
     "CNY conversion unavailable": "CNY conversion unavailable; check the system exchange rate",
   },

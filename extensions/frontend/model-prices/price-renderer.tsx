@@ -1,17 +1,15 @@
 import { Clock3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { formatBillingCurrencyFromUSD } from "@/lib/currency";
+import { formatPricingAmount, type PricingCurrency } from "@/features/model-pricing/currency";
 import { useSystemConfigStore } from "@/stores/system-config-store";
 import { splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
 import { tryParseVisualConfig } from "@/features/pricing/lib/tier-expr";
 import type { PriceBlock, PriceSpec } from "./types";
 
-const money = (value: number | null | undefined) =>
-  formatBillingCurrencyFromUSD(value, {
-    digitsLarge: 2,
-    digitsSmall: 6,
-    abbreviate: false,
-  });
+const money = (
+  value: number | null | undefined,
+  currency: PricingCurrency,
+) => value == null ? "-" : formatPricingAmount(value, currency);
 
 const hasNonZeroPrice = (value: number | null | undefined) =>
   typeof value === "number" && Number.isFinite(value) && value !== 0;
@@ -112,15 +110,27 @@ export function PriceRenderer({
   timezone,
   compareSpec,
   pricesOnly = false,
+  displayCurrency = "CNY",
 }: {
   spec?: PriceSpec;
   timezone: string;
   compareSpec?: PriceSpec;
   pricesOnly?: boolean;
+  displayCurrency?: string;
 }) {
   const { t } = useTranslation();
-  // Currency settings live in a global store; subscribing keeps prices current.
-  useSystemConfigStore((state) => state.config.currency);
+  const currencyConfig = useSystemConfigStore((state) => state.config.currency);
+  const currency: PricingCurrency = displayCurrency.toUpperCase() === "USD"
+    ? { label: "USD", symbol: "$", exchangeRate: 1 }
+    : {
+        label: "CNY",
+        symbol: "¥",
+        exchangeRate:
+          Number.isFinite(currencyConfig.usdExchangeRate) &&
+          currencyConfig.usdExchangeRate > 0
+            ? currencyConfig.usdExchangeRate
+            : 1,
+      };
   const displayedSpec = withDerivedPrices(spec);
   const displayedCompareSpec = withDerivedPrices(compareSpec);
   const requestMode = displayedSpec?.mode === "request";
@@ -171,7 +181,7 @@ export function PriceRenderer({
               className={`ml-1 text-[11px] font-medium ${difference > 0 ? "text-rose-500" : difference < 0 ? "text-emerald-500" : "text-muted-foreground"}`}
             >
               {difference > 0 ? "+" : ""}
-              {money(difference)}
+              {money(difference, currency)}
             </small>
           );
         };
@@ -206,21 +216,21 @@ export function PriceRenderer({
               <div className="space-y-1.5 text-sm">
                 {showTokenPrices && hasNonZeroPrice(b.input) && (
                   <div>
-                    {t("Input price")}: <b>{money(b.input)}</b>
+                    {t("Input price")}: <b>{money(b.input, currency)}</b>
                     {delta(b.input, compared?.input)}
                     {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
                   </div>
                 )}
                 {showTokenPrices && hasNonZeroPrice(b.output) && (
                   <div>
-                    {t("Output price")}: <b>{money(b.output)}</b>
+                    {t("Output price")}: <b>{money(b.output, currency)}</b>
                     {delta(b.output, compared?.output)}
                     {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
                   </div>
                 )}
                 {showRequestPrice && hasNonZeroPrice(b.price) && (
                   <div>
-                    <b>{money(b.price)}</b>
+                    <b>{money(b.price, currency)}</b>
                     {delta(b.price, compared?.price)}
                     <span className="ml-1 text-muted-foreground">/ {unit || t("Per request")}</span>
                   </div>
@@ -232,7 +242,7 @@ export function PriceRenderer({
                   ["audioInput", "Audio input price"],
                   ["audioOutput", "Audio output price"],
                 ] as const).map(([field, label]) =>
-                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field])}</b>{delta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
+                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency)}</b>{delta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
                 )}
               </div>
             )}
