@@ -231,6 +231,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const [saving, setSaving] = useState(false);
   const [discount, setDiscount] = useState(0);
   const [editorOverride, setEditorOverride] = useState<ModelRatioData | null>(null);
+  const pricingCurrency = usePricingPreferencesStore((state) => state.currency);
   const setPricingCurrency = usePricingPreferencesStore((state) => state.setCurrency);
   useEffect(() => {
     setEntry(null);
@@ -340,7 +341,9 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
                   toast.error(t("No vendor price is available for the selected pricing mode"));
                   return;
                 }
-                setPricingCurrency(vendorPriceSpec?.pricingCurrency || "USD");
+                setPricingCurrency(
+                  vendorPriceSpec?.pricingCurrency || pricingCurrency,
+                );
                 setEditorOverride(vendor);
                 toast.success(t("Vendor price synchronized"));
               }}
