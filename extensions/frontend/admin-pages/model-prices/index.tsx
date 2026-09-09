@@ -152,7 +152,12 @@ function SpecEditor({
           <a key={url} href={url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-primary underline">{url}</a>
         ))}
       </div>
-      <PricingCurrencySelector siteCurrency={siteCurrency} />
+      <PricingCurrencySelector
+        siteCurrency={siteCurrency}
+        onValueChange={(pricingCurrency) =>
+          onChange({ ...value, pricingCurrency })
+        }
+      />
       <Tabs
         value={mode}
         onValueChange={(next) =>
@@ -498,11 +503,20 @@ export function ModelPriceManagementPage() {
                   {t("Cancel")}
                 </Button>
                 <Button
-                  onClick={() =>
-                    tab === "ours"
-                      ? void runtimePricingEditorRef.current?.save()
-                      : void save()
-                  }
+                  onClick={() => {
+                    if (tab !== "ours") {
+                      void save();
+                      return;
+                    }
+                    const runtimeSave = document.querySelector<HTMLButtonElement>(
+                      "[data-runtime-pricing-save]",
+                    );
+                    if (!runtimeSave || runtimeSave.disabled) {
+                      toast.error(t("Pricing editor is still loading"));
+                      return;
+                    }
+                    runtimeSave.click();
+                  }}
                 >
                   {t("Save")}
                 </Button>

@@ -21,6 +21,7 @@ export type PriceBlock = {
 };
 export type PriceSpec = {
   mode?: "token" | "request" | "time" | "tiered" | "table" | "expression";
+  pricingCurrency?: "USD" | "site";
   blocks?: PriceBlock[];
 };
 export type ModelPrice = {

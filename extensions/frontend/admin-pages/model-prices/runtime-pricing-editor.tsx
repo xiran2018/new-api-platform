@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Save } from "lucide-react";
+import { RefreshCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import {
   splitBillingExprAndRequestRules,
 } from "@/features/pricing/lib/billing-expr";
 import type { ModelRatioData } from "@/features/system-settings/models/model-pricing-core";
+import { usePricingPreferencesStore } from "@/stores/pricing-preferences-store";
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
@@ -229,8 +230,11 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const [entry, setEntry] = useState<ModelPricingEntry | null>(null);
   const [saving, setSaving] = useState(false);
   const [discount, setDiscount] = useState(0);
+  const [editorOverride, setEditorOverride] = useState<ModelRatioData | null>(null);
+  const setPricingCurrency = usePricingPreferencesStore((state) => state.setCurrency);
   useEffect(() => {
     setEntry(null);
+    setEditorOverride(null);
     setDiscount(currentPriceSpec?.blocks?.[0]?.discount ?? 0);
     if (modelKey)
       void getModelPricing([modelKey])
@@ -283,6 +287,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
           </div>
         </div>
         <Button
+          data-runtime-pricing-save=""
           size="lg"
           className="shrink-0 shadow-md"
           disabled={saving || !modelKey}
@@ -315,13 +320,34 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
           className="!overflow-visible [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static"
           ref={ref}
           editData={
-            hasConfiguredPrice(entry)
+            editorOverride || (hasConfiguredPrice(entry)
               ? editorData(
                   entry,
                   currentPriceSpec?.blocks?.[0]?.discount ?? 0,
                   currentPriceSpec,
                 )
-              : vendorEditorData(modelKey, vendorPriceSpec) || editorData(entry)
+              : editorData(entry))
+          }
+          pricingHeaderAction={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                const current = await ref.current?.commitDraft();
+                if (!current) return;
+                const vendor = vendorEditorData(modelKey, vendorPriceSpec);
+                if (!vendor || vendor.billingMode !== current.billingMode) {
+                  toast.error(t("No vendor price is available for the selected pricing mode"));
+                  return;
+                }
+                setPricingCurrency(vendorPriceSpec?.pricingCurrency || "USD");
+                setEditorOverride(vendor);
+                toast.success(t("Vendor price synchronized"));
+              }}
+            >
+              <RefreshCcw className="mr-2 size-4" />
+              {t("Sync vendor price")}
+            </Button>
           }
           usageSchema={entry.usage_schema}
           isSaving={saving}

@@ -265,6 +265,17 @@ func syncExistingModelPrices(db *gorm.DB) error {
 	for _, pricing := range model.GetPricing() {
 		pricingByName[pricing.ModelName] = pricing
 	}
+	pricingSnapshot, err := model.GetModelPricingSnapshot(nil)
+	if err != nil {
+		return err
+	}
+	configuredPricing := make(map[string]bool, len(pricingSnapshot.Entries))
+	for _, entry := range pricingSnapshot.Entries {
+		_, hasModelPrice := entry.Configured["ModelPrice"]
+		_, hasModelRatio := entry.Configured["ModelRatio"]
+		_, hasBillingExpression := entry.Configured["billing_setting.billing_expr"]
+		configuredPricing[entry.ModelName] = hasModelPrice || hasModelRatio || hasBillingExpression
+	}
 	models, err := model.GetAllModels(0, 100000)
 	if err != nil {
 		return err
@@ -296,7 +307,7 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		tags := splitModelTags(tagsRaw)
 		tagsJSON, _ := json.Marshal(tags)
 		priceSpec := json.RawMessage(`{}`)
-		if hasPricing {
+		if hasPricing && configuredPricing[name] {
 			priceSpec = priceSpecFor(name, pricing)
 		}
 		rows = append(rows, modelPriceCatalog{
@@ -323,7 +334,10 @@ func syncExistingModelPrices(db *gorm.DB) error {
 			vendor = "Other"
 		}
 		tagsJSON, _ := json.Marshal(splitModelTags(pricing.Tags))
-		priceSpec := priceSpecFor(name, pricing)
+		priceSpec := json.RawMessage(`{}`)
+		if configuredPricing[name] {
+			priceSpec = priceSpecFor(name, pricing)
+		}
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",

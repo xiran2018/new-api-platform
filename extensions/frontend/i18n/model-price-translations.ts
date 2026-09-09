@@ -195,7 +195,12 @@ Object.assign(resources.zh, {
     "厂商价格用于对比；LLMAPI 价格会写入当前生效的实际计费配置。",
   "Saving here immediately changes actual billing for this model.":
     "在这里保存后，该模型将立即按照新价格进行实际计费。",
-  "Save runtime pricing": "保存实际计费价格",
+    "Save runtime pricing": "保存实际计费价格",
+    "Sync vendor price": "一键同步原厂价格",
+    "Vendor price synchronized": "已同步当前计费模式的原厂价格",
+    "No vendor price is available for the selected pricing mode":
+      "原厂价格中没有当前计费模式，无法同步",
+    "Pricing editor is still loading": "价格编辑器仍在加载，请稍后重试",
   "Runtime pricing saved": "实际计费价格已保存并生效",
   "All models": "全部模型",
   "Existing local models": "本机已有模型",
