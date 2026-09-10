@@ -96,13 +96,13 @@ export function ModelPricesPage() {
           </div>
         </div>
         <div className="max-w-full overflow-x-auto rounded-lg border bg-card shadow-sm [scrollbar-gutter:stable]">
-          <table className="w-full min-w-[1280px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
             <colgroup>
-              <col className="w-[16%]" />
-              <col className="w-[14%]" />
-              <col className="w-[16%]" />
-              <col className="w-[27%]" />
-              <col className="w-[27%]" />
+              <col className="w-[18%]" />
+              <col className="w-[13%]" />
+              <col className="w-[9%]" />
+              <col className="w-[30%]" />
+              <col className="w-[30%]" />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-muted">
               <tr>
@@ -126,7 +126,7 @@ export function ModelPricesPage() {
                   </td>
                   <td className="break-words p-4">{r.vendor}</td>
                   <td className="p-4">
-                    <div className="flex max-w-48 flex-wrap gap-1">
+                    <div className="flex max-w-32 flex-wrap gap-1">
                       {(r.tags || []).map((x) => (
                         <span
                           key={x}

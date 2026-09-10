@@ -20,7 +20,10 @@ import {
 } from "@/features/model-pricing/currency";
 import { PricingAmountInput } from "@/features/model-pricing/pricing-amount-input";
 import { PricingCurrencySelector } from "@/features/model-pricing/pricing-currency-selector";
+import { getModelPricing } from "@/features/model-pricing/api";
+import { getVendors } from "@/features/models/api";
 import { combineBillingExpr, splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
+import type { BillingUsageSchema } from "@/features/pricing/types";
 import { TieredPricingEditor } from "@/features/system-settings/models/tiered-pricing-editor";
 import { api } from "@/lib/api";
 import { useSystemConfigStore } from "@/stores/system-config-store";
@@ -32,6 +35,7 @@ import {
   RuntimePricingEditor,
   type RuntimePricingEditorHandle,
 } from "./runtime-pricing-editor";
+import { UsageRuleBuilder, usageRuleSetExpression } from "./usage-rule-builder";
 
 const empty: ModelPrice = {
   id: 0,
@@ -58,12 +62,26 @@ function SpecEditor({
   value,
   onChange,
   source,
+  modelKey,
+  actualPriceSpec,
 }: {
   value: PriceSpec;
   onChange: (v: PriceSpec) => void;
   source?: string;
+  modelKey: string;
+  actualPriceSpec?: PriceSpec;
 }) {
   const { t } = useTranslation();
+  const [usageSchema, setUsageSchema] = useState<BillingUsageSchema | undefined>();
+  useEffect(() => {
+    if (!modelKey) {
+      setUsageSchema(undefined);
+      return;
+    }
+    void getModelPricing([modelKey])
+      .then((data) => setUsageSchema(data.entries.find((entry) => entry.model_name === modelKey)?.usage_schema))
+      .catch(() => setUsageSchema(undefined));
+  }, [modelKey]);
   const currencyConfig = useSystemConfigStore(
     (state) => state.config.currency,
   );
@@ -122,8 +140,9 @@ function SpecEditor({
           : audioInput * audioOutputRatio,
     };
   });
-  const mode =
-    value.mode === "request"
+  const mode = value.blocks?.[0]?.usageRuleSet
+    ? "media"
+    : value.mode === "request"
       ? "request"
       : value.mode === "expression"
         ? "expression"
@@ -160,17 +179,64 @@ function SpecEditor({
       />
       <Tabs
         value={mode}
-        onValueChange={(next) =>
-          onChange({ mode: next as PriceSpec["mode"], blocks })
-        }
+        onValueChange={(next) => {
+          if (next === "media") {
+            onChange({
+              ...value,
+              mode: "expression",
+              blocks: [{
+                label: "Expression",
+                usageRuleSet: { version: 1, execution: usageSchema ? "task" : "request", rules: [] },
+              }],
+            });
+            return;
+          }
+          const cleanBlocks = blocks.map(({ usageRuleSet: _usageRuleSet, ...block }) => block);
+          onChange({ ...value, mode: next as PriceSpec["mode"], blocks: cleanBlocks });
+        }}
       >
-        <TabsList className="grid w-full max-w-xl grid-cols-3">
+        <TabsList className="grid h-auto w-full max-w-3xl grid-cols-2 sm:grid-cols-4">
           <TabsTrigger value="token">{t("Per-token")}</TabsTrigger>
           <TabsTrigger value="request">{t("Per-request")}</TabsTrigger>
           <TabsTrigger value="expression">{t("Expression")}</TabsTrigger>
+          <TabsTrigger value="media">{t("Advanced media pricing rules")}</TabsTrigger>
         </TabsList>
       </Tabs>
-      {blocks.map((b, i) => (
+      {mode === "media" && (
+        <UsageRuleBuilder
+          value={value.blocks?.[0]?.usageRuleSet}
+          usageSchema={usageSchema}
+          exchangeRate={pricingCurrency.exchangeRate}
+          currencySymbol={pricingCurrency.symbol}
+          headerAction={
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!actualPriceSpec?.blocks?.[0]?.usageRuleSet?.rules?.length}
+              onClick={() => {
+                const usageRuleSet = actualPriceSpec?.blocks?.[0]?.usageRuleSet;
+                if (!usageRuleSet?.rules?.length) return;
+                const expression = usageRuleSetExpression(usageRuleSet);
+                onChange({
+                  mode: "expression",
+                  pricingCurrency: actualPriceSpec?.pricingCurrency,
+                  blocks: [{ label: "Expression", note: expression, baseExpression: expression, usageRuleSet }],
+                });
+                toast.success(t("Actual media pricing rules copied to vendor price"));
+              }}
+            >
+              <RefreshCcw className="mr-2 size-4" />
+              {t("Copy actual media pricing")}
+            </Button>
+          }
+          onApply={(usageRuleSet, expression) => onChange({
+            ...value,
+            mode: "expression",
+            blocks: [{ label: "Expression", note: expression, baseExpression: expression, usageRuleSet }],
+          })}
+        />
+      )}
+      {mode !== "media" && blocks.map((b, i) => (
         <div
           className="grid gap-3 rounded-md border bg-muted/20 p-4 md:grid-cols-2"
           key={i}
@@ -299,6 +365,7 @@ export function ModelPriceManagementPage() {
     [q, setQ] = useState(""),
     [filter, setFilter] = useState<"all" | "local" | "unset">("all"),
     [edit, setEdit] = useState<ModelPrice | null>(null),
+    [vendorNames, setVendorNames] = useState<string[]>([]),
     [tab, setTab] = useState<"vendor" | "ours">("vendor"),
     [syncOpen, setSyncOpen] = useState(false),
     [syncModel, setSyncModel] = useState<string | undefined>();
@@ -307,6 +374,17 @@ export function ModelPriceManagementPage() {
       .get("/api/platform/admin/model-prices", { params: { q } })
       .then((r) => setRows(r.data.data || []));
   useEffect(load, [q]);
+  useEffect(() => {
+    void getVendors({ page_size: 1000 })
+      .then((response) => {
+        if (!response.success) throw new Error(response.message || t("Failed to load vendors"));
+        setVendorNames(
+          [...new Set((response.data?.items || []).map((vendor) => vendor.name.trim()).filter(Boolean))]
+            .sort((left, right) => left.localeCompare(right)),
+        );
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : t("Failed to load vendors")));
+  }, [t]);
   const shown = useMemo(
     () =>
       rows.filter((row) => {
@@ -538,11 +616,20 @@ export function ModelPriceManagementPage() {
                     setEdit({ ...edit, displayName: e.target.value })
                   }
                 /></label>
-                <label className="space-y-1 text-sm"><span>{t("Vendor")}</span><Input
-                  placeholder={t("Vendor")}
-                  value={edit.vendor}
-                  onChange={(e) => setEdit({ ...edit, vendor: e.target.value })}
-                /></label>
+                <label className="space-y-1 text-sm">
+                  <span>{t("Vendor")}</span>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background px-3"
+                    value={edit.vendor}
+                    onChange={(event) => setEdit({ ...edit, vendor: event.target.value })}
+                  >
+                    <option value="" disabled>{t("Select vendor")}</option>
+                    {edit.vendor && !vendorNames.includes(edit.vendor) && (
+                      <option value={edit.vendor}>{edit.vendor} ({t("Historical value")})</option>
+                    )}
+                    {vendorNames.map((vendor) => <option value={vendor} key={vendor}>{vendor}</option>)}
+                  </select>
+                </label>
                 <label className="space-y-1 text-sm"><span>{t("Tags")}</span><Input
                   placeholder={t("Tags")}
                   value={(edit.tags || []).join(",")}
@@ -610,6 +697,8 @@ export function ModelPriceManagementPage() {
                   value={edit.vendorPriceSpec}
                   onChange={(v) => setEdit({ ...edit, vendorPriceSpec: v })}
                   source={edit.upstreamSource}
+                  modelKey={edit.modelKey}
+                  actualPriceSpec={edit.llmapiPriceSpec}
                 />
               ) : (
                 <RuntimePricingEditor

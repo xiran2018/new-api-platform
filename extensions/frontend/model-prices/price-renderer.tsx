@@ -4,7 +4,7 @@ import type { PricingCurrency } from "@/features/model-pricing/currency";
 import { useSystemConfigStore } from "@/stores/system-config-store";
 import { splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
 import { tryParseVisualConfig } from "@/features/pricing/lib/tier-expr";
-import type { PriceBlock, PriceSpec } from "./types";
+import type { PriceBlock, PriceSpec, UsageRuleSet } from "./types";
 
 const money = (
   value: number | null | undefined,
@@ -114,6 +114,76 @@ const activeWindow = (b: PriceBlock, timezone: string) => {
     ? now >= b.start && now < b.end
     : now >= b.start || now < b.end;
 };
+
+function UsageRuleSetRenderer({
+  ruleSet,
+  currency,
+  discount = 0,
+}: {
+  ruleSet: UsageRuleSet;
+  currency: PricingCurrency;
+  discount?: number;
+}) {
+  const { t } = useTranslation();
+  const operator = { eq: "=", ne: "!=", lt: "<", lte: "≤", gt: ">", gte: "≥" } as const;
+  const factor = 1 - discount / 100;
+  const showRuleDetails = ruleSet.rules.length > 1 || ruleSet.rules.some((rule) => rule.conditions.length > 0);
+  const meterLabel = (meter: string) => {
+    if (["request", "count"].includes(meter)) return "";
+    return t(({
+      input_images: "Input image count",
+      output_images: "Output image count",
+      seconds: "Duration in seconds",
+      characters: "Character count",
+    } as Record<string, string>)[meter] || meter);
+  };
+  const charges = (rule: UsageRuleSet["rules"][number]) => (
+    <div className="space-y-1">
+      {rule.charges.filter((charge) => charge.price !== 0).map((charge, chargeIndex) => {
+        const label = meterLabel(charge.meter);
+        return (
+          <div className="whitespace-nowrap" key={`${charge.meter}-${chargeIndex}`}>
+            {label && <span className="mr-1 text-muted-foreground">{label}:</span>}
+            <b>{money(charge.price * factor, currency)}</b>
+            <span className="ml-1 text-muted-foreground">/ {charge.unit}</span>
+          </div>
+        );
+      })}
+      {!rule.charges.some((charge) => charge.price !== 0) && <span className="text-muted-foreground">{t("Free")}</span>}
+    </div>
+  );
+  return (
+    <div className="space-y-2">
+      <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+        <span>{t("Pricing mode")}: {t("Usage rule pricing")}</span>
+        {discount > 0 && <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">{t("Discount")} {discount}%</span>}
+      </div>
+      {!showRuleDetails ? (
+        <div className="rounded-md border bg-muted/25 p-3 text-sm">
+          {charges(ruleSet.rules[0])}
+        </div>
+      ) : <div className="overflow-hidden rounded-md border">
+        <table className="w-full table-fixed text-sm">
+          <colgroup><col className="w-[22%]" /><col className="w-[38%]" /><col className="w-[40%]" /></colgroup>
+          <thead className="bg-muted/60 text-xs text-muted-foreground">
+            <tr><th className="p-2 text-left">{t("Pricing tier")}</th><th className="p-2 text-left">{t("Match conditions")}</th><th className="p-2 text-left">{t("Unit price")}</th></tr>
+          </thead>
+          <tbody>
+            {ruleSet.rules.map((rule, index) => (
+              <tr className="border-t align-top" key={rule.id || index}>
+                <td className="p-2 font-medium">{rule.label}</td>
+                <td className="p-2 text-xs text-muted-foreground">
+                  {rule.conditions.length ? rule.conditions.map((condition) => `${condition.field} ${operator[condition.operator]} ${String(condition.value)}`).join(" · ") : t("Fallback")}
+                </td>
+                <td className="p-2">{charges(rule)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>}
+    </div>
+  );
+}
 export function PriceRenderer({
   spec,
   timezone,
@@ -143,6 +213,7 @@ export function PriceRenderer({
   const displayedSpec = withDerivedPrices(spec);
   const displayedCompareSpec = withDerivedPrices(compareSpec);
   const requestMode = displayedSpec?.mode === "request";
+  const usageRuleSet = spec?.blocks?.[0]?.usageRuleSet;
   const blocks = (displayedSpec?.blocks || []).filter(
     (block) =>
       displayedSpec?.mode === "table" ||
@@ -164,6 +235,9 @@ export function PriceRenderer({
       table: "Custom table",
     } as Record<string, string>)[spec?.mode || "token"] || "Token pricing",
   );
+  if (usageRuleSet?.rules?.length) {
+    return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} />;
+  }
   if (!blocks.length) return <span className="text-muted-foreground">-</span>;
   return (
     <div className="space-y-2">

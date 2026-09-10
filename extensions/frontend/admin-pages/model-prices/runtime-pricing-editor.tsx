@@ -16,11 +16,13 @@ import {
 } from "@/features/pricing/lib/billing-expr";
 import type { ModelRatioData } from "@/features/system-settings/models/model-pricing-core";
 import { usePricingPreferencesStore } from "@/stores/pricing-preferences-store";
+import { useSystemConfigStore } from "@/stores/system-config-store";
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
 } from "@/features/system-settings/models/model-pricing-sheet";
-import type { PriceSpec } from "../../model-prices/types";
+import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
+import { UsageRuleBuilder, usageRuleSetExpression } from "./usage-rule-builder";
 
 type PriceComparison = Partial<
   Record<
@@ -157,6 +159,7 @@ function displaySpec(
   data: ModelRatioData,
   discount?: number,
   baseData?: ModelRatioData,
+  usageRuleSet?: UsageRuleSet,
 ): PriceSpec {
   if (data.billingMode === "tiered_expr")
     return {
@@ -175,6 +178,7 @@ function displaySpec(
               )
             : undefined,
           discount,
+          usageRuleSet,
         },
       ],
     };
@@ -233,9 +237,22 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const [editorOverride, setEditorOverride] = useState<ModelRatioData | null>(null);
   const pricingCurrency = usePricingPreferencesStore((state) => state.currency);
   const setPricingCurrency = usePricingPreferencesStore((state) => state.setCurrency);
+  const currencyConfig = useSystemConfigStore((state) => state.config.currency);
+  const exchangeRate = pricingCurrency === "site" && currencyConfig.usdExchangeRate > 0
+    ? currencyConfig.usdExchangeRate
+    : 1;
+  const currencySymbol = pricingCurrency === "site" ? "¥" : "$";
+  const [usageRuleSet, setUsageRuleSet] = useState<UsageRuleSet | undefined>(
+    currentPriceSpec?.blocks?.[0]?.usageRuleSet,
+  );
+  const [advancedPricingActive, setAdvancedPricingActive] = useState(
+    Boolean(currentPriceSpec?.blocks?.[0]?.usageRuleSet),
+  );
   useEffect(() => {
     setEntry(null);
     setEditorOverride(null);
+    setUsageRuleSet(currentPriceSpec?.blocks?.[0]?.usageRuleSet);
+    setAdvancedPricingActive(Boolean(currentPriceSpec?.blocks?.[0]?.usageRuleSet));
     setDiscount(currentPriceSpec?.blocks?.[0]?.discount ?? 0);
     if (modelKey)
       void getModelPricing([modelKey])
@@ -251,6 +268,10 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     const draft = await ref.current?.commitDraft();
     if (!draft) return;
     draft.name = modelKey;
+    const activeRuleSet = usageRuleSet && draft.billingMode === "tiered_expr" &&
+      draft.billingExpr?.trim() === usageRuleSetExpression(usageRuleSet).trim()
+      ? usageRuleSet
+      : undefined;
     const billedDraft = applyDiscount(draft, discount);
     setSaving(true);
     try {
@@ -263,13 +284,44 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       ]);
       const refreshed = await getModelPricing([modelKey]);
       setEntry(refreshed.entries[0] || null);
-      await onSaved(displaySpec(billedDraft, discount || undefined, draft));
+      await onSaved(displaySpec(billedDraft, discount || undefined, draft, activeRuleSet));
       toast.success(t("Runtime pricing saved"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Save failed"));
     } finally {
       setSaving(false);
     }
+  };
+  const syncVendorPrice = async (advancedOnly = false) => {
+    if (advancedOnly) {
+      const vendorRuleSet = vendorPriceSpec?.blocks?.[0]?.usageRuleSet;
+      if (!vendorRuleSet?.rules?.length) {
+        toast.error(t("No vendor media pricing rules are available"));
+        return;
+      }
+      setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
+      setUsageRuleSet(vendorRuleSet);
+      setAdvancedPricingActive(true);
+      setEditorOverride({
+        name: modelKey,
+        billingMode: "tiered_expr",
+        billingExpr: usageRuleSetExpression(vendorRuleSet),
+        requestRuleExpr: "",
+      });
+      toast.success(t("Vendor media pricing rules synchronized"));
+      return;
+    }
+    const current = await ref.current?.commitDraft();
+    if (!current) return;
+    const vendor = vendorEditorData(modelKey, vendorPriceSpec);
+    if (!vendor || vendor.billingMode !== current.billingMode) {
+      toast.error(t("No vendor price is available for the selected pricing mode"));
+      return;
+    }
+    setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
+    setUsageRuleSet(vendorPriceSpec?.blocks?.[0]?.usageRuleSet);
+    setEditorOverride(vendor);
+    toast.success(t("Vendor price synchronized"));
   };
   useImperativeHandle(forwardedRef, () => ({ save }));
   if (!entry)
@@ -330,32 +382,47 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
               : editorData(entry))
           }
           pricingHeaderAction={
-            <Button
+            !advancedPricingActive ? <Button
               type="button"
               variant="outline"
-              onClick={async () => {
-                const current = await ref.current?.commitDraft();
-                if (!current) return;
-                const vendor = vendorEditorData(modelKey, vendorPriceSpec);
-                if (!vendor || vendor.billingMode !== current.billingMode) {
-                  toast.error(t("No vendor price is available for the selected pricing mode"));
-                  return;
-                }
-                setPricingCurrency(
-                  vendorPriceSpec?.pricingCurrency || pricingCurrency,
-                );
-                setEditorOverride(vendor);
-                toast.success(t("Vendor price synchronized"));
-              }}
+              onClick={() => void syncVendorPrice()}
             >
               <RefreshCcw className="mr-2 size-4" />
               {t("Sync vendor price")}
-            </Button>
+            </Button> : null
           }
           usageSchema={entry.usage_schema}
           isSaving={saving}
           priceComparison={vendorComparison(vendorPriceSpec)}
           priceMultiplier={1 - discount / 100}
+          additionalPricingActive={advancedPricingActive}
+          onAdditionalPricingActiveChange={setAdvancedPricingActive}
+          additionalPricingTab={{
+            label: t("Advanced media pricing rules"),
+            content: (
+              <UsageRuleBuilder
+                value={usageRuleSet}
+                usageSchema={entry.usage_schema}
+                exchangeRate={exchangeRate}
+                currencySymbol={currencySymbol}
+                headerAction={
+                  <Button type="button" variant="outline" onClick={() => void syncVendorPrice(true)}>
+                    <RefreshCcw className="mr-2 size-4" />
+                    {t("Sync vendor media pricing")}
+                  </Button>
+                }
+                onApply={(nextRuleSet, expression) => {
+                  setUsageRuleSet(nextRuleSet);
+                  setEditorOverride({
+                    name: modelKey,
+                    billingMode: "tiered_expr",
+                    billingExpr: expression,
+                    requestRuleExpr: "",
+                  });
+                }}
+              />
+            ),
+          }}
           expressionComparison={
             vendorPriceSpec?.mode === "expression"
               ? splitBillingExprAndRequestRules(

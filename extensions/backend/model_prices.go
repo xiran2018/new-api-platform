@@ -229,7 +229,7 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		}
 		if json.Unmarshal(row.LLMAPIPriceSpec, &spec) == nil && len(spec.Blocks) > 0 {
 			metadata := make(map[string]any)
-			for _, key := range []string{"discount", "baseExpression"} {
+			for _, key := range []string{"discount", "baseExpression", "usageRuleSet"} {
 				if value, exists := spec.Blocks[0][key]; exists {
 					metadata[key] = value
 				}
