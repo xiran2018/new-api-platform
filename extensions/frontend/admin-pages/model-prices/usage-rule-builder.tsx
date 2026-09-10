@@ -1,7 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { CopyPlus, Plus, Trash2, WandSparkles } from "lucide-react";
+import { CopyPlus, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BillingUsageSchema } from "@/features/pricing/types";
@@ -167,6 +166,17 @@ export function usageRuleSetExpression(ruleSet: UsageRuleSet) {
   return expression;
 }
 
+export function validateUsageRuleSet(ruleSet?: UsageRuleSet) {
+  const rules = ruleSet?.rules || [];
+  if (!rules.length || rules.at(-1)!.conditions.length || rules.slice(0, -1).some((item) => !item.conditions.length)) {
+    return "The last pricing tier must be the condition-free fallback";
+  }
+  if (rules.some((item) => !item.label.trim() || !item.charges.length || item.conditions.some((condition) => !condition.field.trim()) || item.charges.some((entry) => !entry.meter.trim() || !Number.isFinite(entry.price) || entry.price < 0))) {
+    return "Complete every tier, condition, meter and non-negative price";
+  }
+  return "";
+}
+
 function parseInputValue(value: string): string | number | boolean {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -245,8 +255,8 @@ export function UsageRuleBuilder({
   const [templateKey, setTemplateKey] = useState<TemplateKey>(defaultTemplate);
   useEffect(() => {
     setRules(value?.rules?.length ? value.rules : template(defaultTemplate, execution).rules);
-    setTemplateKey(defaultTemplate);
   }, [value, execution, defaultTemplate]);
+  useEffect(() => setTemplateKey(defaultTemplate), [defaultTemplate]);
   const fields = useMemo(
     () => execution === "task" ? Object.keys(usageSchema || {}) : requestFields,
     [usageSchema],
@@ -257,20 +267,12 @@ export function UsageRuleBuilder({
       : usageSchema?.[field]?.type === "number")],
     [execution, fields, usageSchema],
   );
-  const updateRule = (index: number, next: UsagePriceRule) => {
-    const copy = [...rules]; copy[index] = next; setRules(copy);
-  };
-  const apply = () => {
-    if (!rules.length || rules.at(-1)!.conditions.length || rules.slice(0, -1).some((item) => !item.conditions.length)) {
-      toast.error(t("The last pricing tier must be the condition-free fallback")); return;
-    }
-    if (rules.some((item) => !item.label.trim() || !item.charges.length || item.conditions.some((c) => !c.field.trim()) || item.charges.some((c) => !c.meter.trim() || !Number.isFinite(c.price) || c.price < 0))) {
-      toast.error(t("Complete every tier, condition, meter and non-negative price")); return;
-    }
+  const commitRules = (nextRules: UsagePriceRule[]) => {
+    setRules(nextRules);
     const next = {
       version: 1 as const,
       execution,
-      rules: rules.map((item) => ({
+      rules: nextRules.map((item) => ({
         ...item,
         charges: item.charges.map((part) => ({
           ...part,
@@ -282,7 +284,9 @@ export function UsageRuleBuilder({
       })),
     };
     onApply(next, usageRuleSetExpression(next));
-    toast.success(t("Visual pricing rules applied"));
+  };
+  const updateRule = (index: number, next: UsagePriceRule) => {
+    const copy = [...rules]; copy[index] = next; commitRules(copy);
   };
   return (
     <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
@@ -296,7 +300,11 @@ export function UsageRuleBuilder({
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1 text-sm">
           <span className="font-medium">{t("Pricing template")}</span>
-          <select className="flex h-9 min-w-52 rounded-md border bg-background px-3 text-sm" value={templateKey} onChange={(event) => setTemplateKey(event.target.value as TemplateKey)}>
+          <select className="flex h-9 min-w-52 rounded-md border bg-background px-3 text-sm" value={templateKey} onChange={(event) => {
+            const nextTemplate = event.target.value as TemplateKey;
+            setTemplateKey(nextTemplate);
+            commitRules(template(nextTemplate, execution).rules);
+          }}>
             {execution === "request" && <option value="image">{t("Image resolution (1K/2K)")}</option>}
             {(execution === "request" || fields.includes("prompt_extend")) && <option value="boolean">{t("Boolean request option")}</option>}
             {(execution === "request" || fields.includes("count")) && <option value="volume">{t("Per-request quantity tiers")}</option>}
@@ -304,7 +312,6 @@ export function UsageRuleBuilder({
             <option value="blank">{t("Blank rule")}</option>
           </select>
         </label>
-        <Button type="button" variant="outline" onClick={() => setRules(template(templateKey, execution).rules)}><WandSparkles className="mr-2 size-4" />{t("Load template")}</Button>
         <span className="text-xs text-muted-foreground">{execution === "task" ? t("Task usage settlement") : t("Synchronous request settlement")}</span>
       </div>
       <div className="space-y-3">
@@ -313,7 +320,7 @@ export function UsageRuleBuilder({
             <div className="flex items-center gap-2">
               <Input className="max-w-xs font-medium" value={item.label} placeholder={t("Tier name")} onChange={(event) => updateRule(ruleIndex, { ...item, label: event.target.value })} />
               <span className="text-xs text-muted-foreground">{ruleIndex === rules.length - 1 ? t("Fallback tier") : t("Tier {{number}}", { number: ruleIndex + 1 })}</span>
-              <Button className="ml-auto" type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => setRules(rules.filter((_, index) => index !== ruleIndex))}><Trash2 className="size-4" /></Button>
+              <Button className="ml-auto" type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(rules.filter((_, index) => index !== ruleIndex))}><Trash2 className="size-4" /></Button>
             </div>
             {ruleIndex < rules.length - 1 && (
               <div className="space-y-2">
@@ -352,9 +359,8 @@ export function UsageRuleBuilder({
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" disabled={!fields.length} onClick={() => {
           const next = rule(t("New pricing tier"), [{ field: fields[0] || "", operator: "eq", value: defaultConditionValue(fields[0] || "", usageSchema) }]);
-          setRules([...rules.slice(0, -1), next, rules.at(-1)!]);
+          commitRules([...rules.slice(0, -1), next, rules.at(-1)!]);
         }}><CopyPlus className="mr-2 size-4" />{t("Add pricing tier")}</Button>
-        <Button type="button" onClick={apply}><WandSparkles className="mr-2 size-4" />{t("Apply visual pricing rules")}</Button>
       </div>
     </div>
   );

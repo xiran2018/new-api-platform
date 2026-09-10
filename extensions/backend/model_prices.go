@@ -21,6 +21,7 @@ type modelPriceCatalog struct {
 	ID                uint64          `gorm:"primaryKey" json:"id"`
 	ModelKey          string          `gorm:"size:255;uniqueIndex;not null" json:"modelKey"`
 	DisplayName       string          `gorm:"size:255;not null" json:"displayName"`
+	Description       string          `gorm:"size:500" json:"description"`
 	Vendor            string          `gorm:"size:120;index" json:"vendor"`
 	Tags              json.RawMessage `gorm:"type:jsonb;not null;default:'[]'" json:"tags"`
 	Currency          string          `gorm:"size:8;not null;default:CNY" json:"currency"`
@@ -41,6 +42,7 @@ type modelPriceCatalog struct {
 type modelPriceInput struct {
 	ModelKey          string          `json:"modelKey"`
 	DisplayName       string          `json:"displayName"`
+	Description       string          `json:"description"`
 	Vendor            string          `json:"vendor"`
 	Tags              json.RawMessage `json:"tags"`
 	Currency          string          `json:"currency"`
@@ -191,7 +193,7 @@ func getPublicModelPrices(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	query := db.Where("published = ?", true)
 	if q != "" {
-		query = query.Where("model_key ILIKE ? OR display_name ILIKE ? OR vendor ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%")
+		query = query.Where("model_key ILIKE ? OR display_name ILIKE ? OR description ILIKE ? OR vendor ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%", "%"+q+"%")
 	}
 	err = query.Order("sort_order asc, id asc").Find(&rows).Error
 	c.JSON(200, gin.H{"success": err == nil, "data": rows})
@@ -211,7 +213,7 @@ func listAdminModelPrices(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	query := db
 	if q != "" {
-		query = query.Where("model_key ILIKE ? OR display_name ILIKE ? OR vendor ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%")
+		query = query.Where("model_key ILIKE ? OR display_name ILIKE ? OR description ILIKE ? OR vendor ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%", "%"+q+"%")
 	}
 	err = query.Order("sort_order asc, id asc").Find(&rows).Error
 	c.JSON(200, gin.H{"success": err == nil, "data": rows})
@@ -436,7 +438,7 @@ func bindModelPrice(c *gin.Context) (modelPriceCatalog, error) {
 	if err := c.ShouldBindJSON(&in); err != nil {
 		return modelPriceCatalog{}, err
 	}
-	in.ModelKey, in.DisplayName, in.Vendor = strings.TrimSpace(in.ModelKey), strings.TrimSpace(in.DisplayName), strings.TrimSpace(in.Vendor)
+	in.ModelKey, in.DisplayName, in.Description, in.Vendor = strings.TrimSpace(in.ModelKey), strings.TrimSpace(in.DisplayName), strings.TrimSpace(in.Description), strings.TrimSpace(in.Vendor)
 	if in.ModelKey == "" || in.DisplayName == "" || in.Vendor == "" {
 		return modelPriceCatalog{}, fmt.Errorf("model, display name and vendor are required")
 	}
@@ -466,7 +468,7 @@ func bindModelPrice(c *gin.Context) (modelPriceCatalog, error) {
 	if in.Timezone == "" {
 		in.Timezone = "Asia/Shanghai"
 	}
-	return modelPriceCatalog{ModelKey: in.ModelKey, DisplayName: in.DisplayName, Vendor: in.Vendor, Tags: tags, Currency: in.Currency, Timezone: in.Timezone, VendorPriceSpec: vendor, LLMAPIPriceSpec: ours, RuntimePricingRef: ref, Published: in.Published, SortOrder: in.SortOrder}, nil
+	return modelPriceCatalog{ModelKey: in.ModelKey, DisplayName: in.DisplayName, Description: in.Description, Vendor: in.Vendor, Tags: tags, Currency: in.Currency, Timezone: in.Timezone, VendorPriceSpec: vendor, LLMAPIPriceSpec: ours, RuntimePricingRef: ref, Published: in.Published, SortOrder: in.SortOrder}, nil
 }
 
 func createModelPrice(c *gin.Context) {
@@ -490,7 +492,7 @@ func updateModelPrice(c *gin.Context) {
 		db, e := platformDatabase()
 		err = e
 		if err == nil {
-			err = db.Model(&modelPriceCatalog{}).Where("id = ?", c.Param("id")).Updates(map[string]any{"model_key": row.ModelKey, "display_name": row.DisplayName, "vendor": row.Vendor, "tags": row.Tags, "currency": row.Currency, "timezone": row.Timezone, "vendor_price_spec": row.VendorPriceSpec, "llm_api_price_spec": row.LLMAPIPriceSpec, "runtime_pricing_ref": row.RuntimePricingRef, "published": row.Published, "sort_order": row.SortOrder}).Error
+			err = db.Model(&modelPriceCatalog{}).Where("id = ?", c.Param("id")).Updates(map[string]any{"display_name": row.DisplayName, "description": row.Description, "vendor": row.Vendor, "tags": row.Tags, "currency": row.Currency, "timezone": row.Timezone, "vendor_price_spec": row.VendorPriceSpec, "llm_api_price_spec": row.LLMAPIPriceSpec, "runtime_pricing_ref": row.RuntimePricingRef, "published": row.Published, "sort_order": row.SortOrder}).Error
 		}
 	}
 	if err != nil {
@@ -501,10 +503,29 @@ func updateModelPrice(c *gin.Context) {
 }
 func deleteModelPrice(c *gin.Context) {
 	db, err := platformDatabase()
-	if err == nil {
-		err = db.Delete(&modelPriceCatalog{}, c.Param("id")).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
 	}
-	c.JSON(200, gin.H{"success": err == nil})
+	var row modelPriceCatalog
+	if err = db.First(&row, c.Param("id")).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "model price not found"})
+		return
+	}
+	var runtimeRef struct {
+		Source string `json:"source"`
+	}
+	_ = json.Unmarshal(row.RuntimePricingRef, &runtimeRef)
+	if runtimeRef.Source == "new-api" {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "This model is synchronized from new-api and cannot be deleted here. Remove it from model management or hide it from the public price page."})
+		return
+	}
+	result := db.Delete(&row)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": result.Error.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 // sync-preview accepts normalized vendor specs selected from new-api's existing

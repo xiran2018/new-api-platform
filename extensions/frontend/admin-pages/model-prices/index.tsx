@@ -35,12 +35,13 @@ import {
   RuntimePricingEditor,
   type RuntimePricingEditorHandle,
 } from "./runtime-pricing-editor";
-import { UsageRuleBuilder, usageRuleSetExpression } from "./usage-rule-builder";
+import { UsageRuleBuilder, usageRuleSetExpression, validateUsageRuleSet } from "./usage-rule-builder";
 
 const empty: ModelPrice = {
   id: 0,
   modelKey: "",
   displayName: "",
+  description: "",
   vendor: "",
   tags: [],
   currency: "CNY",
@@ -364,6 +365,7 @@ export function ModelPriceManagementPage() {
   const [rows, setRows] = useState<ModelPrice[]>([]),
     [q, setQ] = useState(""),
     [filter, setFilter] = useState<"all" | "local" | "unset">("all"),
+    [vendorFilter, setVendorFilter] = useState("all"),
     [edit, setEdit] = useState<ModelPrice | null>(null),
     [vendorNames, setVendorNames] = useState<string[]>([]),
     [tab, setTab] = useState<"vendor" | "ours">("vendor"),
@@ -391,15 +393,24 @@ export function ModelPriceManagementPage() {
         const local = row.runtimePricingRef?.source === "new-api";
         const unset = !row.llmapiPriceSpec?.blocks?.length;
         return (
-          filter === "all" ||
-          (filter === "local" && local) ||
-          (filter === "unset" && local && unset)
+          (vendorFilter === "all" || row.vendor === vendorFilter) &&
+          (filter === "all" ||
+            (filter === "local" && local) ||
+            (filter === "unset" && local && unset))
         );
       }),
-    [rows, filter],
+    [rows, filter, vendorFilter],
   );
   const save = async () => {
     if (!edit) return;
+    const vendorRules = edit.vendorPriceSpec?.blocks?.[0]?.usageRuleSet;
+    if (vendorRules) {
+      const validationError = validateUsageRuleSet(vendorRules);
+      if (validationError) {
+        toast.error(t(validationError));
+        return;
+      }
+    }
     if (edit.id) {
       await api.put(`/api/platform/admin/model-prices/${edit.id}`, edit);
       setEdit({ ...edit });
@@ -461,6 +472,16 @@ export function ModelPriceManagementPage() {
           <option value="local">{t("Existing local models")}</option>
           <option value="unset">{t("Models without pricing")}</option>
         </select>
+        <select
+          className="h-10 rounded-md border bg-background px-3"
+          value={vendorFilter}
+          onChange={(event) => setVendorFilter(event.target.value)}
+        >
+          <option value="all">{t("All vendors")}</option>
+          {[...new Set([...vendorNames, ...rows.map((row) => row.vendor)].filter(Boolean))]
+            .sort((left, right) => left.localeCompare(right))
+            .map((vendor) => <option value={vendor} key={vendor}>{vendor}</option>)}
+        </select>
         <span className="self-center text-sm text-muted-foreground">
           {shown.length} {t("models")}
         </span>
@@ -511,6 +532,7 @@ export function ModelPriceManagementPage() {
                       timezone={r.timezone}
                       pricesOnly
                       displayCurrency={r.currency}
+                      showMarkup
                     />
                   </td>
                   <td className="whitespace-nowrap p-3">
@@ -519,6 +541,7 @@ export function ModelPriceManagementPage() {
                       timezone={r.timezone}
                       compareSpec={r.vendorPriceSpec}
                       displayCurrency={r.currency}
+                      showMarkup
                     />
                   </td>
                   <td className="whitespace-nowrap p-3 text-center">
@@ -534,11 +557,22 @@ export function ModelPriceManagementPage() {
                       variant="ghost"
                       onClick={async (e) => {
                         e.stopPropagation();
+                        if (r.runtimePricingRef?.source === "new-api") {
+                          toast.error(t("Synchronized models cannot be deleted here. Remove the model in model management, or turn off public visibility."));
+                          return;
+                        }
                         if (confirm(t("Delete"))) {
-                          await api.delete(
-                            `/api/platform/admin/model-prices/${r.id}`,
-                          );
-                          load();
+                          try {
+                            const response = await api.delete(
+                              `/api/platform/admin/model-prices/${r.id}`,
+                            );
+                            if (!response.data?.success) throw new Error(response.data?.message || t("Delete failed"));
+                            toast.success(t("Deleted successfully"));
+                            load();
+                          } catch (error) {
+                            const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                            toast.error(message || (error instanceof Error ? error.message : t("Delete failed")));
+                          }
                         }
                       }}
                     >
@@ -586,14 +620,11 @@ export function ModelPriceManagementPage() {
                       void save();
                       return;
                     }
-                    const runtimeSave = document.querySelector<HTMLButtonElement>(
-                      "[data-runtime-pricing-save]",
-                    );
-                    if (!runtimeSave || runtimeSave.disabled) {
+                    if (!runtimePricingEditorRef.current) {
                       toast.error(t("Pricing editor is still loading"));
                       return;
                     }
-                    runtimeSave.click();
+                    void runtimePricingEditorRef.current.save();
                   }}
                 >
                   {t("Save")}
@@ -605,16 +636,22 @@ export function ModelPriceManagementPage() {
                 <label className="space-y-1 text-sm"><span>{t("Model key")}</span><Input
                   placeholder={t("Model key")}
                   value={edit.modelKey}
+                  disabled={edit.id > 0}
                   onChange={(e) =>
                     setEdit({ ...edit, modelKey: e.target.value })
                   }
-                /></label>
+                /><span className="block text-xs text-muted-foreground">{t("The model key is used for API requests and cannot be changed after creation.")}</span></label>
                 <label className="space-y-1 text-sm"><span>{t("Display name")}</span><Input
                   placeholder={t("Display name")}
                   value={edit.displayName}
                   onChange={(e) =>
                     setEdit({ ...edit, displayName: e.target.value })
                   }
+                /></label>
+                <label className="space-y-1 text-sm md:col-span-2"><span>{t("Model description")}</span><Input
+                  placeholder={t("Displayed below the model name on the public price page")}
+                  value={edit.description || ""}
+                  onChange={(e) => setEdit({ ...edit, description: e.target.value })}
                 /></label>
                 <label className="space-y-1 text-sm">
                   <span>{t("Vendor")}</span>

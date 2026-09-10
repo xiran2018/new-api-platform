@@ -119,10 +119,12 @@ function UsageRuleSetRenderer({
   ruleSet,
   currency,
   discount = 0,
+  showMarkup = false,
 }: {
   ruleSet: UsageRuleSet;
   currency: PricingCurrency;
   discount?: number;
+  showMarkup?: boolean;
 }) {
   const { t } = useTranslation();
   const operator = { eq: "=", ne: "!=", lt: "<", lte: "≤", gt: ">", gte: "≥" } as const;
@@ -157,6 +159,7 @@ function UsageRuleSetRenderer({
       <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
         <span>{t("Pricing mode")}: {t("Usage rule pricing")}</span>
         {discount > 0 && <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">{t("Discount")} {discount}%</span>}
+        {showMarkup && discount < 0 && <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">{t("Markup")} {Math.abs(discount)}%</span>}
       </div>
       {!showRuleDetails ? (
         <div className="rounded-md border bg-muted/25 p-3 text-sm">
@@ -190,12 +193,14 @@ export function PriceRenderer({
   compareSpec,
   pricesOnly = false,
   displayCurrency = "CNY",
+  showMarkup = false,
 }: {
   spec?: PriceSpec;
   timezone: string;
   compareSpec?: PriceSpec;
   pricesOnly?: boolean;
   displayCurrency?: string;
+  showMarkup?: boolean;
 }) {
   const { t } = useTranslation();
   const currencyConfig = useSystemConfigStore((state) => state.config.currency);
@@ -236,16 +241,21 @@ export function PriceRenderer({
     } as Record<string, string>)[spec?.mode || "token"] || "Token pricing",
   );
   if (usageRuleSet?.rules?.length) {
-    return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} />;
+    return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} showMarkup={showMarkup} />;
   }
   if (!blocks.length) return <span className="text-muted-foreground">-</span>;
   return (
     <div className="space-y-2">
       <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
         <span>{t("Pricing mode")}: {modeLabel}</span>
-        {blocks[0]?.discount != null && (
+        {(blocks[0]?.discount ?? 0) > 0 && (
           <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
             {t("Discount")} {blocks[0].discount}%
+          </span>
+        )}
+        {showMarkup && (blocks[0]?.discount ?? 0) < 0 && (
+          <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">
+            {t("Markup")} {Math.abs(blocks[0].discount!)}%
           </span>
         )}
       </div>

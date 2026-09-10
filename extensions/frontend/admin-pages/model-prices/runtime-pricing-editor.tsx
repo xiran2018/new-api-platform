@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCcw, Save } from "lucide-react";
+import { RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import {
   type ModelPricingEditorPanelHandle,
 } from "@/features/system-settings/models/model-pricing-sheet";
 import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
-import { UsageRuleBuilder, usageRuleSetExpression } from "./usage-rule-builder";
+import { UsageRuleBuilder, usageRuleSetExpression, validateUsageRuleSet } from "./usage-rule-builder";
 
 type PriceComparison = Partial<
   Record<
@@ -92,7 +92,7 @@ function editorData(
     data.requestRuleExpr = expression.requestRuleExpr;
   }
   const factor = 1 - savedDiscount / 100;
-  if (savedDiscount > 0 && factor > 0) {
+  if (savedDiscount !== 0 && factor > 0) {
     if (data.billingMode === "per-request" && data.price) {
       data.price = String(Number(data.price) / factor);
     } else if (data.billingMode === "per-token" && data.ratio) {
@@ -146,7 +146,7 @@ function applyDiscount(data: ModelRatioData, discount: number): ModelRatioData {
   const scaled = (value?: string) =>
     value === undefined || value === "" ? value : String(Number(value) * factor);
   if (data.billingMode === "tiered_expr") {
-    return discount > 0
+    return discount !== 0
       ? { ...data, billingExpr: `(${data.billingExpr || "p * 0 + c * 0"}) * ${factor}` }
       : data;
   }
@@ -265,6 +265,13 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   }, [modelKey, currentPriceSpec?.blocks?.[0]?.discount]);
   const save = async () => {
     if (!entry) return;
+    if (advancedPricingActive) {
+      const validationError = validateUsageRuleSet(usageRuleSet);
+      if (validationError) {
+        toast.error(t(validationError));
+        return;
+      }
+    }
     const draft = await ref.current?.commitDraft();
     if (!draft) return;
     draft.name = modelKey;
@@ -292,25 +299,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       setSaving(false);
     }
   };
-  const syncVendorPrice = async (advancedOnly = false) => {
-    if (advancedOnly) {
-      const vendorRuleSet = vendorPriceSpec?.blocks?.[0]?.usageRuleSet;
-      if (!vendorRuleSet?.rules?.length) {
-        toast.error(t("No vendor media pricing rules are available"));
-        return;
-      }
-      setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
-      setUsageRuleSet(vendorRuleSet);
-      setAdvancedPricingActive(true);
-      setEditorOverride({
-        name: modelKey,
-        billingMode: "tiered_expr",
-        billingExpr: usageRuleSetExpression(vendorRuleSet),
-        requestRuleExpr: "",
-      });
-      toast.success(t("Vendor media pricing rules synchronized"));
-      return;
-    }
+  const syncVendorPrice = async () => {
     const current = await ref.current?.commitDraft();
     if (!current) return;
     const vendor = vendorEditorData(modelKey, vendorPriceSpec);
@@ -320,6 +309,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     }
     setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
     setUsageRuleSet(vendorPriceSpec?.blocks?.[0]?.usageRuleSet);
+    setAdvancedPricingActive(Boolean(vendorPriceSpec?.blocks?.[0]?.usageRuleSet));
     setEditorOverride(vendor);
     toast.success(t("Vendor price synchronized"));
   };
@@ -332,40 +322,25 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     );
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 rounded-lg border-2 border-primary/60 bg-primary/10 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="font-semibold">{t("Save runtime pricing")}</div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            {t("Saving here immediately changes actual billing for this model.")}
-          </div>
-        </div>
-        <Button
-          data-runtime-pricing-save=""
-          size="lg"
-          className="shrink-0 shadow-md"
-          disabled={saving || !modelKey}
-          onClick={save}
-        >
-          <Save className="mr-2 size-5" />
-          {saving ? t("Saving...") : t("Save runtime pricing")}
-        </Button>
+      <div className="rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm text-muted-foreground">
+        {t("The Save button above immediately writes the selected pricing mode to actual billing.")}
       </div>
       <label className="block max-w-sm space-y-1 text-sm">
         <span className="font-medium">{t("Discount percentage")}</span>
         <Input
           type="number"
-          min={0}
+          min={-1000}
           max={99.99}
           step="any"
           value={discount || ""}
           placeholder="0"
           onChange={(event) => {
             const value = Number(event.target.value);
-            setDiscount(Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0);
+            setDiscount(Number.isFinite(value) ? Math.min(99.99, Math.max(-1000, value)) : 0);
           }}
         />
         <span className="block text-xs text-muted-foreground">
-          {t("Enter 10 for 10% off; saved billing prices become 90% of the entered prices.")}
+          {t("Enter 10 for 10% off; enter -5 to add 5%. The adjusted price is saved as the actual billing price.")}
         </span>
       </label>
       <div className="min-w-0 rounded-lg border">
@@ -382,14 +357,14 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
               : editorData(entry))
           }
           pricingHeaderAction={
-            !advancedPricingActive ? <Button
+            <Button
               type="button"
               variant="outline"
               onClick={() => void syncVendorPrice()}
             >
               <RefreshCcw className="mr-2 size-4" />
               {t("Sync vendor price")}
-            </Button> : null
+            </Button>
           }
           usageSchema={entry.usage_schema}
           isSaving={saving}
@@ -405,12 +380,6 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
                 usageSchema={entry.usage_schema}
                 exchangeRate={exchangeRate}
                 currencySymbol={currencySymbol}
-                headerAction={
-                  <Button type="button" variant="outline" onClick={() => void syncVendorPrice(true)}>
-                    <RefreshCcw className="mr-2 size-4" />
-                    {t("Sync vendor media pricing")}
-                  </Button>
-                }
                 onApply={(nextRuleSet, expression) => {
                   setUsageRuleSet(nextRuleSet);
                   setEditorOverride({

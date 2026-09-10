@@ -52,6 +52,7 @@ export type ModelPrice = {
   id: number;
   modelKey: string;
   displayName: string;
+  description: string;
   vendor: string;
   tags: string[];
   currency: string;

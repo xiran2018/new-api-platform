@@ -18,11 +18,16 @@ const resources: Record<string, Record<string, string>> = {
     "No price records": "暂无价格记录",
     Current: "当前",
     Discount: "折扣",
+    Markup: "加额",
     "Add model": "新增模型",
     "Upstream price sync": "上游价格同步",
     "Price difference": "价格差距",
     Edit: "编辑",
     Delete: "删除",
+    "Deleted successfully": "删除成功",
+    "Delete failed": "删除失败",
+    "Synchronized models cannot be deleted here. Remove the model in model management, or turn off public visibility.":
+      "该模型由 new-api 自动同步，不能在这里删除。请在模型管理中移除模型，或关闭公开显示。",
     Published: "公开显示",
     Save: "保存",
     Cancel: "取消",
@@ -40,6 +45,11 @@ const resources: Record<string, Record<string, string>> = {
     "Time windows": "分时计价",
     "Time-based pricing": "分时计费",
     "Tiered pricing": "分段计价",
+    "Input token range pricing": "输入 Token 区间计价",
+    "Input range + thinking output pricing": "输入区间 + 思考模式输出计价",
+    "Text/image/audio split pricing": "文本、图片、音频分别计价",
+    "Unified text/image/video input + separate audio pricing":
+      "文本/图片/视频统一输入价 + 音频单独计价",
     "Custom table": "自定义表格",
     "Input price": "输入价格",
     "Output price": "输出价格",
@@ -63,10 +73,16 @@ const resources: Record<string, Record<string, string>> = {
     Timezone: "时区",
     "Sort order": "排序",
     "Display name": "显示名称",
+    "Model description": "模型说明",
+    "Displayed below the model name on the public price page": "显示在客户端模型名称下方",
     "Model key": "模型标识",
+    "The model key is used for API requests and cannot be changed after creation.":
+      "模型标识用于实际 API 请求，创建后不可修改。",
     Search: "搜索",
     "Sync completed": "同步检查完成",
     "Open runtime pricing": "打开实际计费设置",
+    "The Save button above immediately writes the selected pricing mode to actual billing.":
+      "点击上方保存按钮，会将当前选择的计价方式和内容直接写入实际计费配置。",
     Difference: "差值",
     Price: "价格",
     Note: "说明",
@@ -76,7 +92,9 @@ const resources: Record<string, Record<string, string>> = {
     "Price source label": "价格来源名称",
     "Price source": "价格来源",
     "Discount badge": "折扣标签（%）",
-    "Discount percentage": "优惠比例（%）",
+    "Discount percentage": "价格调整比例（%）",
+    "Enter 10 for 10% off; enter -5 to add 5%. The adjusted price is saved as the actual billing price.":
+      "输入 10 表示优惠 10%；输入 -5 表示在原价基础上加额 5%。保存的是调整后的实际计费价格。",
     "Enter 10 for 10% off; saved billing prices become 90% of the entered prices.":
       "填写 10 表示优惠 10%；保存后实际计费价格为输入价格的 90%。",
     "Percentage discounts are unavailable for expression pricing":

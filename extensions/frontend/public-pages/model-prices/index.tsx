@@ -23,7 +23,7 @@ export function ModelPricesPage() {
       rows.filter(
         (r) =>
           (!vendor || r.vendor === vendor) &&
-          `${r.modelKey} ${r.displayName} ${r.vendor} ${(r.tags || []).join(" ")}`
+          `${r.modelKey} ${r.displayName} ${r.description || ""} ${r.vendor} ${(r.tags || []).join(" ")}`
             .toLowerCase()
             .includes(q.toLowerCase()),
       ),
@@ -120,6 +120,11 @@ export function ModelPricesPage() {
                 <tr key={r.id} className="border-t align-top hover:bg-muted/20">
                   <td className="break-words p-4">
                     <div className="font-semibold">{r.displayName}</div>
+                    {r.description && (
+                      <div className="mt-1 text-xs font-medium text-rose-500">
+                        {r.description}
+                      </div>
+                    )}
                     <div className="mt-1 text-xs text-muted-foreground">
                       {r.modelKey}
                     </div>
