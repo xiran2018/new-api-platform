@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CopyPlus, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -28,15 +28,15 @@ const requestFields = [
 ];
 
 const fieldLabels: Record<string, string> = {
-  resolution: "Resolution",
-  resolution_tier: "Resolution tier",
+  resolution: "Output resolution",
+  resolution_tier: "Output resolution tier",
   quality: "Quality",
   mode: "Mode",
   prompt_extend: "Prompt rewriting",
   audio: "Audio enabled",
   input_images: "Input image count",
   output_images: "Output image count",
-  seconds: "Duration in seconds",
+  seconds: "Output video duration",
   characters: "Character count",
   count: "Quantity",
 };
@@ -112,9 +112,11 @@ function template(key: TemplateKey, execution: UsageRuleSet["execution"]): Usage
   }
   if (key === "volume") {
     return wrap([
-      rule("第一档", [{ field: "count", operator: "lte", value: 25 }], [charge("count", "张")]),
-      rule("第二档", [{ field: "count", operator: "lte", value: 125 }], [charge("count", "张")]),
-      rule("第三档", [], [charge("count", "张")]),
+      rule("≤ 25 张", [{ field: "output_images", operator: "lte", value: 25 }], [charge("output_images", "张", 0.3)]),
+      rule("26 - 125 张", [{ field: "output_images", operator: "lte", value: 125 }], [charge("output_images", "张", 0.275)]),
+      rule("126 - 250 张", [{ field: "output_images", operator: "lte", value: 250 }], [charge("output_images", "张", 0.25)]),
+      rule("251 - 1250 张", [{ field: "output_images", operator: "lte", value: 1250 }], [charge("output_images", "张", 0.225)]),
+      rule("> 1250 张", [], [charge("output_images", "张", 0.2)]),
     ]);
   }
   if (key === "video") {
@@ -238,14 +240,12 @@ export function UsageRuleBuilder({
   usageSchema,
   exchangeRate,
   currencySymbol,
-  headerAction,
   onApply,
 }: {
   value?: UsageRuleSet;
   usageSchema?: BillingUsageSchema;
   exchangeRate: number;
   currencySymbol: string;
-  headerAction?: ReactNode;
   onApply: (ruleSet: UsageRuleSet, expression: string) => void;
 }) {
   const { t } = useTranslation();
@@ -253,6 +253,13 @@ export function UsageRuleBuilder({
   const defaultTemplate: TemplateKey = execution === "task" ? "blank" : "image";
   const [rules, setRules] = useState<UsagePriceRule[]>(() => value?.rules || template(defaultTemplate, execution).rules);
   const [templateKey, setTemplateKey] = useState<TemplateKey>(defaultTemplate);
+  const templateHelp: Record<TemplateKey, string> = {
+    image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
+    boolean: "Prices the request according to whether the selected request option is enabled.",
+    volume: "Prices each generated output image according to the output quantity tier.",
+    video: "Prices generated video by output resolution and output duration.",
+    blank: "Build a custom rule from request attributes and measured output usage.",
+  };
   useEffect(() => {
     setRules(value?.rules?.length ? value.rules : template(defaultTemplate, execution).rules);
   }, [value, execution, defaultTemplate]);
@@ -290,12 +297,11 @@ export function UsageRuleBuilder({
   };
   return (
     <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
         <div>
           <div className="font-semibold">{t("Advanced media pricing rules")}</div>
           <p className="mt-1 text-sm text-muted-foreground">{t("Build dynamic prices from request attributes and measured usage. Rules are checked from top to bottom; the final tier is the fallback.")}</p>
         </div>
-        {headerAction}
       </div>
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1 text-sm">
@@ -305,15 +311,16 @@ export function UsageRuleBuilder({
             setTemplateKey(nextTemplate);
             commitRules(template(nextTemplate, execution).rules);
           }}>
-            {execution === "request" && <option value="image">{t("Image resolution (1K/2K)")}</option>}
+            {execution === "request" && <option value="image">{t("Output image resolution (1K/2K)")}</option>}
             {(execution === "request" || fields.includes("prompt_extend")) && <option value="boolean">{t("Boolean request option")}</option>}
-            {(execution === "request" || fields.includes("count")) && <option value="volume">{t("Per-request quantity tiers")}</option>}
-            {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds"))) && <option value="video">{t("Video resolution per second")}</option>}
+            {(execution === "request" || fields.includes("output_images") || fields.includes("count")) && <option value="volume">{t("Generated image quantity tiers")}</option>}
+            {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds"))) && <option value="video">{t("Output video resolution and duration")}</option>}
             <option value="blank">{t("Blank rule")}</option>
           </select>
         </label>
         <span className="text-xs text-muted-foreground">{execution === "task" ? t("Task usage settlement") : t("Synchronous request settlement")}</span>
       </div>
+      <p className="text-xs text-muted-foreground">{t(templateHelp[templateKey])}</p>
       <div className="space-y-3">
         {rules.map((item, ruleIndex) => (
           <div className="space-y-3 rounded-md border bg-background p-3" key={item.id}>

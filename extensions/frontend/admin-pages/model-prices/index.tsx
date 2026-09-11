@@ -35,7 +35,7 @@ import {
   RuntimePricingEditor,
   type RuntimePricingEditorHandle,
 } from "./runtime-pricing-editor";
-import { UsageRuleBuilder, usageRuleSetExpression, validateUsageRuleSet } from "./usage-rule-builder";
+import { UsageRuleBuilder, validateUsageRuleSet } from "./usage-rule-builder";
 
 const empty: ModelPrice = {
   id: 0,
@@ -64,13 +64,11 @@ function SpecEditor({
   onChange,
   source,
   modelKey,
-  actualPriceSpec,
 }: {
   value: PriceSpec;
   onChange: (v: PriceSpec) => void;
   source?: string;
   modelKey: string;
-  actualPriceSpec?: PriceSpec;
 }) {
   const { t } = useTranslation();
   const [usageSchema, setUsageSchema] = useState<BillingUsageSchema | undefined>();
@@ -209,27 +207,6 @@ function SpecEditor({
           usageSchema={usageSchema}
           exchangeRate={pricingCurrency.exchangeRate}
           currencySymbol={pricingCurrency.symbol}
-          headerAction={
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!actualPriceSpec?.blocks?.[0]?.usageRuleSet?.rules?.length}
-              onClick={() => {
-                const usageRuleSet = actualPriceSpec?.blocks?.[0]?.usageRuleSet;
-                if (!usageRuleSet?.rules?.length) return;
-                const expression = usageRuleSetExpression(usageRuleSet);
-                onChange({
-                  mode: "expression",
-                  pricingCurrency: actualPriceSpec?.pricingCurrency,
-                  blocks: [{ label: "Expression", note: expression, baseExpression: expression, usageRuleSet }],
-                });
-                toast.success(t("Actual media pricing rules copied to vendor price"));
-              }}
-            >
-              <RefreshCcw className="mr-2 size-4" />
-              {t("Copy actual media pricing")}
-            </Button>
-          }
           onApply={(usageRuleSet, expression) => onChange({
             ...value,
             mode: "expression",
@@ -735,7 +712,6 @@ export function ModelPriceManagementPage() {
                   onChange={(v) => setEdit({ ...edit, vendorPriceSpec: v })}
                   source={edit.upstreamSource}
                   modelKey={edit.modelKey}
-                  actualPriceSpec={edit.llmapiPriceSpec}
                 />
               ) : (
                 <RuntimePricingEditor

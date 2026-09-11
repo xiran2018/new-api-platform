@@ -130,12 +130,24 @@ function UsageRuleSetRenderer({
   const operator = { eq: "=", ne: "!=", lt: "<", lte: "≤", gt: ">", gte: "≥" } as const;
   const factor = 1 - discount / 100;
   const showRuleDetails = ruleSet.rules.length > 1 || ruleSet.rules.some((rule) => rule.conditions.length > 0);
+  const baseUnitPrice = ruleSet.rules
+    .flatMap((rule) => rule.charges)
+    .find((charge) => charge.price > 0)?.price || 0;
+  const conditionLabel = (condition: UsageRuleSet["rules"][number]["conditions"][number]) => {
+    const field = t(({
+      output_images: "Generated image quantity",
+      input_images: "Input image count",
+      seconds: "Output video duration",
+      characters: "Character count",
+    } as Record<string, string>)[condition.field] || condition.field);
+    return `${field} ${operator[condition.operator]} ${String(condition.value)}`;
+  };
   const meterLabel = (meter: string) => {
     if (["request", "count"].includes(meter)) return "";
     return t(({
       input_images: "Input image count",
       output_images: "Output image count",
-      seconds: "Duration in seconds",
+      seconds: "Output video duration",
       characters: "Character count",
     } as Record<string, string>)[meter] || meter);
   };
@@ -165,20 +177,25 @@ function UsageRuleSetRenderer({
         <div className="rounded-md border bg-muted/25 p-3 text-sm">
           {charges(ruleSet.rules[0])}
         </div>
-      ) : <div className="overflow-hidden rounded-md border">
-        <table className="w-full table-fixed text-sm">
-          <colgroup><col className="w-[22%]" /><col className="w-[38%]" /><col className="w-[40%]" /></colgroup>
+      ) : <div className="overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[560px] table-fixed text-sm">
+          <colgroup><col className="w-[24%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[40%]" /></colgroup>
           <thead className="bg-muted/60 text-xs text-muted-foreground">
-            <tr><th className="p-2 text-left">{t("Pricing tier")}</th><th className="p-2 text-left">{t("Match conditions")}</th><th className="p-2 text-left">{t("Unit price")}</th></tr>
+            <tr><th className="p-2 text-left">{t("Pricing tier")}</th><th className="p-2 text-left">{t("Unit price")}</th><th className="p-2 text-left">{t("Tier discount")}</th><th className="p-2 text-left">{t("Match conditions")}</th></tr>
           </thead>
           <tbody>
             {ruleSet.rules.map((rule, index) => (
               <tr className="border-t align-top" key={rule.id || index}>
                 <td className="p-2 font-medium">{rule.label}</td>
-                <td className="p-2 text-xs text-muted-foreground">
-                  {rule.conditions.length ? rule.conditions.map((condition) => `${condition.field} ${operator[condition.operator]} ${String(condition.value)}`).join(" · ") : t("Fallback")}
-                </td>
                 <td className="p-2">{charges(rule)}</td>
+                <td className="p-2 text-xs text-muted-foreground">
+                  {baseUnitPrice > 0 && rule.charges[0]?.price > 0 && rule.charges[0].price < baseUnitPrice
+                    ? `${(rule.charges[0].price / baseUnitPrice * 10).toFixed(1)} ${t("Chinese discount unit")}`
+                    : t("None")}
+                </td>
+                <td className="p-2 text-xs text-muted-foreground">
+                  {rule.conditions.length ? rule.conditions.map(conditionLabel).join(" · ") : rule.label}
+                </td>
               </tr>
             ))}
           </tbody>
