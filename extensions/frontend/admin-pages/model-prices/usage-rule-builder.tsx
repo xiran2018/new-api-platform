@@ -11,7 +11,7 @@ import type {
   UsageRuleSet,
 } from "../../model-prices/types";
 
-type TemplateKey = "image" | "boolean" | "volume" | "video" | "blank";
+type TemplateKey = "image" | "boolean" | "volume" | "video" | "ttsCharacters" | "blank";
 
 const requestFields = [
   "resolution",
@@ -24,6 +24,8 @@ const requestFields = [
   "output_images",
   "seconds",
   "characters",
+  "tts_input_characters",
+  "tts_output_characters",
   "count",
 ];
 
@@ -38,6 +40,8 @@ const fieldLabels: Record<string, string> = {
   output_images: "Output image count",
   seconds: "Output video duration",
   characters: "Character count",
+  tts_input_characters: "TTS input price",
+  tts_output_characters: "TTS output price",
   count: "Quantity",
 };
 
@@ -56,7 +60,7 @@ function defaultUnit(meter: string, usageSchema?: BillingUsageSchema) {
   if (unit === "token") return "百万 Token";
   if (unit === "credit") return "计费点";
   if (meter.includes("image")) return "张";
-  if (meter === "characters") return "字符";
+  if (["characters", "tts_input_characters", "tts_output_characters"].includes(meter)) return "字符";
   return "个";
 }
 
@@ -81,7 +85,7 @@ function unitDivisor(unit: string) {
 function unitOptions(meter: string, usageSchema?: BillingUsageSchema) {
   if (meter === "request") return ["次"];
   if (meter === "seconds" || usageSchema?.[meter]?.unit === "second") return ["秒", "分钟", "小时"];
-  if (meter === "characters") return ["字符", "千字符", "万字符"];
+  if (["characters", "tts_input_characters", "tts_output_characters"].includes(meter)) return ["字符", "千字符", "万字符"];
   if (meter.includes("image")) return ["张"];
   if (usageSchema?.[meter]?.unit === "token") return ["百万 Token"];
   if (usageSchema?.[meter]?.unit === "credit") return ["计费点"];
@@ -123,6 +127,14 @@ function template(key: TemplateKey, execution: UsageRuleSet["execution"]): Usage
     return wrap([
       rule("720P", [{ field: "resolution", operator: "eq", value: "720P" }], [charge("seconds", "秒")]),
       rule("1080P", [], [charge("seconds", "秒")]),
+    ]);
+  }
+  if (key === "ttsCharacters") {
+    return wrap([
+      rule("按字符计费", [], [
+        charge("tts_input_characters", "万字符", 0.8),
+        charge("tts_output_characters", "万字符", 0),
+      ]),
     ]);
   }
   return wrap([rule("默认")]);
@@ -258,6 +270,7 @@ export function UsageRuleBuilder({
     boolean: "Prices the request according to whether the selected request option is enabled.",
     volume: "Prices each generated output image according to the output quantity tier.",
     video: "Prices generated video by output resolution and output duration.",
+    ttsCharacters: "Prices text-to-speech input per ten thousand Unicode characters; generated audio output is free.",
     blank: "Build a custom rule from request attributes and measured output usage.",
   };
   useEffect(() => {
@@ -270,7 +283,7 @@ export function UsageRuleBuilder({
   );
   const meters = useMemo(
     () => ["request", ...fields.filter((field) => execution === "request"
-      ? ["input_images", "output_images", "count", "characters", "seconds"].includes(field)
+      ? ["input_images", "output_images", "count", "characters", "tts_input_characters", "tts_output_characters", "seconds"].includes(field)
       : usageSchema?.[field]?.type === "number")],
     [execution, fields, usageSchema],
   );
@@ -315,6 +328,7 @@ export function UsageRuleBuilder({
             {(execution === "request" || fields.includes("prompt_extend")) && <option value="boolean">{t("Boolean request option")}</option>}
             {(execution === "request" || fields.includes("output_images") || fields.includes("count")) && <option value="volume">{t("Generated image quantity tiers")}</option>}
             {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds"))) && <option value="video">{t("Output video resolution and duration")}</option>}
+            {execution === "request" && <option value="ttsCharacters">{t("Text-to-speech per 10K characters")}</option>}
             <option value="blank">{t("Blank rule")}</option>
           </select>
         </label>
@@ -337,7 +351,7 @@ export function UsageRuleBuilder({
                     <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={condition.field} onChange={(event) => { const field = event.target.value; const conditions = [...item.conditions]; conditions[conditionIndex] = { field, operator: "eq", value: defaultConditionValue(field, usageSchema) }; updateRule(ruleIndex, { ...item, conditions }); }}>{fields.map((field) => <option value={field} key={field}>{fieldLabels[field] ? `${t(fieldLabels[field])} (${field})` : field}</option>)}</select>
                     <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={condition.operator} onChange={(event) => { const conditions = [...item.conditions]; conditions[conditionIndex] = { ...condition, operator: event.target.value as UsageRuleCondition["operator"] }; updateRule(ruleIndex, { ...item, conditions }); }}>
                       <option value="eq">=</option><option value="ne">!=</option>
-                      {(usageSchema?.[condition.field]?.type === "number" || ["input_images", "output_images", "count", "characters", "seconds"].includes(condition.field)) && <><option value="lte">≤</option><option value="lt">&lt;</option><option value="gte">≥</option><option value="gt">&gt;</option></>}
+                      {(usageSchema?.[condition.field]?.type === "number" || ["input_images", "output_images", "count", "characters", "tts_input_characters", "tts_output_characters", "seconds"].includes(condition.field)) && <><option value="lte">≤</option><option value="lt">&lt;</option><option value="gte">≥</option><option value="gt">&gt;</option></>}
                     </select>
                     <ConditionValueEditor condition={condition} schema={usageSchema} onChange={(value) => { const conditions = [...item.conditions]; conditions[conditionIndex] = { ...condition, value }; updateRule(ruleIndex, { ...item, conditions }); }} />
                     <Button type="button" variant="ghost" size="icon" title={t("Delete condition")} onClick={() => updateRule(ruleIndex, { ...item, conditions: item.conditions.filter((_, index) => index !== conditionIndex) })}><Trash2 className="size-4" /></Button>

@@ -267,6 +267,7 @@ Object.assign(resources.zh, {
     "None": "无",
     "Video resolution per second": "视频分辨率按秒",
     "Output video resolution and duration": "输出视频分辨率与时长计价",
+    "Text-to-speech per 10K characters": "文本转语音按万字符",
     "Prices generated images by output resolution; input image count refers only to uploaded reference images.":
       "按照生成图片的输出分辨率计价；输入图片数仅指用户上传的参考图片数量。",
     "Prices the request according to whether the selected request option is enabled.":
@@ -275,6 +276,8 @@ Object.assign(resources.zh, {
       "按照实际生成的输出图片数量匹配档位，并对每张输出图片计价。",
     "Prices generated video by output resolution and output duration.":
       "按照生成视频的输出分辨率和输出时长计价。",
+    "Prices text-to-speech input per ten thousand Unicode characters; generated audio output is free.":
+      "按照输入文本的 Unicode 字符数计价，单位为每万字符；生成的音频输出不计费。",
     "Build a custom rule from request attributes and measured output usage.":
       "根据请求参数和实际输出用量创建自定义计费规则。",
     "Blank rule": "空白规则",
@@ -326,6 +329,8 @@ Object.assign(resources.zh, {
     "Duration in seconds": "生成时长",
     "Output video duration": "输出视频时长",
     "Character count": "字符数",
+    "TTS output price": "输出单价",
+    "TTS input price": "输入单价",
     "Quantity": "数量",
   "Runtime pricing saved": "实际计费价格已保存并生效",
   "All models": "全部模型",

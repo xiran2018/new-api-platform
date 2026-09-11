@@ -139,6 +139,8 @@ function UsageRuleSetRenderer({
       input_images: "Input image count",
       seconds: "Output video duration",
       characters: "Character count",
+      tts_input_characters: "TTS input price",
+      tts_output_characters: "TTS output price",
     } as Record<string, string>)[condition.field] || condition.field);
     return `${field} ${operator[condition.operator]} ${String(condition.value)}`;
   };
@@ -149,6 +151,8 @@ function UsageRuleSetRenderer({
       output_images: "Output image count",
       seconds: "Output video duration",
       characters: "Character count",
+      tts_input_characters: "TTS input price",
+      tts_output_characters: "TTS output price",
     } as Record<string, string>)[meter] || meter);
   };
   const charges = (rule: UsageRuleSet["rules"][number]) => (
@@ -163,6 +167,12 @@ function UsageRuleSetRenderer({
           </div>
         );
       })}
+      {rule.charges.some((charge) => charge.meter === "tts_output_characters" && charge.price === 0) && (
+        <div className="whitespace-nowrap">
+          <span className="mr-1 text-muted-foreground">{t("Output price")}:</span>
+          <b>{t("Free")}</b>
+        </div>
+      )}
       {!rule.charges.some((charge) => charge.price !== 0) && <span className="text-muted-foreground">{t("Free")}</span>}
     </div>
   );
