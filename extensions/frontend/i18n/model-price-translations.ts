@@ -17,6 +17,8 @@ const resources: Record<string, Record<string, string>> = {
     "Search models": "搜索模型",
     "Export PDF": "导出 PDF",
     "No price records": "暂无价格记录",
+    "Temporarily unavailable. Coming soon, please stay tuned.":
+      "暂时不可用，即将上线，敬请期待",
     Current: "当前",
     Discount: "折扣",
     Markup: "加额",
@@ -161,6 +163,8 @@ const resources: Record<string, Record<string, string>> = {
     "Search models": "搜尋模型",
     "Export PDF": "匯出 PDF",
     "No price records": "暫無價格記錄",
+    "Temporarily unavailable. Coming soon, please stay tuned.":
+      "暫時無法使用，即將上線，敬請期待",
     Current: "目前",
     Discount: "折扣",
     "Add model": "新增模型",
@@ -191,6 +195,8 @@ const resources: Record<string, Record<string, string>> = {
       "Controls the currency shown on the public model price page.",
     "Approximate CNY": "Approximate CNY",
     "CNY conversion unavailable": "CNY conversion unavailable; check the system exchange rate",
+    "Temporarily unavailable. Coming soon, please stay tuned.":
+      "Temporarily unavailable. Coming soon, please stay tuned.",
   },
   fr: {
     "Model prices": "Prix des modèles",
@@ -199,6 +205,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "Prix réel",
     "Approximate CNY": "Équivalent approximatif en CNY",
     "CNY conversion unavailable": "Conversion en CNY indisponible ; vérifiez le taux de change système",
+    "Temporarily unavailable. Coming soon, please stay tuned.":
+      "Temporairement indisponible. Bientôt disponible.",
   },
   ja: {
     "Model prices": "モデル価格",
@@ -207,6 +215,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "実際の価格",
     "Approximate CNY": "人民元換算（概算）",
     "CNY conversion unavailable": "人民元換算を利用できません。システム為替レートを確認してください",
+    "Temporarily unavailable. Coming soon, please stay tuned.":
+      "現在利用できません。近日公開予定です。",
   },
   ru: {
     "Model prices": "Цены моделей",
@@ -215,6 +225,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "Фактическая цена",
     "Approximate CNY": "Примерно в юанях",
     "CNY conversion unavailable": "Пересчет в юани недоступен; проверьте системный курс",
+    "Temporarily unavailable. Coming soon, please stay tuned.":
+      "Временно недоступно. Скоро будет доступно.",
   },
   vi: {
     "Model prices": "Giá mô hình",
@@ -223,6 +235,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "Giá thực tế",
     "Approximate CNY": "Quy đổi CNY ước tính",
     "CNY conversion unavailable": "Không thể quy đổi CNY; hãy kiểm tra tỷ giá hệ thống",
+    "Temporarily unavailable. Coming soon, please stay tuned.":
+      "Tạm thời chưa khả dụng. Sắp ra mắt, vui lòng đón chờ.",
   },
 };
 

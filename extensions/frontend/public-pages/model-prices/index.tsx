@@ -120,6 +120,11 @@ export function ModelPricesPage() {
                 <tr key={r.id} className="border-t align-top hover:bg-muted/20">
                   <td className="break-words p-4">
                     <div className="font-semibold">{r.displayName}</div>
+                    {!r.llmapiPriceSpec?.blocks?.length && (
+                      <div className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                        {t("Temporarily unavailable. Coming soon, please stay tuned.")}
+                      </div>
+                    )}
                     {r.description && (
                       <div className="mt-1 text-xs font-medium text-rose-500">
                         {r.description}
