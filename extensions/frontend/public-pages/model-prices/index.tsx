@@ -119,7 +119,7 @@ export function ModelPricesPage() {
               {visible.map((r) => (
                 <tr key={r.id} className="border-t align-top hover:bg-muted/20">
                   <td className="break-words p-4">
-                    <div className="font-semibold">{r.displayName}</div>
+                    <div className="font-semibold">{r.modelKey}</div>
                     {!r.llmapiPriceSpec?.blocks?.length && (
                       <div className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-400">
                         {t("Temporarily unavailable. Coming soon, please stay tuned.")}
@@ -130,9 +130,6 @@ export function ModelPricesPage() {
                         {r.description}
                       </div>
                     )}
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {r.modelKey}
-                    </div>
                   </td>
                   <td className="break-words p-4">{r.vendor}</td>
                   <td className="p-4">
