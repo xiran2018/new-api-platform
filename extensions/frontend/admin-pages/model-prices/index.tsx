@@ -475,8 +475,8 @@ export function ModelPriceManagementPage() {
             <col style={{ width: "13%" }} />
             <col style={{ width: "10%" }} />
             <col style={{ width: "25%" }} />
-            <col style={{ width: "26%" }} />
-            <col style={{ width: "8%" }} />
+            <col />
+            <col style={{ width: "96px" }} />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-muted">
             <tr>
@@ -533,7 +533,7 @@ export function ModelPriceManagementPage() {
                     </span>
                   </td>
                   <td className="min-w-0 overflow-hidden p-3 align-top">
-                    <div className="min-w-0 max-w-full overflow-hidden">
+                    <div className="w-full min-w-0 overflow-hidden">
                       <PriceRenderer
                         spec={r.vendorPriceSpec}
                         timezone={r.timezone}
@@ -545,7 +545,7 @@ export function ModelPriceManagementPage() {
                     </div>
                   </td>
                   <td className="min-w-0 overflow-hidden p-3 align-top">
-                    <div className="min-w-0 max-w-full overflow-hidden">
+                    <div className="w-full min-w-0 overflow-hidden">
                       <PriceRenderer
                         spec={r.llmapiPriceSpec}
                         timezone={r.timezone}
