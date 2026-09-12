@@ -1,4 +1,6 @@
 import {
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Pencil,
   Plus,
@@ -6,7 +8,13 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -64,6 +72,28 @@ const empty: ModelPrice = {
   published: false,
   sortOrder: 0,
 };
+
+const defaultColumnWidths = [240, 180, 140, 340, 460, 96];
+const minimumColumnWidths = [160, 120, 110, 220, 260, 80];
+const columnWidthStorageKey = "platform-model-price-column-widths";
+
+function loadColumnWidths() {
+  if (typeof window === "undefined") return defaultColumnWidths;
+  try {
+    const saved = JSON.parse(localStorage.getItem(columnWidthStorageKey) || "");
+    if (
+      Array.isArray(saved) &&
+      saved.length === defaultColumnWidths.length &&
+      saved.every((width) => typeof width === "number" && Number.isFinite(width))
+    ) {
+      return saved.map((width, index) => Math.max(minimumColumnWidths[index], width));
+    }
+  } catch {
+    // Ignore an invalid saved layout and return the defaults.
+  }
+  return defaultColumnWidths;
+}
+
 function SpecEditor({
   value,
   onChange,
@@ -352,7 +382,47 @@ export function ModelPriceManagementPage() {
     [vendorNames, setVendorNames] = useState<string[]>([]),
     [tab, setTab] = useState<"vendor" | "ours">("vendor"),
     [syncOpen, setSyncOpen] = useState(false),
-    [syncModel, setSyncModel] = useState<string | undefined>();
+    [syncModel, setSyncModel] = useState<string | undefined>(),
+    [columnWidths, setColumnWidths] = useState(loadColumnWidths),
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(20);
+  useEffect(() => {
+    localStorage.setItem(columnWidthStorageKey, JSON.stringify(columnWidths));
+  }, [columnWidths]);
+  const startColumnResize = (
+    columnIndex: number,
+    event: ReactPointerEvent<HTMLSpanElement>,
+  ) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = columnWidths[columnIndex];
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const move = (moveEvent: PointerEvent) => {
+      const nextWidth = Math.max(
+        minimumColumnWidths[columnIndex],
+        startWidth + moveEvent.clientX - startX,
+      );
+      setColumnWidths((current) =>
+        current.map((width, index) => index === columnIndex ? nextWidth : width),
+      );
+    };
+    const stop = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", stop);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", stop, { once: true });
+  };
+  const resizeHandle = (columnIndex: number, inHeader = false) => (
+    <span
+      aria-hidden="true"
+      className={`absolute -right-1 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-primary/35 ${inHeader ? "z-50" : "z-10"}`}
+      onPointerDown={(event) => startColumnResize(columnIndex, event)}
+    />
+  );
   const load = () =>
     void api
       .get("/api/platform/admin/model-prices", { params: { q } })
@@ -383,6 +453,16 @@ export function ModelPriceManagementPage() {
       }),
     [rows, filter, vendorFilter],
   );
+  const totalPages = Math.max(1, Math.ceil(shown.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = useMemo(
+    () => shown.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [shown, currentPage, pageSize],
+  );
+  useEffect(() => setPage(1), [q, filter, vendorFilter, pageSize]);
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   const save = async () => {
     if (!edit) return;
     const vendorRules = edit.vendorPriceSpec?.blocks?.[0]?.usageRuleSet;
@@ -404,8 +484,8 @@ export function ModelPriceManagementPage() {
     load();
   };
   return (
-    <div className="min-h-0 w-full min-w-0 flex-1 overflow-auto p-5 [scrollbar-gutter:stable]">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-5">
+      <div className="mb-5 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">
           {t("Model price management")}
         </h1>
@@ -435,7 +515,7 @@ export function ModelPriceManagementPage() {
           </Button>
         </div>
       </div>
-      <div className="mb-4 flex flex-wrap gap-3">
+      <div className="mb-4 flex shrink-0 flex-wrap gap-3">
         <div className="relative w-full max-w-lg">
           <Input
             className="pr-10"
@@ -467,39 +547,51 @@ export function ModelPriceManagementPage() {
         <span className="self-center text-sm text-muted-foreground">
           {shown.length} {t("models")}
         </span>
+        <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+          <span>{t("Rows per page")}</span>
+          <select
+            className="h-10 rounded-md border bg-background px-3 text-foreground"
+            value={pageSize}
+            onChange={(event) => setPageSize(Number(event.target.value))}
+          >
+            {[20, 50, 100].map((size) => (
+              <option value={size} key={size}>{size}</option>
+            ))}
+          </select>
+        </label>
       </div>
-      <div className="w-full min-w-0 rounded-lg border">
-        <table className="w-full min-w-[1180px] table-fixed text-sm">
-          <colgroup>
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "13%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "25%" }} />
-            <col />
-            <col style={{ width: "96px" }} />
-          </colgroup>
-          <thead className="sticky top-0 z-10 bg-muted">
-            <tr>
-              <th className="p-3 text-left">{t("Model name")}</th>
-              <th className="p-3 text-left">{t("Vendor")}</th>
-              <th className="p-3 text-left">{t("Display currency")}</th>
-              <th className="p-3 text-left">{t("Vendor original price")}</th>
-              <th className="p-3 text-left">
-                {t("Actual price")}
-              </th>
-              <th className="sticky right-0 z-20 border-l bg-muted p-3">
-                {t("Actions")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r) => {
+      <div className="min-h-0 w-full min-w-0 flex-1 overflow-auto rounded-t-lg border [scrollbar-gutter:stable]">
+        <div
+          role="row"
+          className="sticky top-0 z-40 grid border-b bg-background text-sm font-semibold shadow-sm"
+          style={{
+            gridTemplateColumns: columnWidths.map((width) => `${width}px`).join(" "),
+            width: `max(100%, ${columnWidths.reduce((sum, width) => sum + width, 0)}px)`,
+          }}
+        >
+          <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Model name")}{resizeHandle(0, true)}</div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Vendor")}{resizeHandle(1, true)}</div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Display currency")}{resizeHandle(2, true)}</div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Vendor original price")}{resizeHandle(3, true)}</div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-left">
+            {t("Actual price")}
+            {resizeHandle(4, true)}
+          </div>
+          <div role="columnheader" className="border-b p-3 text-center">{t("Actions")}</div>
+        </div>
+        <div role="rowgroup" className="text-sm">
+            {pagedRows.map((r) => {
               return (
-                <tr
+                <div
+                  role="row"
                   key={r.id}
-                  className="group border-t align-top hover:bg-muted/30"
+                  className="group grid border-t hover:bg-muted/30"
+                  style={{
+                    gridTemplateColumns: columnWidths.map((width) => `${width}px`).join(" "),
+                    width: `max(100%, ${columnWidths.reduce((sum, width) => sum + width, 0)}px)`,
+                  }}
                 >
-                  <td className="min-w-0 overflow-hidden p-3 font-medium">
+                  <div role="cell" className="relative min-w-0 overflow-hidden border-r p-3 font-medium">
                     <HoverCard>
                       <HoverCardTrigger
                         delay={150}
@@ -527,14 +619,19 @@ export function ModelPriceManagementPage() {
                         {t("Upstream price changed")}
                       </span>
                     )}
-                  </td>
-                  <td className="p-3">{r.vendor}</td>
-                  <td className="p-3">
+                    {resizeHandle(0)}
+                  </div>
+                  <div role="cell" className="relative min-w-0 border-r p-3">
+                    {r.vendor}
+                    {resizeHandle(1)}
+                  </div>
+                  <div role="cell" className="relative min-w-0 border-r p-3">
                     <span className="inline-flex rounded border bg-muted px-2 py-1 text-xs font-medium">
                       {r.currency === "USD" ? "USD ($)" : "CNY (¥)"}
                     </span>
-                  </td>
-                  <td className="min-w-0 overflow-hidden p-3 align-top">
+                    {resizeHandle(2)}
+                  </div>
+                  <div role="cell" className="relative min-w-0 overflow-hidden border-r p-3">
                     <div className="w-full min-w-0 overflow-hidden [contain:inline-size]">
                       <PriceRenderer
                         spec={r.vendorPriceSpec}
@@ -545,8 +642,9 @@ export function ModelPriceManagementPage() {
                         compact
                       />
                     </div>
-                  </td>
-                  <td className="min-w-0 overflow-hidden p-3 align-top">
+                    {resizeHandle(3)}
+                  </div>
+                  <div role="cell" className="relative min-w-0 overflow-hidden border-r p-3">
                     <div className="w-full min-w-0 overflow-hidden [contain:inline-size]">
                       <PriceRenderer
                         spec={r.llmapiPriceSpec}
@@ -557,8 +655,9 @@ export function ModelPriceManagementPage() {
                         compact
                       />
                     </div>
-                  </td>
-                  <td className="sticky right-0 z-10 whitespace-nowrap border-l bg-background p-3 text-center group-hover:bg-muted/30">
+                    {resizeHandle(4)}
+                  </div>
+                  <div role="cell" className="min-w-0 whitespace-nowrap bg-background p-3 text-center group-hover:bg-muted/30">
                     <Button
                       size="icon"
                       variant="ghost"
@@ -592,12 +691,41 @@ export function ModelPriceManagementPage() {
                     >
                       <Trash2 className="size-4" />
                     </Button>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-b-lg border-x border-b bg-background px-4 py-3 text-sm text-muted-foreground">
+        <span>
+          {t("Page {{current}} of {{total}}", {
+            current: currentPage,
+            total: totalPages,
+          })}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={currentPage <= 1}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            <ChevronLeft className="mr-1 size-4" />
+            {t("Previous page")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+          >
+            {t("Next page")}
+            <ChevronRight className="ml-1 size-4" />
+          </Button>
+        </div>
       </div>
       <ModelPriceSyncDialog
         open={syncOpen}
