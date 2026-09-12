@@ -316,6 +316,7 @@ Object.assign(resources.zh, {
     "Sync vendor media pricing": "一键同步厂商媒体价格",
     "No vendor media pricing rules are available": "厂商原价尚未设置高级媒体计费规则",
     "Vendor media pricing rules synchronized": "已同步厂商媒体价格，请保存使实际计费生效",
+    "Vendor pricing template and prices synchronized": "已同步厂商计费模板及模板中的全部价格，请点击保存使实际计费生效",
     "Resolution": "分辨率",
     "Resolution tier": "分辨率档位",
     "Output resolution": "输出分辨率",

@@ -302,8 +302,27 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const syncVendorPrice = async () => {
     const current = await ref.current?.commitDraft();
     if (!current) return;
+    const vendorRuleSet = vendorPriceSpec?.blocks?.[0]?.usageRuleSet;
     const vendor = vendorEditorData(modelKey, vendorPriceSpec);
-    if (!vendor || vendor.billingMode !== current.billingMode) {
+    if (!vendor) {
+      toast.error(t("No vendor price is available for the selected pricing mode"));
+      return;
+    }
+    if (vendorRuleSet?.rules?.length) {
+      const expression = usageRuleSetExpression(vendorRuleSet);
+      setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
+      setUsageRuleSet(vendorRuleSet);
+      setAdvancedPricingActive(true);
+      setEditorOverride({
+        name: modelKey,
+        billingMode: "tiered_expr",
+        billingExpr: expression,
+        requestRuleExpr: "",
+      });
+      toast.success(t("Vendor pricing template and prices synchronized"));
+      return;
+    }
+    if (vendor.billingMode !== current.billingMode) {
       toast.error(t("No vendor price is available for the selected pricing mode"));
       return;
     }

@@ -140,6 +140,19 @@ function template(key: TemplateKey, execution: UsageRuleSet["execution"]): Usage
   return wrap([rule("默认")]);
 }
 
+function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKey): TemplateKey {
+  const rules = value?.rules || [];
+  if (!rules.length) return fallback;
+  const fields = new Set(rules.flatMap((item) => item.conditions.map((condition) => condition.field)));
+  const meters = new Set(rules.flatMap((item) => item.charges.map((part) => part.meter)));
+  if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
+  if (fields.has("resolution_tier") || (fields.has("resolution") && !meters.has("seconds"))) return "image";
+  if (fields.has("resolution") && meters.has("seconds")) return "video";
+  if (fields.has("output_images") || fields.has("count")) return "volume";
+  if (fields.has("prompt_extend") || fields.has("audio")) return "boolean";
+  return "blank";
+}
+
 function valueLiteral(value: UsageRuleCondition["value"]) {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   const trimmed = value.trim();
@@ -264,7 +277,7 @@ export function UsageRuleBuilder({
   const execution: UsageRuleSet["execution"] = usageSchema && Object.keys(usageSchema).length ? "task" : "request";
   const defaultTemplate: TemplateKey = execution === "task" ? "blank" : "image";
   const [rules, setRules] = useState<UsagePriceRule[]>(() => value?.rules || template(defaultTemplate, execution).rules);
-  const [templateKey, setTemplateKey] = useState<TemplateKey>(defaultTemplate);
+  const [templateKey, setTemplateKey] = useState<TemplateKey>(() => detectTemplateKey(value, defaultTemplate));
   const templateHelp: Record<TemplateKey, string> = {
     image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
     boolean: "Prices the request according to whether the selected request option is enabled.",
@@ -275,8 +288,8 @@ export function UsageRuleBuilder({
   };
   useEffect(() => {
     setRules(value?.rules?.length ? value.rules : template(defaultTemplate, execution).rules);
+    setTemplateKey(detectTemplateKey(value, defaultTemplate));
   }, [value, execution, defaultTemplate]);
-  useEffect(() => setTemplateKey(defaultTemplate), [defaultTemplate]);
   const fields = useMemo(
     () => execution === "task" ? Object.keys(usageSchema || {}) : requestFields,
     [usageSchema],
