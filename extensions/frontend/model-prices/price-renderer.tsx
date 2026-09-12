@@ -120,11 +120,13 @@ function UsageRuleSetRenderer({
   currency,
   discount = 0,
   showMarkup = false,
+  compact = false,
 }: {
   ruleSet: UsageRuleSet;
   currency: PricingCurrency;
   discount?: number;
   showMarkup?: boolean;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const operator = { eq: "=", ne: "!=", lt: "<", lte: "≤", gt: ">", gte: "≥" } as const;
@@ -187,6 +189,20 @@ function UsageRuleSetRenderer({
         <div className="rounded-md border bg-muted/25 p-3 text-sm">
           {charges(ruleSet.rules[0])}
         </div>
+      ) : compact ? (
+        <div className="space-y-2">
+          {ruleSet.rules.map((rule, index) => (
+            <div className="min-w-0 rounded-md border bg-muted/25 p-2.5" key={rule.id || index}>
+              <div className="mb-1 break-words text-xs font-medium">{rule.label}</div>
+              {charges(rule)}
+              {rule.conditions.length > 0 && (
+                <div className="mt-1 break-words text-xs text-muted-foreground">
+                  {rule.conditions.map(conditionLabel).join(" · ")}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       ) : <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[560px] table-fixed text-sm">
           <colgroup><col className="w-[24%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[40%]" /></colgroup>
@@ -221,6 +237,7 @@ export function PriceRenderer({
   pricesOnly = false,
   displayCurrency = "CNY",
   showMarkup = false,
+  compact = false,
 }: {
   spec?: PriceSpec;
   timezone: string;
@@ -228,6 +245,7 @@ export function PriceRenderer({
   pricesOnly?: boolean;
   displayCurrency?: string;
   showMarkup?: boolean;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const currencyConfig = useSystemConfigStore((state) => state.config.currency);
@@ -268,7 +286,7 @@ export function PriceRenderer({
     } as Record<string, string>)[spec?.mode || "token"] || "Token pricing",
   );
   if (usageRuleSet?.rules?.length) {
-    return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} showMarkup={showMarkup} />;
+    return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} showMarkup={showMarkup} compact={compact} />;
   }
   if (!blocks.length) return <span className="text-muted-foreground">-</span>;
   return (
@@ -368,12 +386,12 @@ export function PriceRenderer({
               </div>
             )}
             {!pricesOnly && displayedSpec?.mode === "table" && b.table?.headers?.length && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+              <div className={compact ? "min-w-0" : "overflow-x-auto"}>
+                <table className={`w-full text-xs ${compact ? "table-fixed" : ""}`}>
                   <thead>
                     <tr>
                       {b.table.headers.map((h, j) => (
-                        <th className="border-b p-1 text-left" key={j}>
+                        <th className="break-words border-b p-1 text-left" key={j}>
                           {h}
                         </th>
                       ))}
@@ -383,7 +401,7 @@ export function PriceRenderer({
                     {(b.table.rows || []).map((r, j) => (
                       <tr key={j}>
                         {r.map((v, k) => (
-                          <td className="border-b/50 p-1" key={k}>
+                          <td className="break-words border-b/50 p-1" key={k}>
                             {v}
                           </td>
                         ))}

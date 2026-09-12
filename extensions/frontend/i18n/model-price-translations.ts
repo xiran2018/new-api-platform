@@ -6,6 +6,7 @@ const resources: Record<string, Record<string, string>> = {
     "Model price management": "模型价格管理",
     "Vendor original price": "厂商原价",
     "Vendor price": "原厂价格",
+    "Vendor price is not set": "原厂价格未设置",
     "Actual price": "实际价格",
     "Model name": "模型名称",
     Vendor: "厂商",

@@ -262,12 +262,16 @@ function ConditionValueEditor({
 
 export function UsageRuleBuilder({
   value,
+  comparisonValue,
+  priceMultiplier = 1,
   usageSchema,
   exchangeRate,
   currencySymbol,
   onApply,
 }: {
   value?: UsageRuleSet;
+  comparisonValue?: UsageRuleSet;
+  priceMultiplier?: number;
   usageSchema?: BillingUsageSchema;
   exchangeRate: number;
   currencySymbol: string;
@@ -375,16 +379,33 @@ export function UsageRuleBuilder({
             )}
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">{t("Charges in this tier")}</div>
-              {item.charges.map((part, chargeIndex) => (
+              {item.charges.map((part, chargeIndex) => {
+                const vendorPart = comparisonValue?.rules[ruleIndex]?.charges.find(
+                  (candidate) => candidate.meter === part.meter && candidate.unit === part.unit,
+                );
+                const actualPrice = part.price * priceMultiplier;
+                const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
+                return (
                 <div className="grid gap-2 sm:grid-cols-[minmax(130px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_36px]" key={chargeIndex}>
-                  <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={part.meter} onChange={(event) => { const meter = event.target.value; const charges = [...item.charges]; charges[chargeIndex] = { ...part, meter, unit: defaultUnit(meter, usageSchema) }; updateRule(ruleIndex, { ...item, charges }); }}>{meters.map((meter) => <option value={meter} key={meter}>{meter === "request" ? t("Per request") : fieldLabels[meter] ? `${t(fieldLabels[meter])} (${meter})` : meter}</option>)}</select>
+                  <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={part.meter} onChange={(event) => { const meter = event.target.value; const charges = [...item.charges]; charges[chargeIndex] = { ...part, meter, unit: defaultUnit(meter, usageSchema) }; updateRule(ruleIndex, { ...item, charges }); }}>{meters.map((meter) => <option value={meter} key={meter}>{meter === "request" ? t("Per request") : fieldLabels[meter] ? t(fieldLabels[meter]) : meter}</option>)}</select>
                   <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={part.unit} onChange={(event) => { const charges = [...item.charges]; charges[chargeIndex] = { ...part, unit: event.target.value }; updateRule(ruleIndex, { ...item, charges }); }}>
                     {unitOptions(part.meter, usageSchema).map((unit) => <option value={unit} key={unit}>{unit}</option>)}
                   </select>
-                  <div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{currencySymbol}</span><Input className="pl-7" type="number" min={0} step="any" value={Number((part.price * exchangeRate).toPrecision(15))} onFocus={(event) => Number(event.currentTarget.value) === 0 && event.currentTarget.select()} onChange={(event) => { const charges = [...item.charges]; charges[chargeIndex] = { ...part, price: Math.max(0, Number(event.target.value) || 0) / exchangeRate }; updateRule(ruleIndex, { ...item, charges }); }} /></div>
+                  <div className="space-y-1">
+                    <div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{currencySymbol}</span><Input className="pl-7" type="number" min={0} step="any" value={Number((part.price * exchangeRate).toPrecision(15))} onFocus={(event) => Number(event.currentTarget.value) === 0 && event.currentTarget.select()} onChange={(event) => { const charges = [...item.charges]; charges[chargeIndex] = { ...part, price: Math.max(0, Number(event.target.value) || 0) / exchangeRate }; updateRule(ruleIndex, { ...item, charges }); }} /></div>
+                    {vendorPart ? (
+                      <div className="text-xs text-muted-foreground">
+                        {t("Vendor price")}: {currencySymbol}{(vendorPart.price * exchangeRate).toFixed(3)}
+                        <span className={difference! > 0 ? "ml-2 text-rose-500" : difference! < 0 ? "ml-2 text-emerald-500" : "ml-2"}>
+                          {t("Difference")}: {difference! > 0 ? "+" : ""}{currencySymbol}{(difference! * exchangeRate).toFixed(3)}
+                        </span>
+                      </div>
+                    ) : <div className="text-xs text-muted-foreground">{t("Vendor price is not set")}</div>}
+                  </div>
                   <Button type="button" variant="ghost" size="icon" title={t("Delete charge")} disabled={item.charges.length === 1} onClick={() => updateRule(ruleIndex, { ...item, charges: item.charges.filter((_, index) => index !== chargeIndex) })}><Trash2 className="size-4" /></Button>
                 </div>
-              ))}
+                );
+              })}
               <Button type="button" size="sm" variant="ghost" onClick={() => updateRule(ruleIndex, { ...item, charges: [...item.charges, charge()] })}><Plus className="mr-1 size-4" />{t("Add charge")}</Button>
             </div>
           </div>

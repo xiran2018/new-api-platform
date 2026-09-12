@@ -10,6 +10,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -463,11 +468,19 @@ export function ModelPriceManagementPage() {
           {shown.length} {t("models")}
         </span>
       </div>
-      <div className="w-max min-w-full rounded-lg border">
-        <table className="w-max min-w-full table-auto text-sm">
+      <div className="w-full min-w-0 rounded-lg border">
+        <table className="w-full min-w-[1180px] table-fixed text-sm">
+          <colgroup>
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "26%" }} />
+            <col style={{ width: "8%" }} />
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-muted">
             <tr>
-              <th className="w-56 max-w-56 p-3 text-left lg:w-[clamp(14rem,22vw,30rem)] lg:max-w-[clamp(14rem,22vw,30rem)]">{t("Model name")}</th>
+              <th className="p-3 text-left">{t("Model name")}</th>
               <th className="p-3 text-left">{t("Vendor")}</th>
               <th className="p-3 text-left">{t("Display currency")}</th>
               <th className="p-3 text-left">{t("Vendor original price")}</th>
@@ -484,13 +497,29 @@ export function ModelPriceManagementPage() {
                   key={r.id}
                   className="border-t align-top hover:bg-muted/30"
                 >
-                  <td className="w-56 max-w-56 overflow-hidden p-3 font-medium lg:w-[clamp(14rem,22vw,30rem)] lg:max-w-[clamp(14rem,22vw,30rem)]">
-                    <div className="truncate" title={r.displayName}>
-                      {r.displayName}
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground" title={r.modelKey}>
-                      {r.modelKey}
-                    </div>
+                  <td className="min-w-0 overflow-hidden p-3 font-medium">
+                    <HoverCard>
+                      <HoverCardTrigger
+                        delay={150}
+                        closeDelay={600}
+                        render={<div className="min-w-0 cursor-text" />}
+                      >
+                        <div className="truncate">{r.displayName}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {r.modelKey}
+                        </div>
+                      </HoverCardTrigger>
+                      <HoverCardContent
+                        align="start"
+                        side="right"
+                        className="w-auto max-w-md select-text break-words"
+                      >
+                        <div className="font-medium">{r.displayName}</div>
+                        <div className="mt-1 font-mono text-xs text-muted-foreground">
+                          {r.modelKey}
+                        </div>
+                      </HoverCardContent>
+                    </HoverCard>
                     {r.syncStatus === "changed" && (
                       <span className="text-xs text-amber-600">
                         {t("Upstream price changed")}
@@ -503,23 +532,29 @@ export function ModelPriceManagementPage() {
                       {r.currency === "USD" ? "USD ($)" : "CNY (¥)"}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap p-3">
-                    <PriceRenderer
-                      spec={r.vendorPriceSpec}
-                      timezone={r.timezone}
-                      pricesOnly
-                      displayCurrency={r.currency}
-                      showMarkup
-                    />
+                  <td className="min-w-0 overflow-hidden p-3 align-top">
+                    <div className="min-w-0 max-w-full overflow-hidden">
+                      <PriceRenderer
+                        spec={r.vendorPriceSpec}
+                        timezone={r.timezone}
+                        pricesOnly
+                        displayCurrency={r.currency}
+                        showMarkup
+                        compact
+                      />
+                    </div>
                   </td>
-                  <td className="whitespace-nowrap p-3">
-                    <PriceRenderer
-                      spec={r.llmapiPriceSpec}
-                      timezone={r.timezone}
-                      compareSpec={r.vendorPriceSpec}
-                      displayCurrency={r.currency}
-                      showMarkup
-                    />
+                  <td className="min-w-0 overflow-hidden p-3 align-top">
+                    <div className="min-w-0 max-w-full overflow-hidden">
+                      <PriceRenderer
+                        spec={r.llmapiPriceSpec}
+                        timezone={r.timezone}
+                        compareSpec={r.vendorPriceSpec}
+                        displayCurrency={r.currency}
+                        showMarkup
+                        compact
+                      />
+                    </div>
                   </td>
                   <td className="whitespace-nowrap p-3 text-center">
                     <Button
