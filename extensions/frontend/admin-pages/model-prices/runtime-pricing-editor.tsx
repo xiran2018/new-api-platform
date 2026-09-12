@@ -420,6 +420,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
                 ).billingExpr
               : undefined
           }
+          showMissingVendorPrice
         />
       </div>
     </div>
