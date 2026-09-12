@@ -487,7 +487,9 @@ export function ModelPriceManagementPage() {
               <th className="p-3 text-left">
                 {t("Actual price")}
               </th>
-              <th className="p-3">{t("Actions")}</th>
+              <th className="sticky right-0 z-20 border-l bg-muted p-3">
+                {t("Actions")}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -495,7 +497,7 @@ export function ModelPriceManagementPage() {
               return (
                 <tr
                   key={r.id}
-                  className="border-t align-top hover:bg-muted/30"
+                  className="group border-t align-top hover:bg-muted/30"
                 >
                   <td className="min-w-0 overflow-hidden p-3 font-medium">
                     <HoverCard>
@@ -533,7 +535,7 @@ export function ModelPriceManagementPage() {
                     </span>
                   </td>
                   <td className="min-w-0 overflow-hidden p-3 align-top">
-                    <div className="w-full min-w-0 overflow-hidden">
+                    <div className="w-full min-w-0 overflow-hidden [contain:inline-size]">
                       <PriceRenderer
                         spec={r.vendorPriceSpec}
                         timezone={r.timezone}
@@ -545,7 +547,7 @@ export function ModelPriceManagementPage() {
                     </div>
                   </td>
                   <td className="min-w-0 overflow-hidden p-3 align-top">
-                    <div className="w-full min-w-0 overflow-hidden">
+                    <div className="w-full min-w-0 overflow-hidden [contain:inline-size]">
                       <PriceRenderer
                         spec={r.llmapiPriceSpec}
                         timezone={r.timezone}
@@ -556,7 +558,7 @@ export function ModelPriceManagementPage() {
                       />
                     </div>
                   </td>
-                  <td className="whitespace-nowrap p-3 text-center">
+                  <td className="sticky right-0 z-10 whitespace-nowrap border-l bg-background p-3 text-center group-hover:bg-muted/30">
                     <Button
                       size="icon"
                       variant="ghost"

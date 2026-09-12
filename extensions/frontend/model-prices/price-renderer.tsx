@@ -162,7 +162,7 @@ function UsageRuleSetRenderer({
       {rule.charges.filter((charge) => charge.price !== 0).map((charge, chargeIndex) => {
         const label = meterLabel(charge.meter);
         return (
-          <div className="whitespace-nowrap" key={`${charge.meter}-${chargeIndex}`}>
+          <div className="break-words" key={`${charge.meter}-${chargeIndex}`}>
             {label && <span className="mr-1 text-muted-foreground">{label}:</span>}
             <b>{money(charge.price * factor, currency)}</b>
             <span className="ml-1 text-muted-foreground">/ {charge.unit}</span>
@@ -170,7 +170,7 @@ function UsageRuleSetRenderer({
         );
       })}
       {rule.charges.some((charge) => charge.meter === "tts_output_characters" && charge.price === 0) && (
-        <div className="whitespace-nowrap">
+        <div className="break-words">
           <span className="mr-1 text-muted-foreground">{t("Output price")}:</span>
           <b>{t("Free")}</b>
         </div>
