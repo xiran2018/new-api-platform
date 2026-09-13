@@ -45,6 +45,7 @@ for key in \
   input-length-thinking-tiers \
   text-image-audio-split \
   unified-multimodal-input-audio-output \
+  omni-output-modes \
   live-translation-multimodal \
   audio-transcription-per-second
 do

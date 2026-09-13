@@ -11,7 +11,7 @@ upgrade changes the target file:
 
 Model-pricing compatibility is additionally guarded by
 `scripts/verify-core-compatibility.sh`. The model-price page reuses upstream's
-`ModelPricingEditorPanel`, while six platform expression presets and one generic
+`ModelPricingEditorPanel`, while seven platform expression presets and one generic
 additional-pricing-tab slot remain small core customizations. The platform uses
 that slot to keep advanced media pricing beside Expression, Per-token, and
 Per-request instead of rendering it as a separate panel. Legacy platform prices

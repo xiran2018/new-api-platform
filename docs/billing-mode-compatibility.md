@@ -14,6 +14,7 @@
 | 输入长度分档 | 输入 Token 区间表达式模板 | `len` |
 | 输入长度加思考开关 | 输入区间 + 思考输出表达式模板 | `len`、`param(enable_thinking)` |
 | 文本、图片、视频、音频分别计价 | 多模态表达式模板 | `p/c/img/img_o/vid/vid_o/ai/ao` |
+| 纯文本/多模态文本/文本+音频三种输出 | Omni 输出模式表达式模板 | `img/ai/vid/ao` 条件分支 |
 | 音频转写按秒 | 音频转写表达式模板 | `aud_s` |
 | 视频分辨率乘输出时长 | 视频分辨率与时长模板 | `resolution`、`seconds` |
 | 视频分辨率加有声/无声 | 视频分辨率、时长与音频开关模板 | `resolution`、`audio`、`seconds` |

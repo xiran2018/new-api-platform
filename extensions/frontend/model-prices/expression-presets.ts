@@ -28,6 +28,11 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'ao > 0 ? tier("text+audio output", p * 7 + c * 0 + img * 7 + vid * 7 + ai * 53 + ao * 213) : tier("text output", p * 7 + c * 40 + img * 7 + vid * 7 + ai * 53 + ao * 0)',
       },
       {
+        key: 'omni-output-modes',
+        label: 'Pure text / multimodal text / text+audio output pricing',
+        expr: '(img > 0 || ai > 0 || vid > 0) ? (ao > 0 ? tier("text+audio output", p * 1.8 + ai * 15.8 + img * 3.3 + vid * 3.3 + c * 0 + ao * 62.6) : tier("multimodal text output", p * 1.8 + ai * 15.8 + img * 3.3 + vid * 3.3 + c * 12.7)) : tier("pure text output", p * 1.8 + c * 6.9)',
+      },
+      {
         key: 'live-translation-multimodal',
         label: 'Live translation multimodal token pricing',
         expr: 'tier("live_translation", p * 0 + c * 10 + img * 4 + ai * 10 + ao * 40)',
