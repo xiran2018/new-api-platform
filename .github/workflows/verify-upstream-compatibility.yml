@@ -1,0 +1,55 @@
+name: Verify upstream compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pricing-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source and core submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: core/new-api/go.mod
+          cache-dependency-path: core/new-api/go.sum
+
+      - name: Assemble platform extensions
+        run: ./scripts/assemble-extensions.sh
+
+      - name: Verify extension contracts
+        run: ./scripts/verify-core-compatibility.sh
+
+      - name: Install frontend dependencies
+        working-directory: core/new-api/web
+        run: bun install --frozen-lockfile
+
+      - name: Verify visual pricing editors
+        working-directory: core/new-api/web
+        run: |
+          bun run typecheck
+          bunx vitest run \
+            src/features/pricing/lib/__tests__/billing-expression.test.ts \
+            src/platform/admin-pages/model-prices/usage-rule-builder.test.ts
+
+      - name: Verify backend billing settlement
+        working-directory: core/new-api
+        run: |
+          go test ./pkg/billingexpr
+          go test ./service -run 'TestBuildTieredTokenParams'

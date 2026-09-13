@@ -45,6 +45,8 @@ if [[ -n "$(git -C "$core_dir" status --porcelain)" ]]; then
 fi
 
 git -C "$core_dir" switch main
+git -C "$core_dir" config rerere.enabled true
+git -C "$core_dir" config rerere.autoupdate true
 git -C "$core_dir" -c core.pager=cat fetch origin
 git -C "$core_dir" -c core.pager=cat fetch upstream
 
@@ -85,9 +87,12 @@ else
   if ! grep -q '^<<<<<<< ' <<<"$merge_preview"; then
     echo "Clean merge: yes"
   else
-    echo "Clean merge: no. Resolve the reported conflicts before using --merge." >&2
-    echo "$merge_preview" >&2
-    exit 1
+    echo "Clean merge: no. Git rerere may reuse a previously recorded resolution."
+    if [[ "$mode" == "--check" ]]; then
+      echo "Run $0 --merge to attempt the merge, or inspect the conflict preview below." >&2
+      echo "$merge_preview" >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -98,7 +103,17 @@ if [[ "$mode" == "--check" ]]; then
   exit 0
 fi
 
-git -C "$core_dir" merge --no-edit upstream/main
+if ! git -C "$core_dir" merge --no-edit upstream/main; then
+  git -C "$core_dir" rerere
+  if ! git -C "$core_dir" diff --quiet --diff-filter=U; then
+    echo "Merge still has unresolved conflicts. Resolve them in core/new-api," >&2
+    echo "run the compatibility checks, then commit. Git rerere will remember the resolution." >&2
+    git -C "$core_dir" status --short >&2
+    exit 1
+  fi
+  git -C "$core_dir" commit --no-edit
+  echo "All merge conflicts were resolved from recorded rerere resolutions."
+fi
 
 "$repo_root/scripts/assemble-extensions.sh"
 "$repo_root/scripts/verify-core-compatibility.sh"
@@ -108,11 +123,16 @@ git -C "$core_dir" merge --no-edit upstream/main
   bun install --frozen-lockfile
   bun run build
   bun run typecheck
+  bunx vitest run \
+    src/features/pricing/lib/__tests__/billing-expression.test.ts \
+    src/platform/admin-pages/model-prices/usage-rule-builder.test.ts
 )
 
 (
   cd "$core_dir"
   GOCACHE=/tmp/new-api-platform-go-cache go build ./router ./platform
+  GOCACHE=/tmp/new-api-platform-go-cache go test ./pkg/billingexpr
+  GOCACHE=/tmp/new-api-platform-go-cache go test ./service -run 'TestBuildTieredTokenParams'
 )
 
 if [[ "$mode" == "--sync" ]]; then

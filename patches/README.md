@@ -19,18 +19,37 @@ are converted through upstream's model-pricing conversion API before editing;
 unsupported conversions remain in the legacy editor rather than being changed
 silently. Both sync and publish workflows stop if upstream lifecycle labels,
 conversion support, presets, or the additional-tab adapter contract disappear.
+The complete screenshot-derived pricing contract and runtime field mapping are
+recorded in `docs/billing-mode-compatibility.md`. Sync also runs the visual
+template and expression settlement regression suites, so a template that still
+exists in source but no longer parses or bills cannot pass verification.
 Vendor comparison text and calculations live entirely in the platform adapter.
-Core pricing controls expose only a generic `renderPriceAddon` slot carrying a
-field key, optional tier scope, and current value. The compatibility check guards
-that slot across legacy and visual expression fields without coupling platform
-UI to upstream internals. Do not replace expression discounts with `(expression) * factor`:
+Core exposes one generic `renderPriceAddon` renderer through an isolated React
+context carrying a field key, optional tier scope, and current value. Intermediate
+editors do not forward platform props; only the outer provider and final price
+inputs know about the extension point. The compatibility check guards those
+mounts without coupling platform UI to upstream editor structure. Do not replace
+expression discounts with `(expression) * factor`:
 that is invalid for `tier(name, fixed(amount))` request-price leaves.
+
+`scripts/sync-upstream.sh` enables Git `rerere` for the core checkout. The first
+time an upstream refactor conflicts with a seam, resolve and commit it normally;
+Git records the before/after conflict. Later merges with the same conflict shape
+can reuse that resolution automatically. `--check` never changes the worktree,
+while `--merge` may attempt recorded resolutions and leaves genuinely new
+conflicts visible for review.
 
 Model list compatibility is intentional: upstream model management requests
 `include_channel_models=true`, and platform price management refreshes its own
 catalogue from `models` plus enabled abilities on enabled channels. This keeps
 both management pages aligned while `model_price_catalogs` remains the storage
 table for platform-only presentation fields.
+
+The public model-price page uses the exact model-name set published by
+`model.GetPricing()`, the same runtime source as the model square. During each
+catalogue refresh it also updates model name, vendor, tags, visibility, and sort
+order from new-api, while preserving platform-only descriptions, administrator
+notes, vendor comparison prices, and discount metadata.
 
 Actual prices have one source of truth. Platform edits call new-api's
 `/api/option/model_pricing` endpoint, which transactionally updates the pricing

@@ -11,7 +11,8 @@ import type {
   UsageRuleSet,
 } from "../../model-prices/types";
 
-type TemplateKey = "image" | "boolean" | "volume" | "video" | "ttsCharacters" | "blank";
+export type TemplateKey = "image" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
+export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
 
 const requestFields = [
   "resolution",
@@ -27,6 +28,8 @@ const requestFields = [
   "tts_input_characters",
   "tts_output_characters",
   "count",
+  "task_type",
+  "output_spec",
 ];
 
 const fieldLabels: Record<string, string> = {
@@ -43,6 +46,8 @@ const fieldLabels: Record<string, string> = {
   tts_input_characters: "TTS input price",
   tts_output_characters: "TTS output price",
   count: "Quantity",
+  task_type: "Task type",
+  output_spec: "Output specification",
 };
 
 const id = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -98,7 +103,7 @@ const rule = (
   charges: UsagePriceCharge[] = [charge()],
 ): UsagePriceRule => ({ id: id(), label, conditions, charges });
 
-function template(key: TemplateKey, execution: UsageRuleSet["execution"]): UsageRuleSet {
+export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSet["execution"]): UsageRuleSet {
   const wrap = (rules: UsagePriceRule[]): UsageRuleSet => ({ version: 1, execution, rules });
   if (key === "image") {
     return wrap([
@@ -129,12 +134,32 @@ function template(key: TemplateKey, execution: UsageRuleSet["execution"]): Usage
       rule("1080P", [], [charge("seconds", "秒")]),
     ]);
   }
+  if (key === "videoAudio") {
+    return wrap([
+      rule("720P with audio", [{ field: "resolution", operator: "eq", value: "720P" }, { field: "audio", operator: "eq", value: true }], [charge("seconds", "秒")]),
+      rule("1080P with audio", [{ field: "resolution", operator: "eq", value: "1080P" }, { field: "audio", operator: "eq", value: true }], [charge("seconds", "秒")]),
+      rule("720P without audio", [{ field: "resolution", operator: "eq", value: "720P" }], [charge("seconds", "秒")]),
+      rule("1080P without audio", [], [charge("seconds", "秒")]),
+    ]);
+  }
+  if (key === "videoMode") return wrap([rule("Standard mode", [{ field: "mode", operator: "eq", value: "wan-std" }], [charge("seconds", "秒")]), rule("Professional mode", [], [charge("seconds", "秒")])]);
+  if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("720P output video", [], [charge("seconds", "秒")])]);
+  if (key === "audioSeconds") return wrap([rule("Audio duration", [], [charge("seconds", "秒")])]);
   if (key === "ttsCharacters") {
     return wrap([
       rule("按字符计费", [], [
         charge("tts_input_characters", "万字符", 0.8),
         charge("tts_output_characters", "万字符", 0),
       ]),
+    ]);
+  }
+  if (key === "voiceCount") return wrap([rule("Voice enrollment", [], [charge("count", "音色")])]);
+  if (key === "taskMatrix") {
+    return wrap([
+      rule("Text-to-3D / standard / no texture", [{ field: "task_type", operator: "eq", value: "text-to-3d" }, { field: "output_spec", operator: "eq", value: "standard-no-texture" }]),
+      rule("Text-to-3D / standard / standard texture", [{ field: "task_type", operator: "eq", value: "text-to-3d" }, { field: "output_spec", operator: "eq", value: "standard-standard-texture" }]),
+      rule("Text-to-3D / HD / HD texture", [{ field: "task_type", operator: "eq", value: "text-to-3d" }, { field: "output_spec", operator: "eq", value: "hd-hd-texture" }]),
+      rule("Other task specification", []),
     ]);
   }
   return wrap([rule("默认")]);
@@ -146,6 +171,12 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   const fields = new Set(rules.flatMap((item) => item.conditions.map((condition) => condition.field)));
   const meters = new Set(rules.flatMap((item) => item.charges.map((part) => part.meter)));
   if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
+  if (fields.has("task_type") || fields.has("output_spec")) return "taskMatrix";
+  if (meters.has("count") && !fields.has("output_images")) return "voiceCount";
+  if (meters.has("seconds") && !fields.has("resolution") && !fields.has("mode")) return "audioSeconds";
+  if (fields.has("resolution") && fields.has("audio")) return "videoAudio";
+  if (fields.has("mode") && meters.has("input_images")) return "imageVideo";
+  if (fields.has("mode") && meters.has("seconds")) return "videoMode";
   if (fields.has("resolution_tier") || (fields.has("resolution") && !meters.has("seconds"))) return "image";
   if (fields.has("resolution") && meters.has("seconds")) return "video";
   if (fields.has("output_images") || fields.has("count")) return "volume";
@@ -280,18 +311,24 @@ export function UsageRuleBuilder({
   const { t } = useTranslation();
   const execution: UsageRuleSet["execution"] = usageSchema && Object.keys(usageSchema).length ? "task" : "request";
   const defaultTemplate: TemplateKey = execution === "task" ? "blank" : "image";
-  const [rules, setRules] = useState<UsagePriceRule[]>(() => value?.rules || template(defaultTemplate, execution).rules);
+  const [rules, setRules] = useState<UsagePriceRule[]>(() => value?.rules || createUsageRuleTemplate(defaultTemplate, execution).rules);
   const [templateKey, setTemplateKey] = useState<TemplateKey>(() => detectTemplateKey(value, defaultTemplate));
   const templateHelp: Record<TemplateKey, string> = {
     image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
     boolean: "Prices the request according to whether the selected request option is enabled.",
     volume: "Prices each generated output image according to the output quantity tier.",
     video: "Prices generated video by output resolution and output duration.",
+    videoAudio: "Prices generated video by output resolution, output duration and whether audio is enabled.",
+    videoMode: "Prices generated video by output mode and duration.",
+    imageVideo: "Prices uploaded images and generated video separately.",
+    audioSeconds: "Prices music, speech or transcription by duration.",
     ttsCharacters: "Prices text-to-speech input per ten thousand Unicode characters; generated audio output is free.",
+    voiceCount: "Prices voice enrollment by the number of voices.",
+    taskMatrix: "Prices combinations of task type and output specification.",
     blank: "Build a custom rule from request attributes and measured output usage.",
   };
   useEffect(() => {
-    setRules(value?.rules?.length ? value.rules : template(defaultTemplate, execution).rules);
+    setRules(value?.rules?.length ? value.rules : createUsageRuleTemplate(defaultTemplate, execution).rules);
     setTemplateKey(detectTemplateKey(value, defaultTemplate));
   }, [value, execution, defaultTemplate]);
   const fields = useMemo(
@@ -339,13 +376,19 @@ export function UsageRuleBuilder({
           <select className="flex h-9 min-w-52 rounded-md border bg-background px-3 text-sm" value={templateKey} onChange={(event) => {
             const nextTemplate = event.target.value as TemplateKey;
             setTemplateKey(nextTemplate);
-            commitRules(template(nextTemplate, execution).rules);
+            commitRules(createUsageRuleTemplate(nextTemplate, execution).rules);
           }}>
-            {execution === "request" && <option value="image">{t("Output image resolution (1K/2K)")}</option>}
+            {(execution === "request" || fields.includes("resolution_tier") || (fields.includes("resolution") && fields.includes("output_images"))) && <option value="image">{t("Output image resolution (1K/2K)")}</option>}
             {(execution === "request" || fields.includes("prompt_extend")) && <option value="boolean">{t("Boolean request option")}</option>}
             {(execution === "request" || fields.includes("output_images") || fields.includes("count")) && <option value="volume">{t("Generated image quantity tiers")}</option>}
             {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds"))) && <option value="video">{t("Output video resolution and duration")}</option>}
-            {execution === "request" && <option value="ttsCharacters">{t("Text-to-speech per 10K characters")}</option>}
+            {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds") && fields.includes("audio"))) && <option value="videoAudio">{t("Video resolution, duration and audio switch")}</option>}
+            {(execution === "request" || (fields.includes("mode") && fields.includes("seconds"))) && <option value="videoMode">{t("Video output mode and duration")}</option>}
+            {(execution === "request" || (fields.includes("input_images") && fields.includes("resolution") && fields.includes("seconds"))) && <option value="imageVideo">{t("Input image and output video")}</option>}
+            {(execution === "request" || fields.includes("seconds")) && <option value="audioSeconds">{t("Audio duration pricing")}</option>}
+            {(execution === "request" || fields.includes("tts_input_characters")) && <option value="ttsCharacters">{t("Text-to-speech per 10K characters")}</option>}
+            {(execution === "request" || fields.includes("count")) && <option value="voiceCount">{t("Voice enrollment count")}</option>}
+            {(execution === "request" || (fields.includes("task_type") && fields.includes("output_spec"))) && <option value="taskMatrix">{t("Task type and output specification matrix")}</option>}
             <option value="blank">{t("Blank rule")}</option>
           </select>
         </label>

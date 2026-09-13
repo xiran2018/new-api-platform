@@ -10,7 +10,7 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
       {
         key: 'input-length-thinking-tiers',
         label: 'Input range + thinking output pricing',
-        expr: 'len <= 256000 ? tier("0-256K", p * 2 + c * (param("enable_thinking") == true ? 12 : 8)) : tier("256K+", p * 6 + c * (param("enable_thinking") == true ? 24 : 16))',
+        expr: 'len <= 256000 ? (param("enable_thinking") == true ? tier("0-256K thinking", p * 2 + c * 12) : tier("0-256K", p * 2 + c * 8)) : (param("enable_thinking") == true ? tier("256K+ thinking", p * 6 + c * 24) : tier("256K+", p * 6 + c * 16))',
       },
     ],
   },
@@ -25,7 +25,7 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
       {
         key: 'unified-multimodal-input-audio-output',
         label: 'Unified text/image/video input + separate audio pricing',
-        expr: 'tier("multimodal_audio", p * 7 + c * (ao > 0 ? 0 : 40) + img * 7 + ai * 53 + vid * 7 + ao * 213)',
+        expr: 'ao > 0 ? tier("text+audio output", p * 7 + c * 0 + img * 7 + vid * 7 + ai * 53 + ao * 213) : tier("text output", p * 7 + c * 40 + img * 7 + vid * 7 + ai * 53 + ao * 0)',
       },
       {
         key: 'live-translation-multimodal',

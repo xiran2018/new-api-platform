@@ -339,12 +339,13 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		} else if stored, exists := storedPriceSpecs[name]; exists {
 			priceSpec = stored
 		}
+		_, visibleInModelSquare := pricingByName[name]
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
-			Published:         metadata.Status == 1, APIEnabled: metadata.APIEnabled, MetadataManaged: true, SortOrder: index,
+			Published:         visibleInModelSquare, APIEnabled: metadata.APIEnabled, MetadataManaged: true, SortOrder: index,
 		})
 	}
 	// Model management is the metadata catalogue, while price management must
@@ -373,12 +374,13 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		} else if stored, exists := storedPriceSpecs[name]; exists {
 			priceSpec = stored
 		}
+		_, visibleInModelSquare := pricingByName[name]
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
-			Published: false, APIEnabled: false, MetadataManaged: true, SortOrder: len(rows),
+			Published:         visibleInModelSquare, APIEnabled: false, MetadataManaged: true, SortOrder: len(rows),
 		})
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
@@ -390,7 +392,7 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		}
 		return tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "model_key"}},
-			DoUpdates: clause.AssignmentColumns([]string{"llm_api_price_spec", "runtime_pricing_ref", "published", "api_enabled", "metadata_managed"}),
+			DoUpdates: clause.AssignmentColumns([]string{"display_name", "vendor", "tags", "llm_api_price_spec", "runtime_pricing_ref", "published", "api_enabled", "metadata_managed", "sort_order"}),
 		}).CreateInBatches(rows, 200).Error
 	})
 }

@@ -5,8 +5,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 editor="$repo_root/core/new-api/web/src/features/system-settings/models/tiered-pricing-editor.tsx"
 sheet="$repo_root/core/new-api/web/src/features/system-settings/models/model-pricing-sheet.tsx"
 price_inputs="$repo_root/core/new-api/web/src/features/system-settings/models/model-pricing-inputs.tsx"
-visual_editor="$repo_root/core/new-api/web/src/features/system-settings/models/visual-billing-document-editor.tsx"
+tier_price_fields="$repo_root/core/new-api/web/src/features/system-settings/models/tier-price-fields.tsx"
+addon_context="$repo_root/extensions/frontend/model-prices/pricing-field-addon.tsx"
 adapter="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.tsx"
+usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.tsx"
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
@@ -49,6 +51,11 @@ do
   require_text "$presets" "key: '$key'" "a platform expression preset was lost during upstream synchronization"
 done
 
+for key in image boolean volume video videoAudio videoMode imageVideo audioSeconds ttsCharacters voiceCount taskMatrix blank
+do
+  require_text "$usage_rule_builder" "$key" "a screenshot-derived visual billing template was lost during upstream synchronization"
+done
+
 require_text "$editor" "PLATFORM_BILLING_PRESET_GROUPS" "the platform expression preset seam was lost during upstream synchronization"
 require_text "$sheet" "Per-token (deprecated)" "the upstream per-token lifecycle label changed"
 require_text "$sheet" "Per-request (deprecated)" "the upstream per-request lifecycle label changed"
@@ -60,8 +67,16 @@ require_text "$adapter" "previewModelPricingConversion" "legacy platform prices 
 require_text "$adapter" "applyPricingDiscount" "platform discounts are no longer applied through the validated pricing helper"
 require_text "$adapter" "serializeVisualBillingDocument" "expression discounts may produce invalid fixed-price expressions"
 require_text "$sheet" "renderPriceAddon" "the generic pricing-field extension slot was lost from the upstream editor"
-require_text "$price_inputs" "addon={props.addon}" "legacy price fields no longer mount the generic extension slot"
-require_text "$visual_editor" "renderPriceAddon" "visual expression fields no longer mount the generic extension slot"
+require_text "$sheet" "PricingFieldAddonProvider" "the generic pricing-field provider was lost from the upstream editor"
+require_text "$addon_context" "createContext" "the isolated pricing-field extension context is missing"
+require_text "$price_inputs" "<PricingFieldAddon" "legacy price fields no longer mount the generic extension slot"
+require_text "$tier_price_fields" "<PricingFieldAddon" "visual expression fields no longer mount the generic extension slot"
+require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/types.ts" "vid_o" "visual video-output pricing variable was lost"
+require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/types.ts" "aud_s" "visual audio-duration pricing variable was lost"
+require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/visual.ts" "request-comparison" "visual request-parameter pricing conditions were lost"
+require_text "$repo_root/core/new-api/pkg/billingexpr/types.go" "AS    float64" "backend audio-duration pricing parameter was lost"
+require_text "$repo_root/core/new-api/pkg/billingexpr/run.go" '"vid_o"' "backend video-output pricing binding was lost"
+require_text "$repo_root/core/new-api/service/tiered_settle.go" 'usedVars["aud_s"]' "audio-duration settlement mapping was lost"
 require_text "$adapter" "renderPriceAddon={renderPriceAddon}" "the platform vendor comparison UI is no longer connected to the generic slot"
 require_text "$model_table" "include_channel_models: true" "model management no longer includes channel models"
 require_text "$platform_backend" "model.GetModelConnections()" "platform price management no longer includes enabled channel abilities"
@@ -70,5 +85,7 @@ require_text "$adapter" "getModelPricing([modelKey])" "platform actual-price edi
 require_text "$model_pricing_api" "api.patch('/api/option/model_pricing'" "the upstream runtime-pricing save endpoint changed"
 require_text "$model_table" "useModelPricing(" "model management no longer reads the shared runtime-pricing configuration"
 require_text "$platform_backend" "model.GetPricing()" "platform display prices are no longer refreshed from runtime pricing"
+require_text "$platform_backend" "visibleInModelSquare" "public model prices no longer use the model-square visibility set"
+require_text "$platform_backend" '"display_name", "vendor", "tags"' "public model metadata may become stale after model synchronization"
 
 echo "Core pricing compatibility: ok"
