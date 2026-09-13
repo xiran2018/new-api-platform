@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   getModelPricing,
+  previewModelPricingConversion,
   saveModelPricing,
   type ModelPricingEntry,
 } from "@/features/model-pricing/api";
@@ -14,15 +15,26 @@ import {
   combineBillingExpr,
   splitBillingExprAndRequestRules,
 } from "@/features/pricing/lib/billing-expr";
+import {
+  parseVisualBillingDocument,
+  serializeVisualBillingDocument,
+  type VisualPricingNode,
+} from "@/features/pricing/lib/billing-expression/visual";
 import type { ModelRatioData } from "@/features/system-settings/models/model-pricing-core";
 import { usePricingPreferencesStore } from "@/stores/pricing-preferences-store";
 import { useSystemConfigStore } from "@/stores/system-config-store";
+import { formatBillingCurrencyFromUSD } from "@/lib/currency";
+import { cn } from "@/lib/utils";
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
 } from "@/features/system-settings/models/model-pricing-sheet";
 import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
-import { UsageRuleBuilder, usageRuleSetExpression, validateUsageRuleSet } from "./usage-rule-builder";
+import {
+  UsageRuleBuilder,
+  usageRuleSetExpression,
+  validateUsageRuleSet,
+} from "./usage-rule-builder";
 
 type PriceComparison = Partial<
   Record<
@@ -141,14 +153,36 @@ function hasConfiguredPrice(entry: ModelPricingEntry) {
   );
 }
 
-function applyDiscount(data: ModelRatioData, discount: number): ModelRatioData {
+export function applyPricingDiscount(data: ModelRatioData, discount: number): ModelRatioData {
   const factor = 1 - discount / 100;
   const scaled = (value?: string) =>
     value === undefined || value === "" ? value : String(Number(value) * factor);
   if (data.billingMode === "tiered_expr") {
-    return discount !== 0
-      ? { ...data, billingExpr: `(${data.billingExpr || "p * 0 + c * 0"}) * ${factor}` }
-      : data;
+    if (discount === 0) return data;
+    const document = parseVisualBillingDocument(
+      data.billingExpr || 'tier("base", p * 0 + c * 0)',
+    );
+    if (document) {
+      const scaleNode = (node: VisualPricingNode): VisualPricingNode => {
+        if (node.kind === "branch") {
+          return { ...node, yes: scaleNode(node.yes), no: scaleNode(node.no) };
+        }
+        return {
+          ...node,
+          fixedPrice: node.fixedPrice === "" ? "" : String(Number(node.fixedPrice) * factor),
+          prices: node.prices.map((price) => ({
+            ...price,
+            value: String(Number(price.value) * factor),
+          })),
+        };
+      };
+      const serialized = serializeVisualBillingDocument({
+        ...document,
+        root: scaleNode(document.root),
+      });
+      if (serialized.ok) return { ...data, billingExpr: serialized.source };
+    }
+    return { ...data, billingExpr: `(${data.billingExpr || "p * 0 + c * 0"}) * ${factor}` };
   }
   return data.billingMode === "per-request"
     ? { ...data, price: scaled(data.price) }
@@ -248,6 +282,55 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const [advancedPricingActive, setAdvancedPricingActive] = useState(
     Boolean(currentPriceSpec?.blocks?.[0]?.usageRuleSet),
   );
+  const legacyComparison = vendorComparison(vendorPriceSpec);
+  const vendorExpressionDocument = vendorPriceSpec?.mode === "expression"
+    ? parseVisualBillingDocument(
+        splitBillingExprAndRequestRules(vendorPriceSpec.blocks?.[0]?.note || "").billingExpr,
+      )
+    : null;
+  const findVendorTier = (node: VisualPricingNode | undefined, label?: string): Extract<VisualPricingNode, { kind: "tier" }> | undefined => {
+    if (!node) return undefined;
+    if (node.kind === "tier") return !label || node.label === label ? node : undefined;
+    return findVendorTier(node.yes, label) || findVendorTier(node.no, label);
+  };
+  const comparisonValue = (key: string, scope?: string) => {
+    const legacyKey = ({
+      input: "input",
+      completion: "completion",
+      cache: "cache",
+      createCache: "createCache",
+      image: "image",
+      audioInput: "audioInput",
+      audioOutput: "audioOutput",
+      request: "request",
+    } as Record<string, keyof PriceComparison>)[key];
+    if (legacyKey) return legacyComparison[legacyKey];
+    const tier = findVendorTier(vendorExpressionDocument?.root, scope);
+    if (!tier) return undefined;
+    if (key === "fixed") return tier.billingUnit === "request" ? Number(tier.fixedPrice) : undefined;
+    const price = tier.prices.find((item) => item.variable === key);
+    return price ? Number(price.value) : undefined;
+  };
+  const renderPriceAddon = ({ key, scope, value }: { key: string; scope?: string; value: string }) => {
+    const vendorPrice = comparisonValue(key, scope);
+    if (vendorPrice == null || !Number.isFinite(vendorPrice)) {
+      return <div className="shrink-0 text-xs text-muted-foreground">{t("Vendor price is not set")}</div>;
+    }
+    const entered = Number(value);
+    const difference = Number.isFinite(entered)
+      ? entered * (1 - discount / 100) - vendorPrice
+      : undefined;
+    return (
+      <div className="shrink-0 text-xs text-muted-foreground">
+        {t("Vendor price")}: {formatBillingCurrencyFromUSD(vendorPrice)}
+        {difference != null && (
+          <span className={cn("ml-2 font-medium", difference > 0 ? "text-rose-500" : difference < 0 ? "text-emerald-500" : "text-muted-foreground")}>
+            {t("Difference")}: {difference > 0 ? "+" : ""}{formatBillingCurrencyFromUSD(difference)}
+          </span>
+        )}
+      </div>
+    );
+  };
   useEffect(() => {
     setEntry(null);
     setEditorOverride(null);
@@ -256,13 +339,36 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     setDiscount(currentPriceSpec?.blocks?.[0]?.discount ?? 0);
     if (modelKey)
       void getModelPricing([modelKey])
-        .then((data) =>
-          setEntry(
-            data.entries.find((item) => item.model_name === modelKey) || null,
-          ),
-        )
+        .then(async (data) => {
+          const nextEntry = data.entries.find((item) => item.model_name === modelKey) || null;
+          setEntry(nextEntry);
+          if (!nextEntry || nextEntry.effective["billing_setting.billing_mode"] === "tiered_expr" || !hasConfiguredPrice(nextEntry)) return;
+          // The platform catalogue stores the pre-discount display price while
+          // new-api stores the discounted runtime price. Undo the saved
+          // discount before conversion so Save applies it exactly once.
+          const legacyDraft = editorData(
+            nextEntry,
+            currentPriceSpec?.blocks?.[0]?.discount ?? 0,
+            currentPriceSpec,
+          );
+          const result = await previewModelPricingConversion({
+            model_name: modelKey,
+            pricing: pricingFromDraft(legacyDraft),
+          });
+          if (result.expression) {
+            const expression = splitBillingExprAndRequestRules(result.expression);
+            setEditorOverride({
+              name: modelKey,
+              billingMode: "tiered_expr",
+              billingExpr: expression.billingExpr,
+              requestRuleExpr: expression.requestRuleExpr,
+            });
+          } else if (result.unsupported_reason) {
+            toast.warning(t(result.unsupported_reason));
+          }
+        })
         .catch((error) => toast.error(error.message));
-  }, [modelKey, currentPriceSpec?.blocks?.[0]?.discount]);
+  }, [modelKey, currentPriceSpec?.blocks?.[0]?.discount, t]);
   const save = async () => {
     if (!entry) return;
     if (advancedPricingActive) {
@@ -279,7 +385,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       draft.billingExpr?.trim() === usageRuleSetExpression(usageRuleSet).trim()
       ? usageRuleSet
       : undefined;
-    const billedDraft = applyDiscount(draft, discount);
+    const billedDraft = applyPricingDiscount(draft, discount);
     setSaving(true);
     try {
       await saveModelPricing([
@@ -375,7 +481,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
                 )
               : editorData(entry))
           }
-          pricingHeaderAction={
+          scrollHeader={
             <Button
               type="button"
               variant="outline"
@@ -385,42 +491,33 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
               {t("Sync vendor price")}
             </Button>
           }
-          usageSchema={entry.usage_schema}
-          isSaving={saving}
-          priceComparison={vendorComparison(vendorPriceSpec)}
-          priceMultiplier={1 - discount / 100}
           additionalPricingActive={advancedPricingActive}
           onAdditionalPricingActiveChange={setAdvancedPricingActive}
           additionalPricingTab={{
             label: t("Advanced media pricing rules"),
             content: (
-              <UsageRuleBuilder
-                value={usageRuleSet}
-                comparisonValue={vendorPriceSpec?.blocks?.[0]?.usageRuleSet}
-                priceMultiplier={1 - discount / 100}
-                usageSchema={entry.usage_schema}
-                exchangeRate={exchangeRate}
-                currencySymbol={currencySymbol}
-                onApply={(nextRuleSet, expression) => {
-                  setUsageRuleSet(nextRuleSet);
-                  setEditorOverride({
-                    name: modelKey,
-                    billingMode: "tiered_expr",
-                    billingExpr: expression,
-                    requestRuleExpr: "",
-                  });
-                }}
-              />
+                <UsageRuleBuilder
+                  value={usageRuleSet}
+                  comparisonValue={vendorPriceSpec?.blocks?.[0]?.usageRuleSet}
+                  priceMultiplier={1 - discount / 100}
+                  usageSchema={entry.usage_schema}
+                  exchangeRate={exchangeRate}
+                  currencySymbol={currencySymbol}
+                  onApply={(nextRuleSet, expression) => {
+                    setUsageRuleSet(nextRuleSet);
+                    setEditorOverride({
+                      name: modelKey,
+                      billingMode: "tiered_expr",
+                      billingExpr: expression,
+                      requestRuleExpr: "",
+                    });
+                  }}
+                />
             ),
           }}
-          expressionComparison={
-            vendorPriceSpec?.mode === "expression"
-              ? splitBillingExprAndRequestRules(
-                  vendorPriceSpec.blocks?.[0]?.note || "",
-                ).billingExpr
-              : undefined
-          }
-          showMissingVendorPrice
+          renderPriceAddon={renderPriceAddon}
+          usageSchema={entry.usage_schema}
+          isSaving={saving}
         />
       </div>
     </div>

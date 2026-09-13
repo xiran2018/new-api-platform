@@ -105,6 +105,7 @@ echo "==> Assembling platform extensions"
 "$repo_root/scripts/assemble-extensions.sh"
 
 echo "==> Checking patches"
+"$repo_root/scripts/verify-core-compatibility.sh"
 git -C "$core_dir" diff --check
 git -C "$repo_root" diff --check
 

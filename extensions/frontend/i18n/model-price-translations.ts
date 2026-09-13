@@ -54,6 +54,12 @@ const resources: Record<string, Record<string, string>> = {
     "Unified text/image/video input + separate audio pricing":
       "文本/图片/视频统一输入价 + 音频单独计价",
     "Live translation multimodal token pricing": "实时多模态翻译计价",
+    "Separate multimodal input and output pricing": "多模态输入与输出分类计价",
+    "Text output by input modality": "按输入模态区分文本输出",
+    "Pure text output price": "纯文本输出价格",
+    "Multimodal text output price": "多模态文本输出价格",
+    "Pure text requests use the pure text output price; requests containing image, video, or audio input use the multimodal text output price. When audio is generated, text output is not charged and only audio output is billed.":
+      "纯文本请求使用纯文本输出价格；请求包含图片、视频或音频输入时使用多模态文本输出价格；生成音频时不收取文本输出费用，仅按音频输出计费。",
     "Audio transcription per second": "语音识别按秒计费",
     "Audio duration pricing": "音频时长计费",
     "Audio duration price": "音频输入价格",
@@ -97,6 +103,8 @@ const resources: Record<string, Record<string, string>> = {
     "Sort order": "排序",
     "Display name": "显示名称",
     "Model description": "模型说明",
+    "Administrator notes": "管理员备注",
+    "Visible to administrators only": "仅管理员可见",
     "Displayed below the model name on the public price page": "显示在客户端模型名称下方",
     "Model key": "模型标识",
     "The model key is used for API requests and cannot be changed after creation.":
@@ -142,6 +150,10 @@ const resources: Record<string, Record<string, string>> = {
     "Controls the currency shown on the public model price page.":
       "控制该模型在前台模型价格页面中显示的币种；底层价格仍以 USD 保存。",
     "Controls public price page visibility only": "仅控制前台价格页显示",
+    "Model square visibility": "模型广场展示",
+    "Controls public page visibility only": "仅控制公开页面是否展示",
+    "Allow API calls": "允许 API 调用",
+    "Disabled by default. Users can call this model only after an administrator enables it.": "默认关闭，只有管理员开启后用户才能调用该模型。",
     "USD is the storage currency; displayed amounts follow the system exchange rate. The timezone is used only for active time-window pricing.":
       "价格以 USD 保存，页面显示金额按系统汇率换算；时区仅用于判断分时价格的当前区间。",
   },
@@ -158,6 +170,8 @@ const resources: Record<string, Record<string, string>> = {
     "Approximate CNY": "價格",
     "CNY conversion unavailable": "人民幣換算暫不可用，請檢查系統匯率",
     "Model name": "模型名稱",
+    "Administrator notes": "管理員備註",
+    "Visible to administrators only": "僅管理員可見",
     Vendor: "廠商",
     Tags: "標籤",
     "Search models": "搜尋模型",
@@ -195,6 +209,8 @@ const resources: Record<string, Record<string, string>> = {
       "Controls the currency shown on the public model price page.",
     "Approximate CNY": "Approximate CNY",
     "CNY conversion unavailable": "CNY conversion unavailable; check the system exchange rate",
+    "Administrator notes": "Administrator notes",
+    "Visible to administrators only": "Visible to administrators only",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Temporarily unavailable. Coming soon, please stay tuned.",
   },
@@ -205,6 +221,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "Prix réel",
     "Approximate CNY": "Équivalent approximatif en CNY",
     "CNY conversion unavailable": "Conversion en CNY indisponible ; vérifiez le taux de change système",
+    "Administrator notes": "Notes administrateur",
+    "Visible to administrators only": "Visible uniquement par les administrateurs",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Temporairement indisponible. Bientôt disponible.",
   },
@@ -215,6 +233,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "実際の価格",
     "Approximate CNY": "人民元換算（概算）",
     "CNY conversion unavailable": "人民元換算を利用できません。システム為替レートを確認してください",
+    "Administrator notes": "管理者メモ",
+    "Visible to administrators only": "管理者のみ閲覧できます",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "現在利用できません。近日公開予定です。",
   },
@@ -225,6 +245,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "Фактическая цена",
     "Approximate CNY": "Примерно в юанях",
     "CNY conversion unavailable": "Пересчет в юани недоступен; проверьте системный курс",
+    "Administrator notes": "Заметки администратора",
+    "Visible to administrators only": "Видно только администраторам",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Временно недоступно. Скоро будет доступно.",
   },
@@ -235,6 +257,8 @@ const resources: Record<string, Record<string, string>> = {
     "Actual price": "Giá thực tế",
     "Approximate CNY": "Quy đổi CNY ước tính",
     "CNY conversion unavailable": "Không thể quy đổi CNY; hãy kiểm tra tỷ giá hệ thống",
+    "Administrator notes": "Ghi chú quản trị viên",
+    "Visible to administrators only": "Chỉ quản trị viên có thể xem",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Tạm thời chưa khả dụng. Sắp ra mắt, vui lòng đón chờ.",
   },

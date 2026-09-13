@@ -32,6 +32,9 @@ export type PriceBlock = {
   image?: number | null;
   audioInput?: number | null;
   audioOutput?: number | null;
+  videoInput?: number | null;
+  videoOutput?: number | null;
+  multimodalOutput?: number | null;
   price?: number | null;
   unit?: string;
   start?: string;
@@ -53,6 +56,7 @@ export type ModelPrice = {
   modelKey: string;
   displayName: string;
   description: string;
+  adminNote?: string;
   vendor: string;
   tags: string[];
   currency: string;
@@ -64,5 +68,6 @@ export type ModelPrice = {
   upstreamSource?: string;
   syncStatus: string;
   published: boolean;
+  apiEnabled: boolean;
   sortOrder: number;
 };

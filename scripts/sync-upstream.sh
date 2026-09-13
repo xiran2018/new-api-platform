@@ -101,6 +101,7 @@ fi
 git -C "$core_dir" merge --no-edit upstream/main
 
 "$repo_root/scripts/assemble-extensions.sh"
+"$repo_root/scripts/verify-core-compatibility.sh"
 
 (
   cd "$core_dir/web"

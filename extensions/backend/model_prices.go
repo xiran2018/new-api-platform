@@ -2,6 +2,7 @@ package platform
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ type modelPriceCatalog struct {
 	ModelKey          string          `gorm:"size:255;uniqueIndex;not null" json:"modelKey"`
 	DisplayName       string          `gorm:"size:255;not null" json:"displayName"`
 	Description       string          `gorm:"size:500" json:"description"`
+	AdminNote         string          `gorm:"size:2000" json:"adminNote"`
 	Vendor            string          `gorm:"size:120;index" json:"vendor"`
 	Tags              json.RawMessage `gorm:"type:jsonb;not null;default:'[]'" json:"tags"`
 	Currency          string          `gorm:"size:8;not null;default:CNY" json:"currency"`
@@ -33,6 +35,8 @@ type modelPriceCatalog struct {
 	UpstreamSource    string          `gorm:"size:255" json:"upstreamSource"`
 	SyncStatus        string          `gorm:"size:24;not null;default:idle" json:"syncStatus"`
 	Published         bool            `gorm:"index;not null;default:false" json:"published"`
+	APIEnabled        bool            `gorm:"index;not null;default:false" json:"apiEnabled"`
+	MetadataManaged   bool            `gorm:"index;not null;default:false" json:"-"`
 	SortOrder         int             `gorm:"index;not null;default:0" json:"sortOrder"`
 	LastSyncedAt      *time.Time      `json:"lastSyncedAt"`
 	CreatedAt         time.Time       `json:"createdAt"`
@@ -43,6 +47,7 @@ type modelPriceInput struct {
 	ModelKey          string          `json:"modelKey"`
 	DisplayName       string          `json:"displayName"`
 	Description       string          `json:"description"`
+	AdminNote         string          `json:"adminNote"`
 	Vendor            string          `json:"vendor"`
 	Tags              json.RawMessage `json:"tags"`
 	Currency          string          `json:"currency"`
@@ -51,7 +56,21 @@ type modelPriceInput struct {
 	LLMAPIPriceSpec   json.RawMessage `json:"llmapiPriceSpec"`
 	RuntimePricingRef json.RawMessage `json:"runtimePricingRef"`
 	Published         bool            `json:"published"`
+	APIEnabled        bool            `json:"apiEnabled"`
 	SortOrder         int             `json:"sortOrder"`
+}
+
+type publicModelPrice struct {
+	ID              uint64          `json:"id"`
+	ModelKey        string          `json:"modelKey"`
+	DisplayName     string          `json:"displayName"`
+	Description     string          `json:"description"`
+	Vendor          string          `json:"vendor"`
+	Tags            json.RawMessage `json:"tags"`
+	Currency        string          `json:"currency"`
+	Timezone        string          `json:"timezone"`
+	VendorPriceSpec json.RawMessage `json:"vendorPriceSpec"`
+	LLMAPIPriceSpec json.RawMessage `json:"llmapiPriceSpec"`
 }
 
 func registerModelPriceRoutes(r *gin.RouterGroup) {
@@ -147,7 +166,7 @@ func previewModelsDevPrices(c *gin.Context) {
 		return
 	}
 	var rows []modelPriceCatalog
-	if err = db.Select("model_key", "vendor").Find(&rows).Error; err != nil {
+	if err = db.Where("metadata_managed = ?", true).Select("model_key", "vendor").Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 		return
 	}
@@ -189,9 +208,9 @@ func getPublicModelPrices(c *gin.Context) {
 		c.JSON(500, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	var rows []modelPriceCatalog
+	var rows []publicModelPrice
 	q := strings.TrimSpace(c.Query("q"))
-	query := db.Where("published = ?", true)
+	query := db.Model(&modelPriceCatalog{}).Where("published = ? AND metadata_managed = ?", true, true)
 	if q != "" {
 		query = query.Where("model_key ILIKE ? OR display_name ILIKE ? OR description ILIKE ? OR vendor ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%", "%"+q+"%")
 	}
@@ -211,9 +230,9 @@ func listAdminModelPrices(c *gin.Context) {
 	}
 	var rows []modelPriceCatalog
 	q := strings.TrimSpace(c.Query("q"))
-	query := db
+	query := db.Where("metadata_managed = ?", true)
 	if q != "" {
-		query = query.Where("model_key ILIKE ? OR display_name ILIKE ? OR description ILIKE ? OR vendor ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%", "%"+q+"%")
+		query = query.Where("model_key ILIKE ? OR display_name ILIKE ? OR description ILIKE ? OR vendor ILIKE ? OR admin_note ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%", "%"+q+"%", "%"+q+"%")
 	}
 	err = query.Order("sort_order asc, id asc").Find(&rows).Error
 	c.JSON(200, gin.H{"success": err == nil, "data": rows})
@@ -225,7 +244,9 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		return err
 	}
 	storedBlockMetadata := make(map[string]map[string]any, len(storedRows))
+	storedPriceSpecs := make(map[string]json.RawMessage, len(storedRows))
 	for _, row := range storedRows {
+		storedPriceSpecs[row.ModelKey] = row.LLMAPIPriceSpec
 		var spec struct {
 			Blocks []map[string]any `json:"blocks"`
 		}
@@ -282,8 +303,12 @@ func syncExistingModelPrices(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
-	rows := make([]modelPriceCatalog, 0, len(models))
-	seen := make(map[string]struct{}, len(models))
+	connections, err := model.GetModelConnections()
+	if err != nil {
+		return err
+	}
+	rows := make([]modelPriceCatalog, 0, len(models)+len(connections))
+	seen := make(map[string]struct{}, len(models)+len(connections))
 	for index, metadata := range models {
 		name := strings.TrimSpace(metadata.ModelName)
 		if name == "" {
@@ -311,23 +336,29 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		priceSpec := json.RawMessage(`{}`)
 		if hasPricing && configuredPricing[name] {
 			priceSpec = priceSpecFor(name, pricing)
+		} else if stored, exists := storedPriceSpecs[name]; exists {
+			priceSpec = stored
 		}
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
-			Published:         true, SortOrder: index,
+			Published:         metadata.Status == 1, APIEnabled: metadata.APIEnabled, MetadataManaged: true, SortOrder: index,
 		})
 	}
-	for name, pricing := range pricingByName {
-		name = strings.TrimSpace(name)
+	// Model management is the metadata catalogue, while price management must
+	// also cover callable models discovered from enabled channel abilities.
+	for _, connection := range connections {
+		name := strings.TrimSpace(connection.Model)
 		if name == "" {
 			continue
 		}
 		if _, exists := seen[name]; exists {
 			continue
 		}
+		seen[name] = struct{}{}
+		pricing, hasPricing := pricingByName[name]
 		vendor := vendorNames[pricing.VendorID]
 		if vendor == "" {
 			vendor = strings.TrimSpace(pricing.OwnerBy)
@@ -337,24 +368,31 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		}
 		tagsJSON, _ := json.Marshal(splitModelTags(pricing.Tags))
 		priceSpec := json.RawMessage(`{}`)
-		if configuredPricing[name] {
+		if hasPricing && configuredPricing[name] {
 			priceSpec = priceSpecFor(name, pricing)
+		} else if stored, exists := storedPriceSpecs[name]; exists {
+			priceSpec = stored
 		}
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
-			Published:         true, SortOrder: len(rows),
+			Published: false, APIEnabled: false, MetadataManaged: true, SortOrder: len(rows),
 		})
 	}
-	if len(rows) == 0 {
-		return nil
-	}
-	return db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "model_key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"llm_api_price_spec", "runtime_pricing_ref"}),
-	}).CreateInBatches(rows, 200).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&modelPriceCatalog{}).Where("metadata_managed = ?", true).Update("metadata_managed", false).Error; err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "model_key"}},
+			DoUpdates: clause.AssignmentColumns([]string{"llm_api_price_spec", "runtime_pricing_ref", "published", "api_enabled", "metadata_managed"}),
+		}).CreateInBatches(rows, 200).Error
+	})
 }
 
 func splitModelTags(raw string) []string {
@@ -438,7 +476,7 @@ func bindModelPrice(c *gin.Context) (modelPriceCatalog, error) {
 	if err := c.ShouldBindJSON(&in); err != nil {
 		return modelPriceCatalog{}, err
 	}
-	in.ModelKey, in.DisplayName, in.Description, in.Vendor = strings.TrimSpace(in.ModelKey), strings.TrimSpace(in.DisplayName), strings.TrimSpace(in.Description), strings.TrimSpace(in.Vendor)
+	in.ModelKey, in.DisplayName, in.Description, in.AdminNote, in.Vendor = strings.TrimSpace(in.ModelKey), strings.TrimSpace(in.DisplayName), strings.TrimSpace(in.Description), strings.TrimSpace(in.AdminNote), strings.TrimSpace(in.Vendor)
 	if in.ModelKey == "" || in.DisplayName == "" || in.Vendor == "" {
 		return modelPriceCatalog{}, fmt.Errorf("model, display name and vendor are required")
 	}
@@ -468,11 +506,34 @@ func bindModelPrice(c *gin.Context) (modelPriceCatalog, error) {
 	if in.Timezone == "" {
 		in.Timezone = "Asia/Shanghai"
 	}
-	return modelPriceCatalog{ModelKey: in.ModelKey, DisplayName: in.DisplayName, Description: in.Description, Vendor: in.Vendor, Tags: tags, Currency: in.Currency, Timezone: in.Timezone, VendorPriceSpec: vendor, LLMAPIPriceSpec: ours, RuntimePricingRef: ref, Published: in.Published, SortOrder: in.SortOrder}, nil
+	if !in.Published {
+		in.APIEnabled = false
+	}
+	return modelPriceCatalog{ModelKey: in.ModelKey, DisplayName: in.DisplayName, Description: in.Description, AdminNote: in.AdminNote, Vendor: in.Vendor, Tags: tags, Currency: in.Currency, Timezone: in.Timezone, VendorPriceSpec: vendor, LLMAPIPriceSpec: ours, RuntimePricingRef: ref, Published: in.Published, APIEnabled: in.APIEnabled, SortOrder: in.SortOrder}, nil
+}
+
+func syncManagedModelFlags(row modelPriceCatalog) error {
+	status := 0
+	if row.Published {
+		status = 1
+	}
+	if err := model.SetExactModelCatalogStatus(row.ModelKey, status); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return fmt.Errorf("model catalog visibility update failed: %w", err)
+	}
+	if err := model.SetExactModelAPIEnabled(row.ModelKey, row.APIEnabled); err != nil {
+		return fmt.Errorf("model API availability update failed: %w", err)
+	}
+	return nil
 }
 
 func createModelPrice(c *gin.Context) {
 	row, err := bindModelPrice(c)
+	if err == nil {
+		err = syncManagedModelFlags(row)
+	}
 	if err == nil {
 		db, e := platformDatabase()
 		err = e
@@ -489,10 +550,13 @@ func createModelPrice(c *gin.Context) {
 func updateModelPrice(c *gin.Context) {
 	row, err := bindModelPrice(c)
 	if err == nil {
+		err = syncManagedModelFlags(row)
+	}
+	if err == nil {
 		db, e := platformDatabase()
 		err = e
 		if err == nil {
-			err = db.Model(&modelPriceCatalog{}).Where("id = ?", c.Param("id")).Updates(map[string]any{"display_name": row.DisplayName, "description": row.Description, "vendor": row.Vendor, "tags": row.Tags, "currency": row.Currency, "timezone": row.Timezone, "vendor_price_spec": row.VendorPriceSpec, "llm_api_price_spec": row.LLMAPIPriceSpec, "runtime_pricing_ref": row.RuntimePricingRef, "published": row.Published, "sort_order": row.SortOrder}).Error
+			err = db.Model(&modelPriceCatalog{}).Where("id = ?", c.Param("id")).Updates(map[string]any{"display_name": row.DisplayName, "description": row.Description, "admin_note": row.AdminNote, "vendor": row.Vendor, "tags": row.Tags, "currency": row.Currency, "timezone": row.Timezone, "vendor_price_spec": row.VendorPriceSpec, "llm_api_price_spec": row.LLMAPIPriceSpec, "runtime_pricing_ref": row.RuntimePricingRef, "published": row.Published, "api_enabled": row.APIEnabled, "sort_order": row.SortOrder}).Error
 		}
 	}
 	if err != nil {

@@ -3,7 +3,6 @@ import {
   ChevronRight,
   ExternalLink,
   Pencil,
-  Plus,
   RefreshCcw,
   Search,
   Trash2,
@@ -33,8 +32,12 @@ import {
 } from "@/features/model-pricing/currency";
 import { PricingAmountInput } from "@/features/model-pricing/pricing-amount-input";
 import { PricingCurrencySelector } from "@/features/model-pricing/pricing-currency-selector";
-import { getModelPricing } from "@/features/model-pricing/api";
+import { getModelPricing, previewModelPricingConversion } from "@/features/model-pricing/api";
+import { pricingFromDraft } from "@/features/model-pricing/pricing";
 import { getVendors } from "@/features/models/api";
+import { ModelsDialogs } from "@/features/models/components/models-dialogs";
+import { ModelsPrimaryButtons } from "@/features/models/components/models-primary-buttons";
+import { ModelsProvider, useModels } from "@/features/models/components/models-provider";
 import { combineBillingExpr, splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
 import type { BillingUsageSchema } from "@/features/pricing/types";
 import { TieredPricingEditor } from "@/features/system-settings/models/tiered-pricing-editor";
@@ -49,29 +52,6 @@ import {
   type RuntimePricingEditorHandle,
 } from "./runtime-pricing-editor";
 import { UsageRuleBuilder, validateUsageRuleSet } from "./usage-rule-builder";
-
-const empty: ModelPrice = {
-  id: 0,
-  modelKey: "",
-  displayName: "",
-  description: "",
-  vendor: "",
-  tags: [],
-  currency: "CNY",
-  timezone: "Asia/Shanghai",
-  vendorPriceSpec: {
-    mode: "token",
-    blocks: [{ input: 0, output: 0, unit: "1M tokens" }],
-  },
-  llmapiPriceSpec: {
-    mode: "token",
-    blocks: [{ input: 0, output: 0, unit: "1M tokens" }],
-  },
-  runtimePricingRef: {},
-  syncStatus: "idle",
-  published: false,
-  sortOrder: 0,
-};
 
 const defaultColumnWidths = [240, 180, 140, 340, 460, 96];
 const minimumColumnWidths = [160, 120, 110, 220, 260, 80];
@@ -94,6 +74,31 @@ function loadColumnWidths() {
   return defaultColumnWidths;
 }
 
+function ModelManagementActions({ onChanged }: { onChanged: () => void }) {
+  const { open } = useModels();
+  const previousOpen = useRef(open);
+
+  useEffect(() => {
+    if (previousOpen.current !== null && open === null) onChanged();
+    previousOpen.current = open;
+  }, [open, onChanged]);
+
+  return (
+    <>
+      <ModelsPrimaryButtons />
+      <ModelsDialogs />
+    </>
+  );
+}
+
+function ModelManagementTools({ onChanged }: { onChanged: () => void }) {
+  return (
+    <ModelsProvider>
+      <ModelManagementActions onChanged={onChanged} />
+    </ModelsProvider>
+  );
+}
+
 function SpecEditor({
   value,
   onChange,
@@ -107,6 +112,7 @@ function SpecEditor({
 }) {
   const { t } = useTranslation();
   const [usageSchema, setUsageSchema] = useState<BillingUsageSchema | undefined>();
+  const [convertingLegacy, setConvertingLegacy] = useState(false);
   useEffect(() => {
     if (!modelKey) {
       setUsageSchema(undefined);
@@ -194,6 +200,36 @@ function SpecEditor({
       ...value,
       blocks: blocks.map((b, j) => (j === i ? { ...b, [key]: v } : b)),
     });
+  const legacyDraft = () => {
+    const block = blocks[0];
+    if (!block) return null;
+    if (mode === "request" && block.price != null) {
+      return {
+        name: modelKey,
+        billingMode: "per-request" as const,
+        price: String(block.price),
+      };
+    }
+    if (mode !== "token" || block.input == null) return null;
+    const input = Number(block.input);
+    if (!Number.isFinite(input) || input <= 0) return null;
+    const ratio = (price: number | null | undefined) =>
+      price == null ? undefined : String(Number(price) / input);
+    return {
+      name: modelKey,
+      billingMode: "per-token" as const,
+      ratio: String(input / 2),
+      completionRatio: ratio(block.output),
+      cacheRatio: ratio(block.cache),
+      createCacheRatio: ratio(block.createCache),
+      imageRatio: ratio(block.image),
+      audioRatio: ratio(block.audioInput),
+      audioCompletionRatio:
+        block.audioInput == null || block.audioOutput == null
+          ? undefined
+          : String(Number(block.audioOutput) / Number(block.audioInput)),
+    };
+  };
   return (
     <div className="space-y-3">
       <div className="rounded-md border bg-muted/20 p-3 text-sm">
@@ -230,12 +266,49 @@ function SpecEditor({
         }}
       >
         <TabsList className="grid h-auto w-full max-w-3xl grid-cols-2 sm:grid-cols-4">
-          <TabsTrigger value="token">{t("Per-token")}</TabsTrigger>
-          <TabsTrigger value="request">{t("Per-request")}</TabsTrigger>
+          <TabsTrigger value="token">{t("Per-token (deprecated)")}</TabsTrigger>
+          <TabsTrigger value="request">{t("Per-request (deprecated)")}</TabsTrigger>
           <TabsTrigger value="expression">{t("Expression")}</TabsTrigger>
           <TabsTrigger value="media">{t("Advanced media pricing rules")}</TabsTrigger>
         </TabsList>
       </Tabs>
+      {(mode === "token" || mode === "request") && (
+        <div className="space-y-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-900 dark:text-amber-100">
+          <p className="font-medium">
+            {t("Legacy pricing is deprecated. Convert the current prices to an expression draft, then save to apply it.")}
+          </p>
+          <Button
+            type="button"
+            disabled={convertingLegacy}
+            onClick={async () => {
+              const draft = legacyDraft();
+              if (!draft) return;
+              setConvertingLegacy(true);
+              try {
+                const result = await previewModelPricingConversion({
+                  model_name: modelKey,
+                  pricing: pricingFromDraft(draft),
+                });
+                if (!result.expression) {
+                  toast.error(t(result.unsupported_reason || "Failed to prepare pricing conversion"));
+                  return;
+                }
+                onChange({
+                  ...value,
+                  mode: "expression",
+                  blocks: [{ label: "Expression", note: result.expression, baseExpression: result.expression }],
+                });
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : t("Failed to prepare pricing conversion"));
+              } finally {
+                setConvertingLegacy(false);
+              }
+            }}
+          >
+            {convertingLegacy ? t("Preparing conversion...") : t("Convert to expression")}
+          </Button>
+        </div>
+      )}
       {mode === "media" && (
         <UsageRuleBuilder
           value={value.blocks?.[0]?.usageRuleSet}
@@ -309,7 +382,6 @@ function SpecEditor({
                     onRequestRuleExprChange={(next) =>
                       set(i, "note", combineBillingExpr(expression.billingExpr, next))
                     }
-                    cnyExchangeRate={showCnyHint ? cnyExchangeRate : undefined}
                   />
                 );
               })()}
@@ -489,7 +561,7 @@ export function ModelPriceManagementPage() {
         <h1 className="text-2xl font-semibold">
           {t("Model price management")}
         </h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             onClick={() =>
@@ -509,10 +581,7 @@ export function ModelPriceManagementPage() {
             <RefreshCcw className="mr-2 size-4" />
             {t("Upstream price sync")}
           </Button>
-          <Button onClick={() => setEdit({ ...empty })}>
-            <Plus className="mr-2 size-4" />
-            {t("Add model")}
-          </Button>
+          <ModelManagementTools onChanged={load} />
         </div>
       </div>
       <div className="mb-4 flex shrink-0 flex-wrap gap-3">
@@ -585,7 +654,7 @@ export function ModelPriceManagementPage() {
                 <div
                   role="row"
                   key={r.id}
-                  className="group grid border-t hover:bg-muted/30"
+                  className="group grid border-b hover:bg-muted/30"
                   style={{
                     gridTemplateColumns: columnWidths.map((width) => `${width}px`).join(" "),
                     width: `max(100%, ${columnWidths.reduce((sum, width) => sum + width, 0)}px)`,
@@ -795,6 +864,19 @@ export function ModelPriceManagementPage() {
                   value={edit.description || ""}
                   onChange={(e) => setEdit({ ...edit, description: e.target.value })}
                 /></label>
+                <label className="space-y-1 text-sm md:col-span-3">
+                  <span>{t("Administrator notes")}</span>
+                  <textarea
+                    className="min-h-24 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    maxLength={2000}
+                    placeholder={t("Visible to administrators only")}
+                    value={edit.adminNote || ""}
+                    onChange={(event) => setEdit({ ...edit, adminNote: event.target.value })}
+                  />
+                  <span className="block text-xs text-muted-foreground">
+                    {t("Visible to administrators only")}
+                  </span>
+                </label>
                 <label className="space-y-1 text-sm">
                   <span>{t("Vendor")}</span>
                   <select
@@ -843,12 +925,26 @@ export function ModelPriceManagementPage() {
                   <input
                     type="checkbox"
                     checked={edit.published}
+                    onChange={(e) => setEdit({
+                      ...edit,
+                      published: e.target.checked,
+                      apiEnabled: e.target.checked ? edit.apiEnabled : false,
+                    })}
+                  />
+                  {t("Model square visibility")}
+                  <span className="text-xs text-muted-foreground">{t("Controls public page visibility only")}</span>
+                </label>
+                <label className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={edit.apiEnabled}
+                    disabled={!edit.published}
                     onChange={(e) =>
-                      setEdit({ ...edit, published: e.target.checked })
+                      setEdit({ ...edit, apiEnabled: e.target.checked })
                     }
                   />
-                  {t("Published")}
-                  <span className="text-xs text-muted-foreground">{t("Controls public price page visibility only")}</span>
+                  {t("Allow API calls")}
+                  <span className="text-xs text-muted-foreground">{t("Disabled by default. Users can call this model only after an administrator enables it.")}</span>
                 </label>
               </div>
               <div className="rounded-md border p-3 text-sm text-muted-foreground">

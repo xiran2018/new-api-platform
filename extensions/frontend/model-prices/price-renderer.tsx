@@ -34,6 +34,9 @@ const blockHasVisiblePrice = (block: PriceBlock, requestMode: boolean) =>
         block.image,
         block.audioInput,
         block.audioOutput,
+        block.videoInput,
+        block.videoOutput,
+        block.multimodalOutput,
       ].some(hasNonZeroPrice);
 
 function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
@@ -59,6 +62,11 @@ function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
         image: tier.image_unit_cost == null ? null : tier.image_unit_cost * multiplier,
         audioInput: tier.audio_input_unit_cost == null ? null : tier.audio_input_unit_cost * multiplier,
         audioOutput: tier.audio_output_unit_cost == null ? null : tier.audio_output_unit_cost * multiplier,
+        videoInput: tier.video_input_unit_cost == null ? null : Number(tier.video_input_unit_cost) * multiplier,
+        videoOutput: tier.video_output_unit_cost == null ? null : Number(tier.video_output_unit_cost) * multiplier,
+        multimodalOutput: tier.multimodal_output_enabled
+          ? Number(tier.multimodal_output_unit_cost ?? 0) * multiplier
+          : null,
         unit: "1M tokens",
         discount: source.discount,
         note: pricesOnlyExpressionNote(tier.conditions),
@@ -351,7 +359,7 @@ export function PriceRenderer({
                 </span>
               )}
             </div>
-            {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.image != null || b.audioInput != null || b.audioOutput != null)) || (showRequestPrice && b.price != null)) && (
+            {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.image != null || b.audioInput != null || b.audioOutput != null || b.videoInput != null || b.videoOutput != null || b.multimodalOutput != null)) || (showRequestPrice && b.price != null)) && (
               <div className="space-y-1.5 text-sm">
                 {showTokenPrices && hasNonZeroPrice(b.input) && (
                   <div>
@@ -362,7 +370,7 @@ export function PriceRenderer({
                 )}
                 {showTokenPrices && hasNonZeroPrice(b.output) && (
                   <div>
-                    {t("Output price")}: <b>{money(b.output, currency)}</b>
+                    {t(b.multimodalOutput != null ? "Pure text output price" : "Output price")}: <b>{money(b.output, currency)}</b>
                     {delta(b.output, compared?.output)}
                     {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
                   </div>
@@ -380,6 +388,9 @@ export function PriceRenderer({
                   ["image", "Image input price"],
                   ["audioInput", "Audio input price"],
                   ["audioOutput", "Audio output price"],
+                  ["videoInput", "Video input price"],
+                  ["videoOutput", "Video output price"],
+                  ["multimodalOutput", "Multimodal text output price"],
                 ] as const).map(([field, label]) =>
                   hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency)}</b>{delta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
                 )}
