@@ -53,6 +53,7 @@ const resources: Record<string, Record<string, string>> = {
     "Text/image/audio split pricing": "文本、图片、音频分别计价",
     "Unified text/image/video input + separate audio pricing":
       "文本/图片/视频统一输入价 + 音频单独计价",
+    "Qwen3 Omni three output prices": "Qwen3 Omni 三种输出价格",
     "Live translation multimodal token pricing": "实时多模态翻译计价",
     "Separate multimodal input and output pricing": "多模态输入与输出分类计价",
     "Text output by input modality": "按输入模态区分文本输出",
