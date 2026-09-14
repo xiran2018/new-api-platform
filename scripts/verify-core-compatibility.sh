@@ -10,6 +10,7 @@ addon_context="$repo_root/extensions/frontend/model-prices/pricing-field-addon.t
 adapter="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.tsx"
 usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.tsx"
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
+capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
 model_pricing_api="$repo_root/core/new-api/web/src/features/model-pricing/api.ts"
@@ -51,6 +52,15 @@ for key in \
 do
   require_text "$presets" "key: '$key'" "a platform expression preset was lost during upstream synchronization"
 done
+
+for capability in \
+  token-pricing request-pricing expression-pricing advanced-media-pricing \
+  shared-input-output-branches input-length-tiers thinking-parameter-branches \
+  audio-duration-pricing video-output-pricing
+do
+  require_text "$capability_contract" "'$capability'" "a stable billing capability was removed"
+done
+require_text "$presets" 'text+audio output (audio only)' "the shared-input output branch capability was removed"
 
 for key in image boolean volume video videoAudio videoMode imageVideo audioSeconds ttsCharacters voiceCount taskMatrix blank
 do

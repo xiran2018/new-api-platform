@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { PLATFORM_BILLING_PRESET_GROUPS } from "@/platform/model-prices/expression-presets";
+import { BILLING_CAPABILITY_CONTRACT } from "@/platform/model-prices/billing-capability-contract";
 
 import { compileBillingExpression } from "@/features/pricing/lib/billing-expression/parser";
 import { evaluateBillingExpression } from "@/features/pricing/lib/billing-expression/runtime";
@@ -11,6 +13,14 @@ import {
 } from "./usage-rule-builder";
 
 describe("screenshot-derived billing templates", () => {
+  it("keeps the stable billing capability contract represented", () => {
+    const presets = PLATFORM_BILLING_PRESET_GROUPS.flatMap((group) => group.presets)
+    const expressions = presets.map((preset) => preset.expr)
+    expect(BILLING_CAPABILITY_CONTRACT).toContain("shared-input-output-branches")
+    expect(expressions.some((expr) => expr.includes("text+audio output (audio only)"))).toBe(true)
+    expect(expressions.some((expr) => expr.includes("ao > 0"))).toBe(true)
+  })
+
   it("keeps every supported visual template valid and executable", () => {
     expect(BILLING_TEMPLATE_KEYS).toEqual([
       "image",
