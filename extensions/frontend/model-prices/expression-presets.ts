@@ -30,7 +30,7 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
       {
         key: 'omni-output-modes',
         label: 'Qwen3 Omni three output prices',
-        expr: '(img > 0 || ai > 0 || vid > 0) ? (ao > 0 ? tier("text+audio output", p * 1.8 + ai * 15.8 + img * 3.3 + vid * 3.3 + c * 0 + ao * 62.6) : tier("multimodal text output", p * 1.8 + ai * 15.8 + img * 3.3 + vid * 3.3 + c * 12.7)) : tier("pure text output", p * 1.8 + c * 6.9)',
+        expr: '(p * 1.8 + ai * 15.8 + img * 3.3 + vid * 3.3) + (ao > 0 ? tier("text+audio output (audio only)", c * 0 + ao * 62.6) : ((img > 0 || ai > 0 || vid > 0) ? tier("multimodal text output", c * 12.7) : tier("pure text output", c * 6.9)))',
       },
       {
         key: 'live-translation-multimodal',
