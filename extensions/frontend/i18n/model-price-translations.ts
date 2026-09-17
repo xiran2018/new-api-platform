@@ -50,6 +50,10 @@ const resources: Record<string, Record<string, string>> = {
     "Tiered pricing": "分段计价",
     "Input token range pricing": "输入 Token 区间计价",
     "Input range + thinking output pricing": "输入区间 + 思考模式输出计价",
+    "Qwen input range and thinking output prices": "Qwen 输入区间与思考/非思考输出计价",
+    "Shared input + thinking output prices": "共享输入价 + 思考/非思考输出价",
+    "Two input ranges + thinking output prices": "两段输入长度 + 思考/非思考输出计价",
+    "Edit tier name": "编辑档位名称",
     "Text/image/audio split pricing": "文本、图片、音频分别计价",
     "Unified text/image/video input + separate audio pricing":
       "文本/图片/视频统一输入价 + 音频单独计价",

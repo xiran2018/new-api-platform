@@ -8,11 +8,26 @@ import { evaluateBillingExpression } from "@/features/pricing/lib/billing-expres
 import {
   BILLING_TEMPLATE_KEYS,
   createUsageRuleTemplate,
+  syncExampleTierNames,
   usageRuleSetExpression,
   validateUsageRuleSet,
 } from "./usage-rule-builder";
 
 describe("screenshot-derived billing templates", () => {
+  it("updates generated media tier names without rewriting custom labels or prices", () => {
+    const original = createUsageRuleTemplate("volume", "request").rules;
+    const changed = syncExampleTierNames(original, 25, 30);
+    expect(changed[0].label).toBe("≤ 30 张");
+    expect(changed[1].label).toBe("31 - 125 张");
+    expect(changed[0].charges).toEqual(original[0].charges);
+    expect(syncExampleTierNames([{ ...original[0], label: "自定义批量档" }], 25, 128)[0].label)
+      .toBe("自定义批量档");
+    const video = createUsageRuleTemplate("video", "request").rules;
+    expect(video[1].label).toBe("其他视频分辨率");
+    expect(syncExampleTierNames(video, "720P", "480P")[0].label).toBe("480P");
+    expect(syncExampleTierNames(syncExampleTierNames(video, "720P", ""), "", "480P")[0].label)
+      .toBe("480P");
+  });
   it("keeps the stable billing capability contract represented", () => {
     const presets = PLATFORM_BILLING_PRESET_GROUPS.flatMap((group) => group.presets)
     const expressions = presets.map((preset) => preset.expr)

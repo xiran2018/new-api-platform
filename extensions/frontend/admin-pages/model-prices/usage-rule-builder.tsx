@@ -103,6 +103,28 @@ const rule = (
   charges: UsagePriceCharge[] = [charge()],
 ): UsagePriceRule => ({ id: id(), label, conditions, charges });
 
+export function syncExampleTierNames(rules: UsagePriceRule[], oldValue: UsageRuleCondition['value'], newValue: UsageRuleCondition['value']): UsagePriceRule[] {
+  if (String(oldValue) === String(newValue) || String(newValue).trim() === "") return rules;
+  const oldText = String(oldValue);
+  const newText = String(newValue);
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return rules.map((item) => {
+    if (typeof oldValue === "number" && typeof newValue === "number" &&
+        item.label.startsWith(`${oldValue + 1} - `)) {
+      return { ...item, label: `${newValue + 1}${item.label.slice(String(oldValue + 1).length)}` };
+    }
+    // Keep the displayed resolution when a numeric input is cleared mid-edit.
+    // On the next keystroke, its label provides the previous complete value.
+    const displayedResolution = item.label.match(/^\d+(?:\.\d+)?(?:DPI|K|P)(?=\s|$)/i)?.[0];
+    const prior = displayedResolution && /^\d+(?:\.\d+)?(?:DPI|K|P)$/i.test(newText)
+      ? displayedResolution : oldText;
+    // A custom name does not start with a price-template threshold.
+    if (!prior || !new RegExp(`^(?:[≤>\\s]*${escape(prior)}(?:\\b|\\s|$)|\\d+(?:\\.\\d+)?\\s*-\\s*${escape(prior)}(?:\\b|\\s|$))`, 'i').test(item.label)) return item;
+    const oldBound = new RegExp(`(^|[^\\w.])${escape(prior)}(?![\\w.])`, 'gi');
+    return { ...item, label: item.label.replace(oldBound, `$1${newText}`) };
+  });
+}
+
 export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSet["execution"]): UsageRuleSet {
   const wrap = (rules: UsagePriceRule[]): UsageRuleSet => ({ version: 1, execution, rules });
   if (key === "image") {
@@ -110,7 +132,7 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       rule("1K", [{ field: "resolution_tier", operator: "eq", value: "1K" }], [
         charge("input_images", "张"), charge("output_images", "张"),
       ]),
-      rule("2K 及以上", [], [charge("input_images", "张"), charge("output_images", "张")]),
+      rule("其他图片分辨率", [], [charge("input_images", "张"), charge("output_images", "张")]),
     ]);
   }
   if (key === "boolean") {
@@ -131,7 +153,7 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
   if (key === "video") {
     return wrap([
       rule("720P", [{ field: "resolution", operator: "eq", value: "720P" }], [charge("seconds", "秒")]),
-      rule("1080P", [], [charge("seconds", "秒")]),
+      rule("其他视频分辨率", [], [charge("seconds", "秒")]),
     ]);
   }
   if (key === "videoAudio") {
@@ -139,11 +161,11 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       rule("720P with audio", [{ field: "resolution", operator: "eq", value: "720P" }, { field: "audio", operator: "eq", value: true }], [charge("seconds", "秒")]),
       rule("1080P with audio", [{ field: "resolution", operator: "eq", value: "1080P" }, { field: "audio", operator: "eq", value: true }], [charge("seconds", "秒")]),
       rule("720P without audio", [{ field: "resolution", operator: "eq", value: "720P" }], [charge("seconds", "秒")]),
-      rule("1080P without audio", [], [charge("seconds", "秒")]),
+      rule("其他无声视频分辨率", [], [charge("seconds", "秒")]),
     ]);
   }
   if (key === "videoMode") return wrap([rule("Standard mode", [{ field: "mode", operator: "eq", value: "wan-std" }], [charge("seconds", "秒")]), rule("Professional mode", [], [charge("seconds", "秒")])]);
-  if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("720P output video", [], [charge("seconds", "秒")])]);
+  if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("其他视频分辨率", [], [charge("seconds", "秒")])]);
   if (key === "audioSeconds") return wrap([rule("Audio duration", [], [charge("seconds", "秒")])]);
   if (key === "ttsCharacters") {
     return wrap([
@@ -413,7 +435,13 @@ export function UsageRuleBuilder({
                       <option value="eq">=</option><option value="ne">!=</option>
                       {(usageSchema?.[condition.field]?.type === "number" || ["input_images", "output_images", "count", "characters", "tts_input_characters", "tts_output_characters", "seconds"].includes(condition.field)) && <><option value="lte">≤</option><option value="lt">&lt;</option><option value="gte">≥</option><option value="gt">&gt;</option></>}
                     </select>
-                    <ConditionValueEditor condition={condition} schema={usageSchema} onChange={(value) => { const conditions = [...item.conditions]; conditions[conditionIndex] = { ...condition, value }; updateRule(ruleIndex, { ...item, conditions }); }} />
+                    <ConditionValueEditor condition={condition} schema={usageSchema} onChange={(value) => {
+                      const conditions = [...item.conditions];
+                      conditions[conditionIndex] = { ...condition, value };
+                      const nextRules = [...rules];
+                      nextRules[ruleIndex] = { ...item, conditions };
+                      commitRules(syncExampleTierNames(nextRules, condition.value, value));
+                    }} />
                     <Button type="button" variant="ghost" size="icon" title={t("Delete condition")} onClick={() => updateRule(ruleIndex, { ...item, conditions: item.conditions.filter((_, index) => index !== conditionIndex) })}><Trash2 className="size-4" /></Button>
                   </div>
                 ))}

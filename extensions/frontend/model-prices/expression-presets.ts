@@ -12,6 +12,21 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         label: 'Input range + thinking output pricing',
         expr: 'len <= 256000 ? (param("enable_thinking") == true ? tier("0-256K thinking", p * 2 + c * 12) : tier("0-256K", p * 2 + c * 8)) : (param("enable_thinking") == true ? tier("256K+ thinking", p * 6 + c * 24) : tier("256K+", p * 6 + c * 16))',
       },
+      {
+        key: 'qwen-thinking-output',
+        label: 'Qwen input range and thinking output prices',
+        expr: 'len <= 256000 ? (param("enable_thinking") == true ? tier("0-256K thinking", p * 1.8 + c * 10.8) : tier("0-256K non-thinking", p * 1.8 + c * 10.8)) : (param("enable_thinking") == true ? tier("256K+ thinking (edit price)", p * 1.8 + c * 10.8) : tier("256K+ non-thinking (edit price)", p * 1.8 + c * 10.8))',
+      },
+      {
+        key: 'shared-input-thinking-output',
+        label: 'Shared input + thinking output prices',
+        expr: '(p * 1.8) + (param("enable_thinking") == true ? tier("thinking output", c * 10.8) : tier("non-thinking output", c * 10.8))',
+      },
+      {
+        key: 'two-range-thinking-output',
+        label: 'Two input ranges + thinking output prices',
+        expr: 'len <= 256000 ? (param("enable_thinking") == true ? tier("Short context thinking", p * 2 + c * 8) : tier("Short context non-thinking", p * 2 + c * 8)) : (param("enable_thinking") == true ? tier("Long context thinking", p * 6 + c * 24) : tier("Long context non-thinking", p * 6 + c * 24))',
+      },
     ],
   },
   {

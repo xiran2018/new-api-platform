@@ -44,6 +44,9 @@ require_text() {
 for key in \
   input-length-tiers \
   input-length-thinking-tiers \
+  qwen-thinking-output \
+  shared-input-thinking-output \
+  two-range-thinking-output \
   text-image-audio-split \
   unified-multimodal-input-audio-output \
   omni-output-modes \
