@@ -441,7 +441,7 @@ export function PriceRenderer({
                 </span>
               )}
             </div>
-            {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.image != null || b.audioInput != null || b.audioOutput != null || b.videoInput != null || b.videoOutput != null || b.multimodalOutput != null)) || (showRequestPrice && b.price != null)) && (
+            {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.createCache1h != null || b.image != null || b.imageOutput != null || b.audioInput != null || b.audioOutput != null || b.audioDuration != null || b.videoInput != null || b.videoOutput != null || b.multimodalOutput != null)) || (showRequestPrice && b.price != null)) && (
               <div className="space-y-1.5 text-sm">
                 {showTokenPrices && hasNonZeroPrice(b.input) && (
                   <div>

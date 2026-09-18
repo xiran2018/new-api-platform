@@ -239,6 +239,24 @@ func listAdminModelPrices(c *gin.Context) {
 }
 
 func syncExistingModelPrices(db *gorm.DB) error {
+	// Older catalog rows were created with USD as the implicit display default.
+	// Migrate that all-legacy state once; after at least one row is explicitly
+	// set to another currency, preserve per-model administrator choices.
+	var currencyState struct {
+		Total int64
+		USD   int64
+	}
+	if err := db.Model(&modelPriceCatalog{}).
+		Where("metadata_managed = ?", true).
+		Select("count(*) AS total, coalesce(sum(case when currency = 'USD' then 1 else 0 end), 0) AS usd").
+		Scan(&currencyState).Error; err != nil {
+		return err
+	}
+	if currencyState.Total > 0 && currencyState.Total == currencyState.USD {
+		if err := db.Model(&modelPriceCatalog{}).Where("metadata_managed = ?", true).Update("currency", "CNY").Error; err != nil {
+			return err
+		}
+	}
 	var storedRows []modelPriceCatalog
 	if err := db.Select("model_key", "llm_api_price_spec").Find(&storedRows).Error; err != nil {
 		return err
@@ -342,7 +360,7 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		_, visibleInModelSquare := pricingByName[name]
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
-			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
+			Tags: tagsJSON, Currency: "CNY", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
 			Published:         visibleInModelSquare, APIEnabled: metadata.APIEnabled, MetadataManaged: true, SortOrder: index,
@@ -377,7 +395,7 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		_, visibleInModelSquare := pricingByName[name]
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
-			Tags: tagsJSON, Currency: "USD", Timezone: "Asia/Shanghai",
+			Tags: tagsJSON, Currency: "CNY", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
 			Published:         visibleInModelSquare, APIEnabled: false, MetadataManaged: true, SortOrder: len(rows),
