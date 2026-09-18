@@ -3,6 +3,11 @@ import { useTranslation } from "react-i18next";
 import type { PricingCurrency } from "@/features/model-pricing/currency";
 import { useSystemConfigStore } from "@/stores/system-config-store";
 import { splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
+import {
+  parseVisualBillingDocument,
+  type VisualCondition,
+  type VisualPricingNode,
+} from "@/features/pricing/lib/billing-expression/visual";
 import { tryParseVisualConfig } from "@/features/pricing/lib/tier-expr";
 import type { PriceBlock, PriceSpec, UsageRuleSet } from "./types";
 
@@ -31,13 +36,81 @@ const blockHasVisiblePrice = (block: PriceBlock, requestMode: boolean) =>
         block.output,
         block.cache,
         block.createCache,
+        block.createCache1h,
         block.image,
+        block.imageOutput,
         block.audioInput,
         block.audioOutput,
+        block.audioDuration,
         block.videoInput,
         block.videoOutput,
         block.multimodalOutput,
       ].some(hasNonZeroPrice);
+
+function visualConditionText(condition: VisualCondition): string {
+  if (condition.kind === "request-comparison") {
+    return `${condition.source}(${condition.path}) ${condition.operator} ${JSON.stringify(condition.value)}`;
+  }
+  if (condition.kind === "comparison") {
+    return `${condition.probe} ${condition.operator} ${condition.value}`;
+  }
+  if (condition.kind === "not") return `!(${visualConditionText(condition.child)})`;
+  return condition.children.map(visualConditionText).join(
+    condition.kind === "all" ? " && " : " || ",
+  );
+}
+
+function visualNodeToPriceBlocks(
+  node: VisualPricingNode,
+  sharedPrices: Array<{ variable: string; value: string }> = [],
+  multiplier = 1,
+  inheritedCondition = "",
+): PriceBlock[] {
+  if (node.kind === "branch") {
+    const condition = visualConditionText(node.condition);
+    const yesCondition = inheritedCondition
+      ? `${inheritedCondition} && ${condition}`
+      : condition;
+    const noCondition = inheritedCondition
+      ? `${inheritedCondition} && !(${condition})`
+      : `!(${condition})`;
+    return [
+      ...visualNodeToPriceBlocks(node.yes, sharedPrices, multiplier, yesCondition),
+      ...visualNodeToPriceBlocks(node.no, sharedPrices, multiplier, noCondition),
+    ];
+  }
+  if (node.billingUnit === "request") {
+    return [{ label: node.label, price: Number(node.fixedPrice) * multiplier, unit: "request", note: inheritedCondition }];
+  }
+  const values = new Map<string, number>();
+  for (const price of sharedPrices) values.set(price.variable, Number(price.value));
+  for (const price of node.prices) values.set(price.variable, Number(price.value));
+  const block: PriceBlock = { label: node.label, unit: "1M tokens", note: inheritedCondition };
+  for (const [variable, value] of values) {
+    const amount = value * multiplier;
+    switch (variable) {
+      case "p": block.input = amount; break;
+      case "c": block.output = amount; break;
+      case "cr": block.cache = amount; break;
+      case "cc": block.createCache = amount; break;
+      case "cc1h": block.createCache1h = amount; break;
+      case "img": block.image = amount; break;
+      case "img_o": block.imageOutput = amount; break;
+      case "ai": block.audioInput = amount; break;
+      case "ao": block.audioOutput = amount; break;
+      case "aud_s": block.audioDuration = amount; break;
+      case "vid": block.videoInput = amount; break;
+      case "vid_o": block.videoOutput = amount; break;
+    }
+  }
+  return [block];
+}
+
+/** Converts any visually parseable expression into list-friendly price blocks. */
+export function expressionPriceBlocks(source: string, multiplier = 1): PriceBlock[] | null {
+  const document = parseVisualBillingDocument(source);
+  return document ? visualNodeToPriceBlocks(document.root, document.shared?.prices, multiplier) : null;
+}
 
 function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
   if (!spec?.blocks?.length) return spec;
@@ -47,10 +120,16 @@ function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
     const config = tryParseVisualConfig(
       splitBillingExprAndRequestRules(baseExpression).billingExpr,
     );
-    if (!config) return spec;
     const multiplier = source.baseExpression && source.discount
       ? 1 - source.discount / 100
       : 1;
+    if (!config) {
+      const blocks = expressionPriceBlocks(
+        splitBillingExprAndRequestRules(baseExpression).billingExpr,
+        multiplier,
+      );
+      return blocks?.length ? { ...spec, blocks } : spec;
+    }
     return {
       ...spec,
       blocks: config.tiers.map((tier) => ({
@@ -59,9 +138,12 @@ function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
         output: tier.output_unit_cost * multiplier,
         cache: tier.cache_read_unit_cost == null ? null : tier.cache_read_unit_cost * multiplier,
         createCache: tier.cache_create_unit_cost == null ? null : tier.cache_create_unit_cost * multiplier,
+        createCache1h: tier.cache_create_1h_unit_cost == null ? null : Number(tier.cache_create_1h_unit_cost) * multiplier,
         image: tier.image_unit_cost == null ? null : tier.image_unit_cost * multiplier,
+        imageOutput: tier.image_output_unit_cost == null ? null : tier.image_output_unit_cost * multiplier,
         audioInput: tier.audio_input_unit_cost == null ? null : tier.audio_input_unit_cost * multiplier,
         audioOutput: tier.audio_output_unit_cost == null ? null : tier.audio_output_unit_cost * multiplier,
+        audioDuration: tier.audio_duration_unit_cost == null ? null : Number(tier.audio_duration_unit_cost) * multiplier,
         videoInput: tier.video_input_unit_cost == null ? null : Number(tier.video_input_unit_cost) * multiplier,
         videoOutput: tier.video_output_unit_cost == null ? null : Number(tier.video_output_unit_cost) * multiplier,
         multimodalOutput: tier.multimodal_output_enabled
@@ -385,9 +467,12 @@ export function PriceRenderer({
                 {showTokenPrices && ([
                   ["cache", "Cache read price"],
                   ["createCache", "Cache write price"],
+                  ["createCache1h", "Cache write (1h) price"],
                   ["image", "Image input price"],
+                  ["imageOutput", "Image output price"],
                   ["audioInput", "Audio input price"],
                   ["audioOutput", "Audio output price"],
+                  ["audioDuration", "Audio duration price"],
                   ["videoInput", "Video input price"],
                   ["videoOutput", "Video output price"],
                   ["multimodalOutput", "Multimodal text output price"],
