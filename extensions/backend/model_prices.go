@@ -640,7 +640,7 @@ func saveModelPriceSyncPreview(c *gin.Context) {
 				var row modelPriceCatalog
 				if e = tx.Where("model_key = ?", item.ModelKey).First(&row).Error; e != nil {
 					if e == gorm.ErrRecordNotFound {
-						row = modelPriceCatalog{ModelKey: item.ModelKey, DisplayName: item.ModelKey, Vendor: "Upstream", Tags: json.RawMessage(`[]`), Currency: "USD", Timezone: "Asia/Shanghai", VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: json.RawMessage(`{}`), RuntimePricingRef: json.RawMessage(`{"source":"upstream"}`), Published: false}
+						row = modelPriceCatalog{ModelKey: item.ModelKey, DisplayName: item.ModelKey, Vendor: "Upstream", Tags: json.RawMessage(`[]`), Currency: "CNY", Timezone: "Asia/Shanghai", VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: json.RawMessage(`{}`), RuntimePricingRef: json.RawMessage(`{"source":"upstream"}`), Published: false}
 						if e = tx.Create(&row).Error; e != nil {
 							return e
 						}
