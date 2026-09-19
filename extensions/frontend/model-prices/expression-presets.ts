@@ -27,6 +27,11 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         label: 'Two input ranges + thinking output prices',
         expr: 'len <= 256000 ? (param("enable_thinking") == true ? tier("Short context thinking", p * 2 + c * 8) : tier("Short context non-thinking", p * 2 + c * 8)) : (param("enable_thinking") == true ? tier("Long context thinking", p * 6 + c * 24) : tier("Long context non-thinking", p * 6 + c * 24))',
       },
+      {
+        key: 'three-range-thinking-output',
+        label: 'Three input ranges + thinking/non-thinking output prices',
+        expr: 'len <= 128000 ? (param("enable_thinking") == true ? tier("0-128K thinking", p * 0.8 + c * 4.8) : tier("0-128K non-thinking", p * 0.8 + c * 4.8)) : len <= 256000 ? (param("enable_thinking") == true ? tier("128K-256K thinking", p * 2 + c * 12) : tier("128K-256K non-thinking", p * 2 + c * 12)) : len <= 1000000 ? (param("enable_thinking") == true ? tier("256K-1M thinking", p * 4 + c * 24) : tier("256K-1M non-thinking", p * 4 + c * 24)) : (param("enable_thinking") == true ? tier("1M+ thinking", p * 4 + c * 24) : tier("1M+ non-thinking", p * 4 + c * 24))',
+      },
     ],
   },
   {
