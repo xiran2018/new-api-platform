@@ -239,23 +239,27 @@ func listAdminModelPrices(c *gin.Context) {
 }
 
 func syncExistingModelPrices(db *gorm.DB) error {
-	// Older catalog rows were created with USD as the implicit display default.
-	// Migrate that all-legacy state once; after at least one row is explicitly
-	// set to another currency, preserve per-model administrator choices.
-	var currencyState struct {
-		Total int64
-		USD   int64
-	}
-	if err := db.Model(&modelPriceCatalog{}).
-		Where("metadata_managed = ?", true).
-		Select("count(*) AS total, coalesce(sum(case when currency = 'USD' then 1 else 0 end), 0) AS usd").
-		Scan(&currencyState).Error; err != nil {
-		return err
-	}
-	if currencyState.Total > 0 && currencyState.Total == currencyState.USD {
-		if err := db.Model(&modelPriceCatalog{}).Where("metadata_managed = ?", true).Update("currency", "CNY").Error; err != nil {
+	// Older releases created rows with USD as the implicit display default,
+	// including mixed catalogues where the earlier all-USD migration could not
+	// run. Migrate that legacy state once, then preserve explicit choices.
+	const migrationKey = "model_price_currency_default_cny_v2"
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var marker platformSetting
+		err := tx.Where(platformSetting{Key: migrationKey}).First(&marker).Error
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		if err = tx.Model(&modelPriceCatalog{}).
+			Where("metadata_managed = ? AND currency = ?", true, "USD").
+			Update("currency", "CNY").Error; err != nil {
+			return err
+		}
+		return tx.Create(&platformSetting{Key: migrationKey, Value: "done"}).Error
+	}); err != nil {
+		return err
 	}
 	var storedRows []modelPriceCatalog
 	if err := db.Select("model_key", "llm_api_price_spec").Find(&storedRows).Error; err != nil {

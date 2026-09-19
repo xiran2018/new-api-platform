@@ -810,7 +810,7 @@ llmapi-migration-YYYYMMDD-HHMMSS.tar.gz.sha256
 
 ```bash
 scp /home/jing/new-api-platform-transfer/llmapi-migration-*.tar.gz* \
-  NEW_SERVER_USER@NEW_SERVER_IP:/tmp/
+  NEW_SERVER_USER@NEW_SERVER_IP:/data/new-api-tmp/
 ```
 
 新服务器完成“方式 2”的 `/opt/llmapi-deploy`、`.env.docker`、证书和镜像准备后，
@@ -853,7 +853,7 @@ chmod +x /opt/llmapi-deploy/scripts/migrate-docker-data.sh
 
 ```bash
 /opt/llmapi-deploy/scripts/migrate-docker-data.sh restore \
-  --archive /tmp/llmapi-migration-YYYYMMDD-HHMMSS.tar.gz \
+  --archive /data/new-api-tmp/llmapi-migration-YYYYMMDD-HHMMSS.tar.gz \
   --deploy-dir /opt/llmapi-deploy \
   --confirm-empty-target
 ```
@@ -877,7 +877,7 @@ curl -fL \
 chmod +x /opt/llmapi-deploy/scripts/resume-migration-restore.sh
 
 /opt/llmapi-deploy/scripts/resume-migration-restore.sh \
-  /tmp/llmapi-migration-YYYYMMDD-HHMMSS.tar.gz
+  /data/new-api-tmp/llmapi-migration-YYYYMMDD-HHMMSS.tar.gz
 ```
 
 该脚本会先自动确认 PostgreSQL 容器正在运行、`new-api` 和 `platform_db` 均可连接且
@@ -905,7 +905,7 @@ docker compose --env-file .env.docker -f docker-compose.prod.yml \
 ### 2. 在实验服务器导出 PostgreSQL
 
 ```bash
-mkdir -p /tmp/llmapi-migration
+mkdir -p /data/new-api-tmp/llmapi-migration
 POSTGRES_CONTAINER=postgres
 REDIS_CONTAINER=redis
 
@@ -916,23 +916,23 @@ docker exec "$REDIS_CONTAINER" redis-server --version
 
 docker exec "$POSTGRES_CONTAINER" \
   pg_dump -U root -Fc --no-owner --no-acl new-api \
-  > /tmp/llmapi-migration/new-api.dump
+  > /data/new-api-tmp/llmapi-migration/new-api.dump
 
 docker exec "$POSTGRES_CONTAINER" \
   pg_dump -U root -Fc --no-owner --no-acl platform_db \
-  > /tmp/llmapi-migration/platform_db.dump
+  > /data/new-api-tmp/llmapi-migration/platform_db.dump
 
-test -s /tmp/llmapi-migration/new-api.dump
-test -s /tmp/llmapi-migration/platform_db.dump
+test -s /data/new-api-tmp/llmapi-migration/new-api.dump
+test -s /data/new-api-tmp/llmapi-migration/platform_db.dump
 ```
 
 如果 PostgreSQL 用户不是 `root`，将两处 `-U root` 改为实际用户。检查备份目录：
 
 ```bash
 docker exec -i "$POSTGRES_CONTAINER" pg_restore -l \
-  < /tmp/llmapi-migration/new-api.dump | head
+  < /data/new-api-tmp/llmapi-migration/new-api.dump | head
 docker exec -i "$POSTGRES_CONTAINER" pg_restore -l \
-  < /tmp/llmapi-migration/platform_db.dump | head
+  < /data/new-api-tmp/llmapi-migration/platform_db.dump | head
 ```
 
 目标 Compose 当前使用 PostgreSQL 15。如果实验机输出的 PostgreSQL 主版本高于 15，
@@ -959,8 +959,8 @@ docker exec "$REDIS_CONTAINER" redis-cli \
 
 docker exec "$REDIS_CONTAINER" test -s /data/dump.rdb
 docker cp "$REDIS_CONTAINER":/data/dump.rdb \
-  /tmp/llmapi-migration/redis.rdb
-test -s /tmp/llmapi-migration/redis.rdb
+  /data/new-api-tmp/llmapi-migration/redis.rdb
+test -s /data/new-api-tmp/llmapi-migration/redis.rdb
 unset REDIS_PASSWORD POSTGRES_PASSWORD SESSION_SECRET
 ```
 
@@ -979,16 +979,16 @@ cd /path/to/experiment-deployment
 APP_CONTAINER="$(docker compose --env-file .env.docker \
   -f docker-compose.prod.yml ps -q new-api)"
 test -n "$APP_CONTAINER"
-mkdir -p /tmp/llmapi-migration/app-data
-docker cp "$APP_CONTAINER":/data/. /tmp/llmapi-migration/app-data/
+mkdir -p /data/new-api-tmp/llmapi-migration/app-data
+docker cp "$APP_CONTAINER":/data/. /data/new-api-tmp/llmapi-migration/app-data/
 ```
 
 若实验应用从源码运行，检查 `core/new-api/data/`；存在且非空时复制：
 
 ```bash
-mkdir -p /tmp/llmapi-migration/app-data
+mkdir -p /data/new-api-tmp/llmapi-migration/app-data
 cp -a /path/to/new-api-platform/core/new-api/data/. \
-  /tmp/llmapi-migration/app-data/
+  /data/new-api-tmp/llmapi-migration/app-data/
 ```
 
 应用日志不影响恢复。确需留档时单独复制 `/app/logs`，不要覆盖新服务器日志卷。
@@ -996,18 +996,18 @@ cp -a /path/to/new-api-platform/core/new-api/data/. \
 ### 5. 打包、校验并传输
 
 ```bash
-cd /tmp
+cd /data/new-api-tmp
 tar -czf llmapi-migration.tar.gz llmapi-migration
 sha256sum llmapi-migration.tar.gz > llmapi-migration.tar.gz.sha256
 
 scp llmapi-migration.tar.gz llmapi-migration.tar.gz.sha256 \
-  NEW_SERVER_USER@NEW_SERVER_IP:/tmp/
+  NEW_SERVER_USER@NEW_SERVER_IP:/data/new-api-tmp/
 ```
 
 在新服务器验证并解压：
 
 ```bash
-cd /tmp
+cd /data/new-api-tmp
 sha256sum -c llmapi-migration.tar.gz.sha256
 tar -xzf llmapi-migration.tar.gz
 ```
@@ -1056,12 +1056,12 @@ docker compose --env-file .env.docker -f docker-compose.prod.yml \
 docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
   pg_restore -U root -d new-api --clean --if-exists --no-owner --no-acl \
   --exit-on-error \
-  < /tmp/llmapi-migration/new-api.dump
+  < /data/new-api-tmp/llmapi-migration/new-api.dump
 
 docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
   pg_restore -U root -d platform_db --clean --if-exists --no-owner --no-acl \
   --exit-on-error \
-  < /tmp/llmapi-migration/platform_db.dump
+  < /data/new-api-tmp/llmapi-migration/platform_db.dump
 ```
 
 如果新服务器的 `POSTGRES_USER` 不是 `root`，将 `-U root` 改为对应用户。验证：
@@ -1084,7 +1084,7 @@ docker compose --env-file .env.docker -f docker-compose.prod.yml create redis
 TARGET_REDIS_CONTAINER="$(docker compose --env-file .env.docker \
   -f docker-compose.prod.yml ps --all --quiet redis)"
 test -n "$TARGET_REDIS_CONTAINER"
-docker cp /tmp/llmapi-migration/redis.rdb \
+docker cp /data/new-api-tmp/llmapi-migration/redis.rdb \
   "$TARGET_REDIS_CONTAINER":/data/dump.rdb
 docker compose --env-file .env.docker -f docker-compose.prod.yml start redis
 set -a; source .env.docker; set +a
@@ -1101,7 +1101,7 @@ docker compose --env-file .env.docker -f docker-compose.prod.yml \
 TARGET_APP_CONTAINER="$(docker compose --env-file .env.docker \
   -f docker-compose.prod.yml ps --all --quiet new-api)"
 test -n "$TARGET_APP_CONTAINER"
-docker cp /tmp/llmapi-migration/app-data/. "$TARGET_APP_CONTAINER":/data/
+docker cp /data/new-api-tmp/llmapi-migration/app-data/. "$TARGET_APP_CONTAINER":/data/
 ```
 
 ### 9. 启动并验证新服务器
@@ -1125,8 +1125,8 @@ curl https://YOUR_DOMAIN/api/status
 应用同时向同一个数据库写入。验收完成后安全清理临时迁移文件：
 
 ```bash
-rm -rf /tmp/llmapi-migration /tmp/llmapi-migration.tar.gz \
-  /tmp/llmapi-migration.tar.gz.sha256
+rm -rf /data/new-api-tmp/llmapi-migration /data/new-api-tmp/llmapi-migration.tar.gz \
+  /data/new-api-tmp/llmapi-migration.tar.gz.sha256
 ```
 
 ## Updating new-api upstream

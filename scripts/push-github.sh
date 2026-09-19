@@ -3,6 +3,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 core_dir="$repo_root/core/new-api"
+tmp_root="${PLATFORM_TMP_DIR:-/data/new-api-tmp}"
+mkdir -p "$tmp_root"
 core_message="chore: update platform core"
 platform_message="chore: publish platform updates"
 skip_checks=false
@@ -111,11 +113,11 @@ git -C "$repo_root" diff --check
 
 if [[ "$skip_checks" == false ]]; then
   echo "==> Running frontend typecheck"
-  (cd "$core_dir/web" && bun run typecheck)
+  (cd "$core_dir/web" && BUN_TMPDIR="$tmp_root" bun run typecheck)
   echo "==> Building frontend"
-  (cd "$core_dir/web" && bun run build)
+  (cd "$core_dir/web" && BUN_TMPDIR="$tmp_root" bun run build)
   echo "==> Testing core integration seams"
-  (cd "$core_dir" && GOCACHE=/tmp/new-api-platform-go-cache go test ./router ./platform)
+  (cd "$core_dir" && GOCACHE="$tmp_root/go-cache" go test ./router ./platform)
 else
   echo "==> Build and test checks skipped by --skip-checks"
 fi

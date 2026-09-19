@@ -51,35 +51,69 @@ type faqItem struct {
 	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
-var platformDB *gorm.DB
-var platformDBOnce sync.Once
-var platformDBErr error
+var (
+	platformDB         *gorm.DB
+	platformDBErr      error
+	platformDBMu       sync.Mutex
+	platformDBReady    bool
+	lastPlatformDBInit time.Time
+)
 
 func platformDatabase() (*gorm.DB, error) {
-	platformDBOnce.Do(func() {
-		dsn := os.Getenv("PLATFORM_DATABASE_URL")
-		if dsn == "" {
-			dsn = "postgresql://root:123456@localhost:5432/platform_db?sslmode=disable"
+	platformDBMu.Lock()
+	defer platformDBMu.Unlock()
+	if platformDBReady {
+		return platformDB, nil
+	}
+	if platformDBErr != nil && time.Since(lastPlatformDBInit) < 2*time.Second {
+		return nil, platformDBErr
+	}
+	lastPlatformDBInit = time.Now()
+
+	dsn := os.Getenv("PLATFORM_DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgresql://root:123456@localhost:5432/platform_db?sslmode=disable"
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		if err = createPlatformDatabase(dsn); err == nil {
+			db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		}
-		platformDB, platformDBErr = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-		if platformDBErr != nil {
-			platformDBErr = createPlatformDatabase(dsn)
-			if platformDBErr == nil {
-				platformDB, platformDBErr = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-			}
-		}
-		if platformDBErr != nil {
-			return
-		}
-		platformDBErr = platformDB.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{}, &modelPriceCatalog{}, &invoiceProfile{}, &platformFile{}, &invoiceRequest{}, &invoiceRequestOrder{}, &reimbursementRequest{}, &invoiceSample{}, &invoiceAuditLog{}, &platformFileVersion{})
-		if platformDBErr == nil {
-			platformDBErr = backfillInvoiceMoney(platformDB)
-		}
-		if platformDBErr == nil {
-			platformDBErr = platformDB.Where(platformSetting{Key: "updates_enabled"}).FirstOrCreate(&platformSetting{Key: "updates_enabled", Value: "true"}).Error
-		}
-	})
-	return platformDB, platformDBErr
+	}
+	if err != nil {
+		platformDBErr = fmt.Errorf("platform database init: %w", err)
+		return nil, platformDBErr
+	}
+	if err = db.AutoMigrate(&updateEntry{}, &platformSetting{}, &faqCategory{}, &faqItem{}, &modelPriceCatalog{}, &invoiceProfile{}, &platformFile{}, &invoiceRequest{}, &invoiceRequestOrder{}, &reimbursementRequest{}, &invoiceSample{}, &invoiceAuditLog{}, &platformFileVersion{}); err != nil {
+		closePlatformDB(db)
+		platformDBErr = fmt.Errorf("platform database migrate: %w", err)
+		return nil, platformDBErr
+	}
+	if err = backfillInvoiceMoney(db); err != nil {
+		closePlatformDB(db)
+		platformDBErr = fmt.Errorf("platform database backfill: %w", err)
+		return nil, platformDBErr
+	}
+	if err = db.Where(platformSetting{Key: "updates_enabled"}).FirstOrCreate(&platformSetting{Key: "updates_enabled", Value: "true"}).Error; err != nil {
+		closePlatformDB(db)
+		platformDBErr = fmt.Errorf("platform database defaults: %w", err)
+		return nil, platformDBErr
+	}
+	platformDB = db
+	platformDBErr = nil
+	platformDBReady = true
+	return platformDB, nil
+}
+
+func closePlatformDB(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return
+	}
+	_ = sqlDB.Close()
 }
 
 // createPlatformDatabase creates only the database named in PLATFORM_DATABASE_URL.

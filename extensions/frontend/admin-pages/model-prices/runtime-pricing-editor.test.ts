@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPricingDiscount } from "./runtime-pricing-editor";
+import {
+  applyPricingDiscount,
+  vendorComparisonValue,
+} from "./runtime-pricing-editor";
+import type { PriceSpec } from "../../model-prices/types";
+
+import { PLATFORM_BILLING_PRESET_GROUPS } from "@/platform/model-prices/expression-presets";
 
 describe("applyPricingDiscount", () => {
   it("scales a fixed request leaf without wrapping the expression", () => {
@@ -29,5 +35,53 @@ describe("applyPricingDiscount", () => {
 
     expect(result.billingExpr).toContain("p * 1.8");
     expect(result.billingExpr).toContain("c * 7.2");
+  });
+});
+
+describe("vendorComparisonValue", () => {
+  it("maps normalized display prices to expression editor variables", () => {
+    const spec: PriceSpec = {
+      mode: "token",
+      blocks: [{ input: 2, output: 8, cache: 0.5, createCache: 0.25 }],
+    };
+
+    expect(vendorComparisonValue(spec, "p")).toBe(2);
+    expect(vendorComparisonValue(spec, "c")).toBe(8);
+    expect(vendorComparisonValue(spec, "cr")).toBe(0.5);
+    expect(vendorComparisonValue(spec, "cc")).toBe(0.25);
+  });
+
+  it("reads baseExpression vendor prices, including shared input prices", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [
+        {
+          baseExpression:
+            '(p * 1.8) + (param("enable_thinking") == true ? tier("thinking output", c * 10.8) : tier("non-thinking output", c * 9.6))',
+        },
+      ],
+    };
+
+    expect(vendorComparisonValue(spec, "p")).toBe(1.8);
+    expect(vendorComparisonValue(spec, "c", "thinking output")).toBe(10.8);
+    expect(vendorComparisonValue(spec, "c", "non-thinking output")).toBe(9.6);
+  });
+
+  it("resolves a comparison price for every visual expression preset", () => {
+    for (const group of PLATFORM_BILLING_PRESET_GROUPS) {
+      for (const preset of group.presets) {
+        const spec: PriceSpec = {
+          mode: "expression",
+          blocks: [{ baseExpression: preset.expr }],
+        };
+        const values = [
+          vendorComparisonValue(spec, "p"),
+          vendorComparisonValue(spec, "c"),
+          vendorComparisonValue(spec, "aud_s"),
+        ];
+        expect(values.some((value) => typeof value === "number"), preset.key)
+          .toBe(true);
+      }
+    }
   });
 });

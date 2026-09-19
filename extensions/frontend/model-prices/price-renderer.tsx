@@ -25,7 +25,9 @@ const money = (
   }).format(rounded)}`;
 };
 
-const hasNonZeroPrice = (value: number | null | undefined) =>
+const hasNonZeroPrice = (
+  value: number | null | undefined,
+): value is number =>
   typeof value === "number" && Number.isFinite(value) && value !== 0;
 
 const blockHasVisiblePrice = (block: PriceBlock, requestMode: boolean) =>
@@ -45,7 +47,161 @@ const blockHasVisiblePrice = (block: PriceBlock, requestMode: boolean) =>
         block.videoInput,
         block.videoOutput,
         block.multimodalOutput,
-      ].some(hasNonZeroPrice);
+    ].some(hasNonZeroPrice);
+
+export type PublicPriceRowField =
+  | "price"
+  | "input"
+  | "output"
+  | "cache"
+  | "createCache"
+  | "createCache1h"
+  | "image"
+  | "imageOutput"
+  | "audioInput"
+  | "audioOutput"
+  | "audioDuration"
+  | "videoInput"
+  | "videoOutput"
+  | "multimodalOutput";
+
+export type PublicPriceRow = {
+  field: PublicPriceRowField;
+  label: string;
+  value: number;
+};
+
+const PRICE_ROW_FIELDS: ReadonlyArray<{
+  field: PublicPriceRowField;
+  label: string;
+}> = [
+  { field: "input", label: "Input price" },
+  { field: "output", label: "Output price" },
+  { field: "cache", label: "Cache read price" },
+  { field: "createCache", label: "Cache write price" },
+  { field: "createCache1h", label: "Cache write (1h) price" },
+  { field: "image", label: "Image input price" },
+  { field: "imageOutput", label: "Image output price" },
+  { field: "audioInput", label: "Audio input price" },
+  { field: "audioOutput", label: "Audio output price" },
+  { field: "audioDuration", label: "Audio duration price" },
+  { field: "videoInput", label: "Video input price" },
+  { field: "videoOutput", label: "Video output price" },
+  { field: "multimodalOutput", label: "Multimodal text output price" },
+];
+
+/**
+ * Build the price rows used by the public page. The public page never renders
+ * expression source, match conditions, or notes; tier labels remain human
+ * readable.
+ */
+export function publicPriceRows(
+  block: PriceBlock,
+  requestMode: boolean,
+): PublicPriceRow[] {
+  if (requestMode) {
+    return hasNonZeroPrice(block.price)
+      ? [{ field: "price", label: "Per request", value: block.price }]
+      : [];
+  }
+  return PRICE_ROW_FIELDS.flatMap(({ field, label }) => {
+    const value: number | null | undefined = block[field];
+    return hasNonZeroPrice(value)
+      ? [{ field, label, value }]
+      : [];
+  });
+}
+
+type ThinkingPriceVariant = "thinking" | "non-thinking";
+
+export type PublicPriceBlockGroup = {
+  key: string;
+  label: string;
+  blocks: PriceBlock[];
+  thinkingBlock?: PriceBlock;
+  nonThinkingBlock?: PriceBlock;
+};
+
+const thinkingVariant = (block: PriceBlock): ThinkingPriceVariant | undefined => {
+  const label = block.label || "";
+  const note = block.note || "";
+  if (/\bnon[-\s]?thinking\b/i.test(label)) return "non-thinking";
+  if (/\bthinking\b/i.test(label)) return "thinking";
+
+  // Some presets omit the non-thinking suffix, but the parsed branch note can
+  // still identify whether it came from the false side of enable_thinking.
+  const parameter = /param\(\s*["']enable_thinking["']\s*\)\s*==\s*true/;
+  if (parameter.test(note)) {
+    return /!\s*\(?\s*param\(\s*["']enable_thinking["']\s*\)/.test(note)
+      ? "non-thinking"
+      : "thinking";
+  }
+  return undefined;
+};
+
+const baseTierLabel = (label: string) => {
+  const base = label
+    .replace(/\s*(?:non[-\s]?thinking|thinking)\b\s*/i, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return base.toLowerCase() === "output" ? "" : base;
+};
+
+/**
+ * Group thinking/non-thinking branches that belong to the same pricing tier.
+ * The public page then renders one tier row with two output columns instead of
+ * two separate cards that repeat the same input price.
+ */
+export function publicPriceBlockGroups(
+  blocks: PriceBlock[],
+): PublicPriceBlockGroup[] {
+  type WorkingGroup = PublicPriceBlockGroup & { order: number };
+  const groups = new Map<string, WorkingGroup>();
+
+  const upsert = (
+    key: string,
+    order: number,
+    label: string,
+    block: PriceBlock,
+    variant?: ThinkingPriceVariant,
+  ) => {
+    const existing = groups.get(key);
+    if (!existing) {
+      const group: WorkingGroup = {
+        key,
+        label,
+        blocks: [block],
+        order,
+      };
+      if (variant === "thinking") group.thinkingBlock = block;
+      if (variant === "non-thinking") group.nonThinkingBlock = block;
+      groups.set(key, group);
+      return;
+    }
+
+    if (variant === "thinking" && !existing.thinkingBlock) {
+      existing.thinkingBlock = block;
+      existing.blocks.push(block);
+    } else if (variant === "non-thinking" && !existing.nonThinkingBlock) {
+      existing.nonThinkingBlock = block;
+      existing.blocks.push(block);
+    }
+  };
+
+  blocks.forEach((block, index) => {
+    const variant = thinkingVariant(block);
+    if (!variant) {
+      upsert(`single:${block.label || index}`, index, block.label || "", block);
+      return;
+    }
+    const label = baseTierLabel(block.label || "");
+    upsert(`pair:${label || "default"}`, index, label, block, variant);
+  });
+
+  return Array.from(groups.values())
+    .sort((left, right) => left.order - right.order)
+    .map(({ order: _order, ...group }) => group);
+}
 
 function visualConditionText(condition: VisualCondition): string {
   if (condition.kind === "request-comparison") {
@@ -328,6 +484,7 @@ export function PriceRenderer({
   displayCurrency = "CNY",
   showMarkup = false,
   compact = false,
+  tableLayout = false,
 }: {
   spec?: PriceSpec;
   timezone: string;
@@ -336,6 +493,8 @@ export function PriceRenderer({
   displayCurrency?: string;
   showMarkup?: boolean;
   compact?: boolean;
+  /** Public page layout: one compact table per pricing tier, without raw expression text. */
+  tableLayout?: boolean;
 }) {
   const { t } = useTranslation();
   const currencyConfig = useSystemConfigStore((state) => state.config.currency);
@@ -379,6 +538,169 @@ export function PriceRenderer({
     return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} showMarkup={showMarkup} compact={compact} />;
   }
   if (!blocks.length) return <span className="text-muted-foreground">-</span>;
+  if (tableLayout) {
+    return (
+      <div className="min-w-0 space-y-2">
+        <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span>{t("Pricing mode")}: {modeLabel}</span>
+          {(blocks[0]?.discount ?? 0) > 0 && (
+            <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
+              {t("Discount")} {blocks[0].discount}%
+            </span>
+          )}
+          {showMarkup && (blocks[0]?.discount ?? 0) < 0 && (
+            <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">
+              {t("Markup")} {Math.abs(blocks[0].discount!)}%
+            </span>
+          )}
+        </div>
+        {(() => {
+          const groups = publicPriceBlockGroups(blocks);
+          const pairedGroups = groups.filter(
+            (group) => group.thinkingBlock && group.nonThinkingBlock,
+          );
+          const regularGroups = groups.filter(
+            (group) => !(group.thinkingBlock && group.nonThinkingBlock),
+          );
+          const priceValue = (
+            block: PriceBlock | undefined,
+            field: PublicPriceRowField,
+          ) => block
+            ? publicPriceRows(block, requestMode).find((row) => row.field === field)?.value
+            : undefined;
+          const renderPrice = (value: number | undefined, unit: string) => value == null ? (
+            <span className="text-muted-foreground">-</span>
+          ) : (
+            <>
+              <b>{money(value, currency)}</b>
+              {unit && <span className="ml-1 text-xs text-muted-foreground">/ {unit}</span>}
+            </>
+          );
+          return (
+            <>
+              {pairedGroups.length > 0 && (
+                <div className="overflow-x-auto rounded-md border bg-muted/25">
+                  <table className="w-full min-w-[720px] table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[28%]" />
+                      <col className="w-[24%]" />
+                      <col className="w-[24%]" />
+                      <col className="w-[24%]" />
+                    </colgroup>
+                    <thead className="bg-muted/60 text-xs text-muted-foreground">
+                      <tr>
+                        <th rowSpan={2} className="border-r p-2 text-left font-medium">
+                          {t("Token range")}
+                        </th>
+                        <th rowSpan={2} className="border-r p-2 text-left font-medium">
+                          {t("Input price")}
+                        </th>
+                        <th colSpan={2} className="p-2 text-center font-medium">
+                          {t("Output price")}
+                        </th>
+                      </tr>
+                      <tr className="border-t">
+                        <th className="border-r p-2 text-left font-medium">
+                          {t("Non-thinking mode")}
+                        </th>
+                        <th className="p-2 text-left font-medium">
+                          {t("Thinking mode")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pairedGroups.map((group, groupIndex) => {
+                        const primary = group.nonThinkingBlock || group.thinkingBlock || group.blocks[0];
+                        const unit = primary.unit === "request" ? t("Per request") : primary.unit || "";
+                        const current = displayedSpec?.mode === "time" && group.blocks.some((block) => activeWindow(block, timezone));
+                        const fallbackRange = primary.min != null || primary.max != null
+                          ? `${primary.min ?? 0} - ${primary.max ?? "∞"}`
+                          : t("Default tier");
+                        return (
+                          <tr className="border-t align-top" key={group.key || groupIndex}>
+                            <td className="break-words border-r p-2.5 font-medium">
+                              <div>{group.label || fallbackRange}</div>
+                              {primary.start && (
+                                <div className="mt-1 flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                                  <Clock3 className="size-3" />
+                                  {primary.start}-{primary.end}
+                                </div>
+                              )}
+                              {current && (
+                                <span className="mt-1 inline-flex rounded bg-emerald-600 px-1.5 py-0.5 text-xs font-normal text-white">
+                                  {t("Current")}
+                                </span>
+                              )}
+                            </td>
+                            <td className="break-words border-r p-2.5">
+                              {renderPrice(
+                                priceValue(group.thinkingBlock, "input") ?? priceValue(group.nonThinkingBlock, "input"),
+                                unit,
+                              )}
+                            </td>
+                            <td className="break-words border-r p-2.5">
+                              {renderPrice(priceValue(group.nonThinkingBlock, "output"), unit)}
+                            </td>
+                            <td className="break-words p-2.5">
+                              {renderPrice(priceValue(group.thinkingBlock, "output"), unit)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {regularGroups.map((group, groupIndex) => {
+                const primary = group.blocks[0];
+                const rows = publicPriceRows(primary, requestMode);
+                if (!rows.length) return null;
+                const current = displayedSpec?.mode === "time" && group.blocks.some((block) => activeWindow(block, timezone));
+                const unit = primary.unit === "request" ? t("Per request") : primary.unit || "";
+                return (
+                  <div
+                    key={group.key || groupIndex}
+                    className={`overflow-hidden rounded-md border ${current ? "border-emerald-500/50 bg-emerald-500/10" : "bg-muted/25"}`}
+                  >
+                    {(group.label || primary.start || primary.end || primary.min != null || primary.max != null || current) && (
+                      <div className="flex flex-wrap items-center gap-1.5 border-b bg-background/60 px-3 py-2 text-xs font-medium">
+                        {group.label && <span>{group.label}</span>}
+                        {primary.start && (
+                          <span className="inline-flex items-center gap-1 text-muted-foreground">
+                            <Clock3 className="size-3" />
+                            {primary.start}-{primary.end}
+                          </span>
+                        )}
+                        {(primary.min != null || primary.max != null) && (
+                          <span className="text-muted-foreground">
+                            {primary.min ?? 0} - {primary.max ?? "∞"}
+                          </span>
+                        )}
+                        {current && <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-white">{t("Current")}</span>}
+                      </div>
+                    )}
+                    <table className="w-full table-fixed text-left text-sm">
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr className="border-b last:border-b-0" key={row.field}>
+                            <td className="break-words p-2.5 text-xs text-muted-foreground">{t(row.label)}</td>
+                            <td className="break-words p-2.5">
+                              <b>{money(row.value, currency)}</b>
+                              {unit && <span className="ml-1 text-xs text-muted-foreground">/ {unit}</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </>
+          );
+        })()}
+      </div>
+    );
+  }
   return (
     <div className="space-y-2">
       <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">

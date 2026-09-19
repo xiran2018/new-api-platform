@@ -29,7 +29,11 @@ import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
 } from "@/features/system-settings/models/model-pricing-sheet";
-import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
+import type {
+  PriceBlock,
+  PriceSpec,
+  UsageRuleSet,
+} from "../../model-prices/types";
 import {
   UsageRuleBuilder,
   usageRuleSetExpression,
@@ -49,6 +53,39 @@ type PriceComparison = Partial<
     number
   >
 >;
+
+type ComparisonDisplayField = Extract<
+  keyof PriceBlock,
+  | "input"
+  | "output"
+  | "cache"
+  | "createCache"
+  | "createCache1h"
+  | "image"
+  | "imageOutput"
+  | "audioInput"
+  | "audioOutput"
+  | "audioDuration"
+  | "videoInput"
+  | "videoOutput"
+  | "price"
+>;
+
+const COMPARISON_FIELD_BY_VARIABLE: Record<string, ComparisonDisplayField> = {
+  p: "input",
+  c: "output",
+  cr: "cache",
+  cc: "createCache",
+  cc1h: "createCache1h",
+  img: "image",
+  img_o: "imageOutput",
+  ai: "audioInput",
+  ao: "audioOutput",
+  aud_s: "audioDuration",
+  vid: "videoInput",
+  vid_o: "videoOutput",
+  fixed: "price",
+};
 
 function vendorComparison(spec?: PriceSpec): PriceComparison {
   const block = spec?.blocks?.find(
@@ -85,6 +122,74 @@ function vendorComparison(spec?: PriceSpec): PriceComparison {
   };
 }
 
+function priceSpecExpressionSource(spec?: PriceSpec): string {
+  if (spec?.mode !== "expression") return "";
+  return (spec.blocks || [])
+    .map((block) => block.baseExpression || block.note || "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function findTier(
+  node: VisualPricingNode | undefined,
+  label?: string,
+): Extract<VisualPricingNode, { kind: "tier" }> | undefined {
+  if (!node) return undefined;
+  if (node.kind === "tier") return !label || node.label === label ? node : undefined;
+  return findTier(node.yes, label) || findTier(node.no, label);
+}
+
+/**
+ * Resolve a vendor comparison price for both storage shapes:
+ * normalized display blocks (input/output/cache/...) and visual expression
+ * variables (p/c/cc/...). The latter is what ModelPricingEditorPanel passes
+ * to renderPriceAddon for every expression-based template.
+ */
+export function vendorComparisonValue(
+  spec: PriceSpec | undefined,
+  key: string,
+  scope?: string,
+): number | undefined {
+  const displayField = COMPARISON_FIELD_BY_VARIABLE[key];
+  if (displayField) {
+    const direct = spec?.blocks?.[0]?.[displayField];
+    if (typeof direct === "number" && Number.isFinite(direct)) return direct;
+  }
+  const legacy = vendorComparison(spec);
+  const legacyKey = ({
+    input: "input",
+    completion: "completion",
+    cache: "cache",
+    createCache: "createCache",
+    image: "image",
+    audioInput: "audioInput",
+    audioOutput: "audioOutput",
+    request: "request",
+  } as Record<string, keyof PriceComparison>)[key];
+  if (legacyKey) {
+    const value = legacy[legacyKey];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  const document = parseVisualBillingDocument(
+    splitBillingExprAndRequestRules(priceSpecExpressionSource(spec)).billingExpr,
+  );
+  const shared = document?.shared?.prices.find((item) => item.variable === key);
+  const sharedValue = shared ? Number(shared.value) : undefined;
+  if (typeof sharedValue === "number" && Number.isFinite(sharedValue)) {
+    return sharedValue;
+  }
+  const tier = findTier(document?.root, scope);
+  if (!tier) return undefined;
+  if (key === "fixed") {
+    return tier.billingUnit === "request"
+      ? Number(tier.fixedPrice)
+      : undefined;
+  }
+  const price = tier.prices.find((item) => item.variable === key);
+  const value = price ? Number(price.value) : undefined;
+  return Number.isFinite(value) ? value : undefined;
+}
+
 function editorData(
   entry: ModelPricingEntry,
   savedDiscount = 0,
@@ -115,8 +220,9 @@ function editorData(
 }
 
 function vendorEditorData(modelKey: string, spec?: PriceSpec): ModelRatioData | null {
-  if (spec?.mode === "expression" && spec.blocks?.[0]?.note) {
-    const expression = splitBillingExprAndRequestRules(spec.blocks[0].note);
+  const expressionSource = priceSpecExpressionSource(spec);
+  if (spec?.mode === "expression" && expressionSource) {
+    const expression = splitBillingExprAndRequestRules(expressionSource);
     return {
       name: modelKey,
       billingMode: "tiered_expr",
@@ -282,34 +388,8 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const [advancedPricingActive, setAdvancedPricingActive] = useState(
     Boolean(currentPriceSpec?.blocks?.[0]?.usageRuleSet),
   );
-  const legacyComparison = vendorComparison(vendorPriceSpec);
-  const vendorExpressionDocument = vendorPriceSpec?.mode === "expression"
-    ? parseVisualBillingDocument(
-        splitBillingExprAndRequestRules(vendorPriceSpec.blocks?.[0]?.note || "").billingExpr,
-      )
-    : null;
-  const findVendorTier = (node: VisualPricingNode | undefined, label?: string): Extract<VisualPricingNode, { kind: "tier" }> | undefined => {
-    if (!node) return undefined;
-    if (node.kind === "tier") return !label || node.label === label ? node : undefined;
-    return findVendorTier(node.yes, label) || findVendorTier(node.no, label);
-  };
   const comparisonValue = (key: string, scope?: string) => {
-    const legacyKey = ({
-      input: "input",
-      completion: "completion",
-      cache: "cache",
-      createCache: "createCache",
-      image: "image",
-      audioInput: "audioInput",
-      audioOutput: "audioOutput",
-      request: "request",
-    } as Record<string, keyof PriceComparison>)[key];
-    if (legacyKey) return legacyComparison[legacyKey];
-    const tier = findVendorTier(vendorExpressionDocument?.root, scope);
-    if (!tier) return undefined;
-    if (key === "fixed") return tier.billingUnit === "request" ? Number(tier.fixedPrice) : undefined;
-    const price = tier.prices.find((item) => item.variable === key);
-    return price ? Number(price.value) : undefined;
+    return vendorComparisonValue(vendorPriceSpec, key, scope);
   };
   const renderPriceAddon = ({ key, scope, value }: { key: string; scope?: string; value: string }) => {
     const vendorPrice = comparisonValue(key, scope);

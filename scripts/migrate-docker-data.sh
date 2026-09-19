@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+tmp_root="${PLATFORM_TMP_DIR:-/data/new-api-tmp}"
+mkdir -p "$tmp_root"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -267,7 +270,7 @@ restore_data() {
   info "Verifying archive"
   (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$checksum")")
   local work
-  work="$(mktemp -d)"
+  work="$(mktemp -d "$tmp_root/.llmapi-migration.XXXXXX")"
   CLEANUP_DIR="$work"
   tar -C "$work" -xzf "$archive"
   local payload="$work/payload"

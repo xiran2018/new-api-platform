@@ -5,6 +5,10 @@
 
 页面添加的文本需要按照选择语言版本替换为对应的语言。
 
+## 临时目录约定
+
+构建缓存、测试缓存和迁移解压等临时文件统一使用 `/data/new-api-tmp`，不要使用 `/tmp`。
+
 ## 平台扩展约束
 
 - 原有 new-api 数据库继续使用 `SQL_DSN=postgresql://root:123456@localhost:5432/new-api`。

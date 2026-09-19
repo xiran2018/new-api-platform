@@ -115,13 +115,13 @@ To transfer prebuilt images to an offline/remote target:
 docker save -o new-api-platform-images.tar \
   jingquanliang/new-api-platform:latest \
   jingquanliang/new-api-platform-gateway:latest
-scp new-api-platform-images.tar user@TARGET_HOST:/tmp/
+scp new-api-platform-images.tar user@TARGET_HOST:/data/new-api-tmp/
 ```
 
 On the target:
 
 ```bash
-docker load -i /tmp/new-api-platform-images.tar
+docker load -i /data/new-api-tmp/new-api-platform-images.tar
 ./scripts/docker-prod.sh start
 ```
 
@@ -157,7 +157,7 @@ pg_dump -Fc --no-owner --no-acl \
 pg_dump -Fc --no-owner --no-acl \
   'postgresql://root:OLD_PASSWORD@127.0.0.1:5432/platform_db' \
   -f platform_db.dump
-scp new-api.dump platform_db.dump user@TARGET_HOST:/tmp/
+scp new-api.dump platform_db.dump user@TARGET_HOST:/data/new-api-tmp/
 ```
 
 Start only PostgreSQL and the database initializer on the target:
@@ -171,9 +171,9 @@ Restore both dumps before starting the application:
 
 ```bash
 docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
-  pg_restore -U root -d new-api --clean --if-exists --no-owner < /tmp/new-api.dump
+  pg_restore -U root -d new-api --clean --if-exists --no-owner < /data/new-api-tmp/new-api.dump
 docker compose --env-file .env.docker -f docker-compose.prod.yml exec -T postgres \
-  pg_restore -U root -d platform_db --clean --if-exists --no-owner < /tmp/platform_db.dump
+  pg_restore -U root -d platform_db --clean --if-exists --no-owner < /data/new-api-tmp/platform_db.dump
 ```
 
 If `POSTGRES_USER` is changed from `root`, use that value after `-U`.

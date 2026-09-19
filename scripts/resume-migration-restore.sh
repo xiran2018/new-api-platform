@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+tmp_root="${PLATFORM_TMP_DIR:-/data/new-api-tmp}"
+mkdir -p "$tmp_root"
+
 usage() {
   cat <<EOF
 Usage: $0 ARCHIVE [DEPLOY_DIR]
@@ -91,7 +94,7 @@ checksum="$archive.sha256"
 (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$checksum")")
 echo "==> Prerequisites passed: configuration, TLS, archive, and both restored PostgreSQL databases are ready"
 
-work_dir="$(mktemp -d /tmp/llmapi-resume.XXXXXX)"
+work_dir="$(mktemp -d "$tmp_root/llmapi-resume.XXXXXX")"
 cleanup() { rm -rf -- "$work_dir"; }
 trap cleanup EXIT
 

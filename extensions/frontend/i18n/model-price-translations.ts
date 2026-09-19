@@ -90,6 +90,8 @@ const resources: Record<string, Record<string, string>> = {
     "Custom table": "自定义表格",
     "Input price": "输入价格",
     "Output price": "输出价格",
+    "Token range": "Token 范围",
+    "Default tier": "默认档位",
     Unit: "单位",
     Label: "标签",
     Start: "开始",
@@ -221,6 +223,12 @@ const resources: Record<string, Record<string, string>> = {
     "Visible to administrators only": "Visible to administrators only",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Temporarily unavailable. Coming soon, please stay tuned.",
+    "Input price": "Input price",
+    "Output price": "Output price",
+    "Token range": "Token range",
+    "Default tier": "Default tier",
+    "Non-thinking mode": "Non-thinking mode",
+    "Thinking mode": "Thinking mode",
   },
   fr: {
     "Model prices": "Prix des modèles",

@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 core_dir="$repo_root/core/new-api"
 upstream_url="https://github.com/QuantumNous/new-api.git"
+tmp_root="${PLATFORM_TMP_DIR:-/data/new-api-tmp}"
+mkdir -p "$tmp_root"
 
 usage() {
   cat <<EOF
@@ -120,19 +122,19 @@ fi
 
 (
   cd "$core_dir/web"
-  bun install --frozen-lockfile
-  bun run build
-  bun run typecheck
-  bunx vitest run \
+  BUN_TMPDIR="$tmp_root" bun install --frozen-lockfile
+  BUN_TMPDIR="$tmp_root" bun run build
+  BUN_TMPDIR="$tmp_root" bun run typecheck
+  BUN_TMPDIR="$tmp_root" bunx vitest run \
     src/features/pricing/lib/__tests__/billing-expression.test.ts \
     src/platform/admin-pages/model-prices/usage-rule-builder.test.ts
 )
 
 (
   cd "$core_dir"
-  GOCACHE=/tmp/new-api-platform-go-cache go build ./router ./platform
-  GOCACHE=/tmp/new-api-platform-go-cache go test ./pkg/billingexpr
-  GOCACHE=/tmp/new-api-platform-go-cache go test ./service -run 'TestBuildTieredTokenParams'
+  GOCACHE="$tmp_root/go-cache" go build ./router ./platform
+  GOCACHE="$tmp_root/go-cache" go test ./pkg/billingexpr
+  GOCACHE="$tmp_root/go-cache" go test ./service -run 'TestBuildTieredTokenParams'
 )
 
 if [[ "$mode" == "--sync" ]]; then
