@@ -10,6 +10,7 @@ addon_context="$repo_root/extensions/frontend/model-prices/pricing-field-addon.t
 adapter="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.tsx"
 usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.tsx"
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
+renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.tsx"
 capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
@@ -43,7 +44,6 @@ require_text() {
 
 for key in \
   input-length-tiers \
-  input-length-thinking-tiers \
   qwen-thinking-output \
   shared-input-thinking-output \
   two-range-thinking-output \
@@ -55,6 +55,13 @@ for key in \
 do
   require_text "$presets" "key: '$key'" "a platform expression preset was lost during upstream synchronization"
 done
+
+# The input-length-thinking-tiers preset was intentionally removed from the
+# picker.  Keep the historical expression format compatible instead: prices
+# saved with that preset remain in the database and must still render as paired
+# thinking/non-thinking tiers after an upstream sync.
+require_text "$renderer_test" "keeps legacy input-range thinking prices paired after the preset is removed" \
+  "legacy input-range thinking pricing compatibility was lost during upstream synchronization"
 
 for capability in \
   token-pricing request-pricing expression-pricing advanced-media-pricing \

@@ -97,6 +97,20 @@ describe("expression price display", () => {
     ]);
   });
 
+  it("keeps legacy input-range thinking prices paired after the preset is removed", () => {
+    const legacyExpression =
+      'len <= 256000 ? (param("enable_thinking") == true ? tier("0-256K thinking", p * 2 + c * 12) : tier("0-256K", p * 2 + c * 8)) : (param("enable_thinking") == true ? tier("256K+ thinking", p * 6 + c * 24) : tier("256K+", p * 6 + c * 16))';
+    const blocks = expressionPriceBlocks(legacyExpression);
+    expect(blocks).toHaveLength(4);
+    expect(publicPriceBlockGroups(blocks ?? []).map(({ label, blocks: grouped }) => ({
+      label,
+      size: grouped.length,
+    }))).toEqual([
+      { label: "0-256K", size: 2 },
+      { label: "256K+", size: 2 },
+    ]);
+  });
+
   it("renders one row per token tier with a shared input column", () => {
     render(
       <PriceRenderer

@@ -130,9 +130,9 @@ const thinkingVariant = (block: PriceBlock): ThinkingPriceVariant | undefined =>
 
   // Some presets omit the non-thinking suffix, but the parsed branch note can
   // still identify whether it came from the false side of enable_thinking.
-  const parameter = /param\(\s*["']enable_thinking["']\s*\)\s*==\s*true/;
+  const parameter = /param\(\s*["']?enable_thinking["']?\s*\)\s*==\s*true/;
   if (parameter.test(note)) {
-    return /!\s*\(?\s*param\(\s*["']enable_thinking["']\s*\)/.test(note)
+    return /!\s*\(?\s*param\(\s*["']?enable_thinking["']?\s*\)/.test(note)
       ? "non-thinking"
       : "thinking";
   }

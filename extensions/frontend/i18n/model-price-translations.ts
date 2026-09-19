@@ -49,7 +49,6 @@ const resources: Record<string, Record<string, string>> = {
     "Time-based pricing": "分时计费",
     "Tiered pricing": "分段计价",
     "Input token range pricing": "输入 Token 区间计价",
-    "Input range + thinking output pricing": "输入区间 + 思考模式输出计价",
     "Qwen input range and thinking output prices": "Qwen 输入区间与思考/非思考输出计价",
     "Shared input + thinking output prices": "共享输入价 + 思考/非思考输出价",
     "Two input ranges + thinking output prices": "两段输入长度 + 思考/非思考输出计价",
