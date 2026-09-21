@@ -276,6 +276,10 @@ export function applyPricingDiscount(data: ModelRatioData, discount: number): Mo
         return {
           ...node,
           fixedPrice: node.fixedPrice === "" ? "" : String(Number(node.fixedPrice) * factor),
+          sharedPrices: node.sharedPrices?.map((price) => ({
+            ...price,
+            value: String(Number(price.value) * factor),
+          })),
           prices: node.prices.map((price) => ({
             ...price,
             value: String(Number(price.value) * factor),

@@ -111,6 +111,29 @@ describe("expression price display", () => {
     ]);
   });
 
+  it("keeps one input price and separate thinking outputs in every shared-input range", () => {
+    const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap((group) => group.presets)
+      .find((item) => item.key === "three-range-shared-input-thinking-output");
+    expect(preset).toBeDefined();
+    const blocks = expressionPriceBlocks(preset?.expr || "");
+    expect(blocks).toHaveLength(8);
+
+    const groups = publicPriceBlockGroups(blocks ?? []);
+    expect(groups).toHaveLength(4);
+    expect(groups.map((group) => ({
+      label: group.label,
+      input: group.thinkingBlock?.input,
+      nonThinkingInput: group.nonThinkingBlock?.input,
+      thinkingOutput: group.thinkingBlock?.output,
+      nonThinkingOutput: group.nonThinkingBlock?.output,
+    }))).toEqual([
+      { label: "0-128K", input: 0.8, nonThinkingInput: 0.8, thinkingOutput: 4.8, nonThinkingOutput: 3.6 },
+      { label: "128K-256K", input: 2, nonThinkingInput: 2, thinkingOutput: 12, nonThinkingOutput: 9 },
+      { label: "256K-1M", input: 4, nonThinkingInput: 4, thinkingOutput: 24, nonThinkingOutput: 18 },
+      { label: "1M+", input: 4, nonThinkingInput: 4, thinkingOutput: 24, nonThinkingOutput: 18 },
+    ]);
+  });
+
   it("renders one row per token tier with a shared input column", () => {
     render(
       <PriceRenderer

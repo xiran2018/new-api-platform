@@ -709,6 +709,7 @@ export function ModelPriceManagementPage() {
                         displayCurrency={r.currency}
                         showMarkup
                         compact
+                        tableLayout
                       />
                     </div>
                     {resizeHandle(3)}
@@ -722,6 +723,7 @@ export function ModelPriceManagementPage() {
                         displayCurrency={r.currency}
                         showMarkup
                         compact
+                        tableLayout
                       />
                     </div>
                     {resizeHandle(4)}

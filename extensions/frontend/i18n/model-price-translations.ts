@@ -439,6 +439,37 @@ Object.assign(resources.vi, {
   "Models without pricing": "Mô hình chưa định giá",
 });
 
+Object.assign(resources.en, {
+  "Three input ranges + shared input, thinking/non-thinking output prices":
+    "Three input ranges + shared input, thinking/non-thinking output prices",
+  "Each token range uses one shared input price. Thinking and non-thinking output prices can be set separately.":
+    "Each token range uses one shared input price. Thinking and non-thinking output prices can be set separately.",
+  "Shared input price": "Shared input price",
+  "Maximum input length": "Maximum input length",
+  "Thinking tier name": "Thinking tier name",
+  "Non-thinking tier name": "Non-thinking tier name",
+});
+Object.assign(resources.zh, {
+  "Three input ranges + shared input, thinking/non-thinking output prices":
+    "三段输入长度 + 档位共享输入价 + 思考/非思考输出价",
+  "Each token range uses one shared input price. Thinking and non-thinking output prices can be set separately.":
+    "每个 Token 档位只设置一个共用输入价格，思考与非思考模式的输出价格分别设置。",
+  "Shared input price": "共用输入价格",
+  "Maximum input length": "输入长度上限",
+  "Thinking tier name": "思考模式档位名称",
+  "Non-thinking tier name": "非思考模式档位名称",
+});
+Object.assign(resources["zh-TW"], {
+  "Three input ranges + shared input, thinking/non-thinking output prices":
+    "三段輸入長度 + 檔位共用輸入價 + 思考/非思考輸出價",
+  "Each token range uses one shared input price. Thinking and non-thinking output prices can be set separately.":
+    "每個 Token 檔位只設定一個共用輸入價格，思考與非思考模式的輸出價格分別設定。",
+  "Shared input price": "共用輸入價格",
+  "Maximum input length": "輸入長度上限",
+  "Thinking tier name": "思考模式檔位名稱",
+  "Non-thinking tier name": "非思考模式檔位名稱",
+});
+
 for (const [language, translation] of Object.entries(resources)) {
   const locale =
     language === "zh" ? "zhCN" : language === "zh-TW" ? "zhTW" : language;

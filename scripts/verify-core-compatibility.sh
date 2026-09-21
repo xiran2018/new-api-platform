@@ -47,6 +47,7 @@ for key in \
   qwen-thinking-output \
   shared-input-thinking-output \
   two-range-thinking-output \
+  three-range-shared-input-thinking-output \
   text-image-audio-split \
   unified-multimodal-input-audio-output \
   omni-output-modes \
@@ -95,6 +96,8 @@ require_text "$tier_price_fields" "<PricingFieldAddon" "visual expression fields
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/types.ts" "vid_o" "visual video-output pricing variable was lost"
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/types.ts" "aud_s" "visual audio-duration pricing variable was lost"
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/visual.ts" "request-comparison" "visual request-parameter pricing conditions were lost"
+require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/visual.ts" "sharedPrices?: VisualPrice[]" "tier-local shared input pricing support was lost"
+require_text "$repo_root/core/new-api/web/src/features/system-settings/models/visual-billing-document-editor.tsx" "SharedInputThinkingRangesEditor" "the shared-input thinking-range editor was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/types.go" "AS    float64" "backend audio-duration pricing parameter was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/run.go" '"vid_o"' "backend video-output pricing binding was lost"
 require_text "$repo_root/core/new-api/service/tiered_settle.go" 'usedVars["aud_s"]' "audio-duration settlement mapping was lost"

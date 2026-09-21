@@ -141,6 +141,7 @@ const thinkingVariant = (block: PriceBlock): ThinkingPriceVariant | undefined =>
 
 const baseTierLabel = (label: string) => {
   const base = label
+    .replace(/\s*\(shared\s+input\)\s*/i, " ")
     .replace(/\s*(?:non[-\s]?thinking|thinking)\b\s*/i, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -240,6 +241,7 @@ function visualNodeToPriceBlocks(
   }
   const values = new Map<string, number>();
   for (const price of sharedPrices) values.set(price.variable, Number(price.value));
+  for (const price of node.sharedPrices || []) values.set(price.variable, Number(price.value));
   for (const price of node.prices) values.set(price.variable, Number(price.value));
   const block: PriceBlock = { label: node.label, unit: "1M tokens", note: inheritedCondition };
   for (const [variable, value] of values) {
@@ -534,6 +536,22 @@ export function PriceRenderer({
       table: "Custom table",
     } as Record<string, string>)[spec?.mode || "token"] || "Token pricing",
   );
+  const comparisonDelta = (
+    value: number | null | undefined,
+    other: number | null | undefined,
+  ) => {
+    if (value == null || other == null) return null;
+    const difference = value - other;
+    if (Math.abs(difference * currency.exchangeRate) < 0.0005) return null;
+    return (
+      <small
+        className={`ml-1 text-[11px] font-medium ${difference > 0 ? "text-rose-500" : "text-emerald-500"}`}
+      >
+        {difference > 0 ? "+" : ""}
+        {money(difference, currency)}
+      </small>
+    );
+  };
   if (usageRuleSet?.rules?.length) {
     return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} showMarkup={showMarkup} compact={compact} />;
   }
@@ -556,6 +574,10 @@ export function PriceRenderer({
         </div>
         {(() => {
           const groups = publicPriceBlockGroups(blocks);
+          const compareGroups = publicPriceBlockGroups(displayedCompareSpec?.blocks || []);
+          const compareGroupFor = (group: PublicPriceBlockGroup) =>
+            compareGroups.find((candidate) => candidate.key === group.key) ||
+            compareGroups.find((candidate) => candidate.label === group.label);
           const pairedGroups = groups.filter(
             (group) => group.thinkingBlock && group.nonThinkingBlock,
           );
@@ -568,11 +590,16 @@ export function PriceRenderer({
           ) => block
             ? publicPriceRows(block, requestMode).find((row) => row.field === field)?.value
             : undefined;
-          const renderPrice = (value: number | undefined, unit: string) => value == null ? (
+          const renderPrice = (
+            value: number | undefined,
+            unit: string,
+            comparedValue?: number,
+          ) => value == null ? (
             <span className="text-muted-foreground">-</span>
           ) : (
             <>
               <b>{money(value, currency)}</b>
+              {showMarkup && comparisonDelta(value, comparedValue)}
               {unit && <span className="ml-1 text-xs text-muted-foreground">/ {unit}</span>}
             </>
           );
@@ -580,7 +607,7 @@ export function PriceRenderer({
             <>
               {pairedGroups.length > 0 && (
                 <div className="overflow-x-auto rounded-md border bg-muted/25">
-                  <table className="w-full min-w-[720px] table-fixed text-left text-sm">
+                  <table className={`w-full ${compact ? "min-w-0 text-xs" : "min-w-[720px] text-sm"} table-fixed text-left`}>
                     <colgroup>
                       <col className="w-[28%]" />
                       <col className="w-[24%]" />
@@ -611,6 +638,7 @@ export function PriceRenderer({
                     <tbody>
                       {pairedGroups.map((group, groupIndex) => {
                         const primary = group.nonThinkingBlock || group.thinkingBlock || group.blocks[0];
+                        const comparedGroup = compareGroupFor(group);
                         const unit = primary.unit === "request" ? t("Per request") : primary.unit || "";
                         const current = displayedSpec?.mode === "time" && group.blocks.some((block) => activeWindow(block, timezone));
                         const fallbackRange = primary.min != null || primary.max != null
@@ -636,13 +664,22 @@ export function PriceRenderer({
                               {renderPrice(
                                 priceValue(group.thinkingBlock, "input") ?? priceValue(group.nonThinkingBlock, "input"),
                                 unit,
+                                priceValue(comparedGroup?.thinkingBlock, "input") ?? priceValue(comparedGroup?.nonThinkingBlock, "input"),
                               )}
                             </td>
                             <td className="break-words border-r p-2.5">
-                              {renderPrice(priceValue(group.nonThinkingBlock, "output"), unit)}
+                              {renderPrice(
+                                priceValue(group.nonThinkingBlock, "output"),
+                                unit,
+                                priceValue(comparedGroup?.nonThinkingBlock, "output"),
+                              )}
                             </td>
                             <td className="break-words p-2.5">
-                              {renderPrice(priceValue(group.thinkingBlock, "output"), unit)}
+                              {renderPrice(
+                                priceValue(group.thinkingBlock, "output"),
+                                unit,
+                                priceValue(comparedGroup?.thinkingBlock, "output"),
+                              )}
                             </td>
                           </tr>
                         );
@@ -655,6 +692,7 @@ export function PriceRenderer({
                 const primary = group.blocks[0];
                 const rows = publicPriceRows(primary, requestMode);
                 if (!rows.length) return null;
+                const comparedRows = publicPriceRows(compareGroupFor(group)?.blocks[0] || {}, requestMode);
                 const current = displayedSpec?.mode === "time" && group.blocks.some((block) => activeWindow(block, timezone));
                 const unit = primary.unit === "request" ? t("Per request") : primary.unit || "";
                 return (
@@ -686,6 +724,10 @@ export function PriceRenderer({
                             <td className="break-words p-2.5 text-xs text-muted-foreground">{t(row.label)}</td>
                             <td className="break-words p-2.5">
                               <b>{money(row.value, currency)}</b>
+                              {showMarkup && comparisonDelta(
+                                row.value,
+                                comparedRows.find((candidate) => candidate.field === row.field)?.value,
+                              )}
                               {unit && <span className="ml-1 text-xs text-muted-foreground">/ {unit}</span>}
                             </td>
                           </tr>
@@ -720,22 +762,6 @@ export function PriceRenderer({
         const showRequestPrice = displayedSpec?.mode === "request";
         const showTokenPrices = !showRequestPrice && displayedSpec?.mode !== "table";
         const compared = displayedCompareSpec?.blocks?.[i];
-        const delta = (
-          value: number | null | undefined,
-          other: number | null | undefined,
-        ) => {
-          if (value == null || other == null) return null;
-          const difference = value - other;
-          if (Math.abs(difference * currency.exchangeRate) < 0.0005) return null;
-          return (
-            <small
-              className={`ml-1 text-[11px] font-medium ${difference > 0 ? "text-rose-500" : difference < 0 ? "text-emerald-500" : "text-muted-foreground"}`}
-            >
-              {difference > 0 ? "+" : ""}
-              {money(difference, currency)}
-            </small>
-          );
-        };
         const current =
           displayedSpec?.mode === "time" && activeWindow(b, timezone);
         const unit = b.unit === "request" ? t("Per request") : b.unit;
@@ -768,21 +794,21 @@ export function PriceRenderer({
                 {showTokenPrices && hasNonZeroPrice(b.input) && (
                   <div>
                     {t("Input price")}: <b>{money(b.input, currency)}</b>
-                    {delta(b.input, compared?.input)}
+                    {comparisonDelta(b.input, compared?.input)}
                     {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
                   </div>
                 )}
                 {showTokenPrices && hasNonZeroPrice(b.output) && (
                   <div>
                     {t(b.multimodalOutput != null ? "Pure text output price" : "Output price")}: <b>{money(b.output, currency)}</b>
-                    {delta(b.output, compared?.output)}
+                    {comparisonDelta(b.output, compared?.output)}
                     {unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}
                   </div>
                 )}
                 {showRequestPrice && hasNonZeroPrice(b.price) && (
                   <div>
                     <b>{money(b.price, currency)}</b>
-                    {delta(b.price, compared?.price)}
+                    {comparisonDelta(b.price, compared?.price)}
                     <span className="ml-1 text-muted-foreground">/ {unit || t("Per request")}</span>
                   </div>
                 )}
@@ -799,7 +825,7 @@ export function PriceRenderer({
                   ["videoOutput", "Video output price"],
                   ["multimodalOutput", "Multimodal text output price"],
                 ] as const).map(([field, label]) =>
-                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency)}</b>{delta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
+                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency)}</b>{comparisonDelta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
                 )}
               </div>
             )}
