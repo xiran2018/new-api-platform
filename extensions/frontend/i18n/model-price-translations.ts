@@ -69,7 +69,7 @@ const resources: Record<string, Record<string, string>> = {
       "纯文本请求使用纯文本输出价格；请求包含图片、视频或音频输入时使用多模态文本输出价格；生成音频时不收取文本输出费用，仅按音频输出计费。",
     "Audio transcription per second": "语音识别按秒计费",
     "Audio duration pricing": "音频时长计费",
-    "Audio duration price": "音频输入价格",
+    "Audio duration price": "音频时长价格",
     "Per second": "每秒",
     "Output is free": "输出不计费",
     "Unified output price": "统一输出价",
