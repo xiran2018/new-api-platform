@@ -5,6 +5,9 @@ This repository keeps `core/new-api` as the upstream gateway and places product-
 Run `./scripts/assemble-extensions.sh` before frontend or backend builds. The script creates only ignored generated extension files under `core/new-api/platform/` and `core/new-api/web/src/platform/`; the four stable core seams are tracked as patches.
 
 See `docs/extension-architecture.md` for the stable integration seams and upgrade procedure.
+计费表达式模板的兼容规则、可视化编辑要求和上游同步保护见
+[`docs/billing-mode-compatibility.md`](docs/billing-mode-compatibility.md)。新增模板前请先阅读其中的
+“新增共享输入价 + 三段输入长度 + 思考/非思考输出价模板的约束”章节。
 
 For a complete Docker deployment with the application, portal gateway,
 PostgreSQL and Redis, see [docs/docker-production-deployment.md](docs/docker-production-deployment.md).
