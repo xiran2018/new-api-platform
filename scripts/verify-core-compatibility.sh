@@ -51,6 +51,7 @@ for key in \
   text-image-audio-split \
   unified-multimodal-input-audio-output \
   omni-output-modes \
+  omni-shared-media-input-output-modes \
   live-translation-multimodal \
   audio-transcription-per-second
 do
@@ -98,6 +99,9 @@ require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expre
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/visual.ts" "request-comparison" "visual request-parameter pricing conditions were lost"
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/visual.ts" "sharedPrices?: VisualPrice[]" "tier-local shared input pricing support was lost"
 require_text "$repo_root/core/new-api/web/src/features/system-settings/models/visual-billing-document-editor.tsx" "SharedInputThinkingRangesEditor" "the shared-input thinking-range editor was lost"
+require_text "$repo_root/core/new-api/web/src/features/system-settings/models/visual-billing-document-editor.tsx" "supportsPlatformVisualBillingDocumentEditor" "the platform visual billing editor seam was lost"
+require_text "$repo_root/extensions/frontend/model-prices/visual-billing-document-editor.tsx" "PlatformVisualBillingDocumentEditor" "the shared-media Omni editor was lost"
+require_text "$renderer_test" "renders %s as one grouped input/output row" "the grouped Omni price table was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/types.go" "AS    float64" "backend audio-duration pricing parameter was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"vid"' "backend video-input pricing compile binding was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"vid_o"' "backend video-output pricing compile binding was lost"

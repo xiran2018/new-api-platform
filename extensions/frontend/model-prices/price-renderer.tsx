@@ -122,6 +122,31 @@ export type PublicPriceBlockGroup = {
   nonThinkingBlock?: PriceBlock;
 };
 
+type OmniOutputPriceSet = {
+  pure: PriceBlock;
+  multimodal: PriceBlock;
+  audio: PriceBlock;
+};
+
+const omniOutputKind = (block: PriceBlock): keyof OmniOutputPriceSet | null => {
+  const label = (block.label || "").toLowerCase();
+  if (label.startsWith("pure text output")) return "pure";
+  if (label.startsWith("multimodal text output")) return "multimodal";
+  if (label.startsWith("text+audio output")) return "audio";
+  return null;
+};
+
+function omniOutputPriceSet(blocks: PriceBlock[]): OmniOutputPriceSet | null {
+  const found: Partial<OmniOutputPriceSet> = {};
+  for (const block of blocks) {
+    const kind = omniOutputKind(block);
+    if (kind && !found[kind]) found[kind] = block;
+  }
+  return found.pure && found.multimodal && found.audio
+    ? found as OmniOutputPriceSet
+    : null;
+}
+
 const thinkingVariant = (block: PriceBlock): ThinkingPriceVariant | undefined => {
   const label = block.label || "";
   const note = block.note || "";
@@ -573,8 +598,20 @@ export function PriceRenderer({
           )}
         </div>
         {(() => {
-          const groups = publicPriceBlockGroups(blocks);
-          const compareGroups = publicPriceBlockGroups(displayedCompareSpec?.blocks || []);
+          const omniPrices = omniOutputPriceSet(blocks);
+          const comparedOmniPrices = omniOutputPriceSet(displayedCompareSpec?.blocks || []);
+          const omniBlocks = new Set(omniPrices ? Object.values(omniPrices) : []);
+          const groups = publicPriceBlockGroups(
+            blocks.filter((block) => !omniBlocks.has(block)),
+          );
+          const comparedOmniBlocks = new Set(
+            comparedOmniPrices ? Object.values(comparedOmniPrices) : [],
+          );
+          const compareGroups = publicPriceBlockGroups(
+            (displayedCompareSpec?.blocks || []).filter(
+              (block) => !comparedOmniBlocks.has(block),
+            ),
+          );
           const compareGroupFor = (group: PublicPriceBlockGroup) =>
             compareGroups.find((candidate) => candidate.key === group.key) ||
             compareGroups.find((candidate) => candidate.label === group.label);
@@ -605,6 +642,100 @@ export function PriceRenderer({
           );
           return (
             <>
+              {omniPrices && (() => {
+                const unit = omniPrices.pure.unit || omniPrices.multimodal.unit || omniPrices.audio.unit || "";
+                const inputBlock = omniPrices.pure;
+                const comparedInputBlock = comparedOmniPrices?.pure;
+                const imagePrice = priceValue(inputBlock, "image");
+                const videoPrice = priceValue(inputBlock, "videoInput");
+                const comparedImagePrice = priceValue(comparedInputBlock, "image");
+                const comparedVideoPrice = priceValue(comparedInputBlock, "videoInput");
+                const sameMediaPrice = imagePrice === videoPrice;
+                return (
+                  <div className="overflow-x-auto rounded-md border bg-muted/25">
+                    <table className="min-w-[900px] table-fixed text-left text-xs">
+                      <thead className="bg-muted/60 text-muted-foreground">
+                        <tr>
+                          <th colSpan={3} className="border-b border-r p-2 text-center font-medium">
+                            {t("Input unit price")}
+                          </th>
+                          <th colSpan={3} className="border-b p-2 text-center font-medium">
+                            {t("Output unit price")}
+                          </th>
+                        </tr>
+                        <tr>
+                          <th className="border-r p-2 font-medium">{t("Text input")}</th>
+                          <th className="border-r p-2 font-medium">{t("Audio input")}</th>
+                          <th className="border-r p-2 font-medium">{t("Image / video input")}</th>
+                          <th className="border-r p-2 font-medium">{t("Pure text output")}</th>
+                          <th className="border-r p-2 font-medium">{t("Multimodal text output")}</th>
+                          <th className="p-2 font-medium">
+                            {t("Text + audio output")}
+                            <span className="ml-1 font-normal">({t("Audio only billed")})</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t align-top">
+                          <td className="break-words border-r p-2.5">
+                            {renderPrice(
+                              priceValue(inputBlock, "input"),
+                              unit,
+                              priceValue(comparedInputBlock, "input"),
+                            )}
+                          </td>
+                          <td className="break-words border-r p-2.5">
+                            {renderPrice(
+                              priceValue(inputBlock, "audioInput"),
+                              unit,
+                              priceValue(comparedInputBlock, "audioInput"),
+                            )}
+                          </td>
+                          <td className="break-words border-r p-2.5">
+                            {sameMediaPrice ? renderPrice(
+                              imagePrice ?? videoPrice,
+                              unit,
+                              comparedImagePrice ?? comparedVideoPrice,
+                            ) : (
+                              <div className="space-y-1">
+                                <div>
+                                  <span className="mr-1 text-muted-foreground">{t("Image input")}:</span>
+                                  {renderPrice(imagePrice, unit, comparedImagePrice)}
+                                </div>
+                                <div>
+                                  <span className="mr-1 text-muted-foreground">{t("Video input")}:</span>
+                                  {renderPrice(videoPrice, unit, comparedVideoPrice)}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="break-words border-r p-2.5">
+                            {renderPrice(
+                              priceValue(omniPrices.pure, "output"),
+                              unit,
+                              priceValue(comparedOmniPrices?.pure, "output"),
+                            )}
+                          </td>
+                          <td className="break-words border-r p-2.5">
+                            {renderPrice(
+                              priceValue(omniPrices.multimodal, "output"),
+                              unit,
+                              priceValue(comparedOmniPrices?.multimodal, "output"),
+                            )}
+                          </td>
+                          <td className="break-words p-2.5">
+                            {renderPrice(
+                              priceValue(omniPrices.audio, "audioOutput"),
+                              unit,
+                              priceValue(comparedOmniPrices?.audio, "audioOutput"),
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
               {pairedGroups.length > 0 && (
                 <div className="overflow-x-auto rounded-md border bg-muted/25">
                   <table className={`w-full ${compact ? "min-w-0 text-xs" : "min-w-[720px] text-sm"} table-fixed text-left`}>

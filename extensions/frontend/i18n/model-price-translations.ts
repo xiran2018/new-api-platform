@@ -57,6 +57,21 @@ const resources: Record<string, Record<string, string>> = {
     "Unified text/image/video input + separate audio pricing":
       "文本/图片/视频统一输入价 + 音频单独计价",
     "Qwen3 Omni three output prices": "Qwen3 Omni 三种输出价格",
+    "Qwen3 Omni shared image/video input + three output prices":
+      "Qwen3 Omni 共享图片/视频输入价 + 三种输出价格",
+    "Input unit price": "输入单价",
+    "Output unit price": "输出单价",
+    "Text input": "文本输入",
+    "Audio input": "音频输入",
+    "Image / video input": "图片/视频输入",
+    "Image input": "图片输入",
+    "Video input": "视频输入",
+    "Pure text output": "纯文本输出",
+    "Multimodal text output": "多模态文本输出",
+    "Text + audio output": "文本+音频输出",
+    "Audio only billed": "仅音频计费",
+    "One price is applied to both image and video input tokens.":
+      "同一个价格会同时应用于图片和视频输入 Token。",
     "text+audio output (audio only)": "文本+音频输出（仅音频计费）",
     "Shared input pricing": "共享输入价格",
     "These input prices are applied once before the selected output price branch.": "这些输入价格只计算一次，然后叠加所选的输出价格分支。",
@@ -440,6 +455,19 @@ Object.assign(resources.vi, {
 });
 
 Object.assign(resources.en, {
+  "Qwen3 Omni shared image/video input + three output prices":
+    "Qwen3 Omni shared image/video input + three output prices",
+  "Input unit price": "Input unit price",
+  "Output unit price": "Output unit price",
+  "Text input": "Text input",
+  "Audio input": "Audio input",
+  "Image / video input": "Image / video input",
+  "Pure text output": "Pure text output",
+  "Multimodal text output": "Multimodal text output",
+  "Text + audio output": "Text + audio output",
+  "Audio only billed": "Audio only billed",
+  "One price is applied to both image and video input tokens.":
+    "One price is applied to both image and video input tokens.",
   "Three input ranges + shared input, thinking/non-thinking output prices":
     "Three input ranges + shared input, thinking/non-thinking output prices",
   "Each token range uses one shared input price. Thinking and non-thinking output prices can be set separately.":
@@ -462,6 +490,19 @@ Object.assign(resources.zh, {
   "Non-thinking tier name": "非思考模式档位名称",
 });
 Object.assign(resources["zh-TW"], {
+  "Qwen3 Omni shared image/video input + three output prices":
+    "Qwen3 Omni 共用圖片/影片輸入價 + 三種輸出價格",
+  "Input unit price": "輸入單價",
+  "Output unit price": "輸出單價",
+  "Text input": "文字輸入",
+  "Audio input": "音訊輸入",
+  "Image / video input": "圖片/影片輸入",
+  "Pure text output": "純文字輸出",
+  "Multimodal text output": "多模態文字輸出",
+  "Text + audio output": "文字+音訊輸出",
+  "Audio only billed": "僅音訊計費",
+  "One price is applied to both image and video input tokens.":
+    "同一個價格會同時套用於圖片與影片輸入 Token。",
   "Three input ranges + shared input, thinking/non-thinking output prices":
     "三段輸入長度 + 檔位共用輸入價 + 思考/非思考輸出價",
   "Each token range uses one shared input price. Thinking and non-thinking output prices can be set separately.":

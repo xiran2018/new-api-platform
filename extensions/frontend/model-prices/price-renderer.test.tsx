@@ -155,4 +155,55 @@ describe("expression price display", () => {
     expect(screen.getAllByText("0-128K")).toHaveLength(1);
     expect(screen.getAllByText("128K-256K")).toHaveLength(1);
   });
+
+  it.each(["omni-output-modes", "omni-shared-media-input-output-modes"])(
+    "renders %s as one grouped input/output row",
+    (presetKey) => {
+      const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap((group) => group.presets)
+        .find((item) => item.key === presetKey);
+      expect(preset).toBeDefined();
+
+      render(
+        <PriceRenderer
+          tableLayout
+          timezone="Asia/Shanghai"
+          spec={{
+            mode: "expression",
+            blocks: [{ baseExpression: preset?.expr }],
+          }}
+        />,
+      );
+
+      expect(document.querySelectorAll("table")).toHaveLength(1);
+      expect(document.querySelectorAll("tbody tr")).toHaveLength(1);
+      expect(screen.getByText("Input unit price")).toBeInTheDocument();
+      expect(screen.getByText("Output unit price")).toBeInTheDocument();
+      expect(screen.getByText("Image / video input")).toBeInTheDocument();
+      expect(screen.getByText("Pure text output")).toBeInTheDocument();
+      expect(screen.getByText("Multimodal text output")).toBeInTheDocument();
+      expect(screen.queryByText(/img > 0/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/ao > 0/)).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps different legacy image and video prices in one Omni table cell", () => {
+    render(
+      <PriceRenderer
+        tableLayout
+        timezone="Asia/Shanghai"
+        spec={{
+          mode: "expression",
+          blocks: [
+            { label: "pure text output", input: 1, image: 2, videoInput: 3, output: 4, unit: "1M tokens" },
+            { label: "multimodal text output", input: 1, image: 2, videoInput: 3, output: 5, unit: "1M tokens" },
+            { label: "text+audio output (audio only)", input: 1, image: 2, videoInput: 3, audioOutput: 6, unit: "1M tokens" },
+          ],
+        }}
+      />,
+    );
+
+    expect(document.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(screen.getByText("Image input:")).toBeInTheDocument();
+    expect(screen.getByText("Video input:")).toBeInTheDocument();
+  });
 });
