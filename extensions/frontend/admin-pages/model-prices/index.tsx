@@ -180,13 +180,8 @@ function SpecEditor({
           : audioInput * audioOutputRatio,
     };
   });
-  const mode = value.blocks?.[0]?.usageRuleSet
-    ? "media"
-    : value.mode === "request"
-      ? "request"
-      : value.mode === "expression"
-        ? "expression"
-        : "token";
+  type SpecMode = "token" | "request" | "expression" | "media";
+  const [mode, setMode] = useState<SpecMode>("expression");
   const lanes = [
     ["output", "Completion price"],
     ["cache", "Cache read price"],
@@ -203,14 +198,14 @@ function SpecEditor({
   const legacyDraft = () => {
     const block = blocks[0];
     if (!block) return null;
-    if (mode === "request" && block.price != null) {
+    if (value.mode === "request" && block.price != null) {
       return {
         name: modelKey,
         billingMode: "per-request" as const,
         price: String(block.price),
       };
     }
-    if (mode !== "token" || block.input == null) return null;
+    if (value.mode !== "token" || block.input == null) return null;
     const input = Number(block.input);
     if (!Number.isFinite(input) || input <= 0) return null;
     const ratio = (price: number | null | undefined) =>
@@ -230,6 +225,49 @@ function SpecEditor({
           : String(Number(block.audioOutput) / Number(block.audioInput)),
     };
   };
+  useEffect(() => {
+    setMode("expression");
+    if (value.mode !== "token" && value.mode !== "request") return;
+    const draft = legacyDraft();
+    if (!draft) {
+      setMode(value.mode);
+      return;
+    }
+    let active = true;
+    setConvertingLegacy(true);
+    void previewModelPricingConversion({
+      model_name: modelKey,
+      pricing: pricingFromDraft(draft),
+    })
+      .then((result) => {
+        if (!active) return;
+        if (!result.expression) {
+          setMode(value.mode as "token" | "request");
+          return;
+        }
+        onChange({
+          ...value,
+          mode: "expression",
+          blocks: [{
+            label: "Expression",
+            note: result.expression,
+            baseExpression: result.expression,
+          }],
+        });
+      })
+      .catch(() => {
+        if (active) setMode(value.mode as "token" | "request");
+      })
+      .finally(() => {
+        if (active) setConvertingLegacy(false);
+      });
+    return () => {
+      active = false;
+    };
+    // Opening another model remounts or changes modelKey. The conversion is
+    // intentionally a draft-only migration and is persisted only on Save.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelKey]);
   return (
     <div className="space-y-3">
       <div className="rounded-md border bg-muted/20 p-3 text-sm">
@@ -250,6 +288,8 @@ function SpecEditor({
       <Tabs
         value={mode}
         onValueChange={(next) => {
+          const nextMode = next as SpecMode;
+          setMode(nextMode);
           if (next === "media") {
             onChange({
               ...value,
@@ -262,7 +302,7 @@ function SpecEditor({
             return;
           }
           const cleanBlocks = blocks.map(({ usageRuleSet: _usageRuleSet, ...block }) => block);
-          onChange({ ...value, mode: next as PriceSpec["mode"], blocks: cleanBlocks });
+          onChange({ ...value, mode: nextMode as PriceSpec["mode"], blocks: cleanBlocks });
         }}
       >
         <TabsList className="grid h-auto w-full max-w-3xl grid-cols-2 sm:grid-cols-4">
@@ -451,6 +491,7 @@ export function ModelPriceManagementPage() {
     [filter, setFilter] = useState<"all" | "local" | "unset">("all"),
     [vendorFilter, setVendorFilter] = useState("all"),
     [edit, setEdit] = useState<ModelPrice | null>(null),
+    [savingEdit, setSavingEdit] = useState(false),
     [vendorNames, setVendorNames] = useState<string[]>([]),
     [tab, setTab] = useState<"vendor" | "ours">("vendor"),
     [syncOpen, setSyncOpen] = useState(false),
@@ -554,6 +595,25 @@ export function ModelPriceManagementPage() {
     }
     toast.success(t("Save"));
     load();
+  };
+  const handleSave = async () => {
+    if (!edit || savingEdit) return;
+    setSavingEdit(true);
+    const loadingToast = toast.loading(t("Saving..."));
+    try {
+      if (tab !== "ours") {
+        await save();
+      } else if (!runtimePricingEditorRef.current) {
+        toast.error(t("Pricing editor is still loading"));
+      } else {
+        await runtimePricingEditorRef.current.save();
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Save failed"));
+    } finally {
+      toast.dismiss(loadingToast);
+      setSavingEdit(false);
+    }
   };
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-5">
@@ -732,7 +792,10 @@ export function ModelPriceManagementPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => setEdit(r)}
+                      onClick={() => {
+                        setTab("vendor");
+                        setEdit(r);
+                      }}
                     >
                       <Pencil className="size-4" />
                     </Button>
@@ -815,6 +878,7 @@ export function ModelPriceManagementPage() {
                 {edit.id > 0 && (
                   <Button
                     variant="outline"
+                    disabled={savingEdit}
                     onClick={() => {
                       setSyncModel(edit.modelKey);
                       setSyncOpen(true);
@@ -824,23 +888,18 @@ export function ModelPriceManagementPage() {
                     {t("Upstream price sync")}
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => setEdit(null)}>
-                  {t("Cancel")}
+                <Button
+                  variant="outline"
+                  disabled={savingEdit}
+                  onClick={() => setEdit(null)}
+                >
+                  {savingEdit ? t("Saving...") : t("Cancel")}
                 </Button>
                 <Button
-                  onClick={() => {
-                    if (tab !== "ours") {
-                      void save();
-                      return;
-                    }
-                    if (!runtimePricingEditorRef.current) {
-                      toast.error(t("Pricing editor is still loading"));
-                      return;
-                    }
-                    void runtimePricingEditorRef.current.save();
-                  }}
+                  disabled={savingEdit}
+                  onClick={() => void handleSave()}
                 >
-                  {t("Save")}
+                  {savingEdit ? t("Saving...") : t("Save")}
                 </Button>
               </div>
             </div>

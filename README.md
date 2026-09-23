@@ -8,6 +8,9 @@ See `docs/extension-architecture.md` for the stable integration seams and upgrad
 计费表达式模板的兼容规则、可视化编辑要求和上游同步保护见
 [`docs/billing-mode-compatibility.md`](docs/billing-mode-compatibility.md)。新增模板前请先阅读其中的
 “新增共享输入价 + 三段输入长度 + 思考/非思考输出价模板的约束”章节。
+全部表达式模板和高级媒体计费规则的名称、字段、布局、展示与真实结算合同见
+[`docs/billing-template-registry.md`](docs/billing-template-registry.md)。新增或修改任何计费模板时，
+必须同时更新机器注册表、该文档和回归测试，否则兼容检查会失败。
 
 For a complete Docker deployment with the application, portal gateway,
 PostgreSQL and Redis, see [docs/docker-production-deployment.md](docs/docker-production-deployment.md).

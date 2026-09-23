@@ -12,6 +12,8 @@ usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usag
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
 renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.tsx"
 capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
+template_registry="$repo_root/extensions/frontend/model-prices/billing-template-registry.ts"
+template_registry_doc="$repo_root/docs/billing-template-registry.md"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
 model_pricing_api="$repo_root/core/new-api/web/src/features/model-pricing/api.ts"
@@ -57,6 +59,22 @@ for key in \
 do
   require_text "$presets" "key: '$key'" "a platform expression preset was lost during upstream synchronization"
 done
+
+require_text "$template_registry" "EXPRESSION_TEMPLATE_REGISTRY" \
+  "the machine-readable expression-template registry was lost"
+require_text "$template_registry" "ADVANCED_MEDIA_TEMPLATE_REGISTRY" \
+  "the machine-readable advanced-media registry was lost"
+require_text "$template_registry_doc" "登记与检查制度" \
+  "the human-readable billing-template maintenance contract was lost"
+while IFS= read -r key; do
+  require_text "$template_registry_doc" "\`$key\`" \
+    "billing template '$key' is not documented in the registry"
+done < <(sed -n "s/^[[:space:]]*key: '\([^']*\)'.*/\1/p" "$template_registry" | sort -u)
+require_text "$renderer_test" "EXPRESSION_TEMPLATE_REGISTRY" \
+  "expression presets are no longer checked against the billing-template registry"
+require_text "$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.test.ts" \
+  "ADVANCED_MEDIA_TEMPLATE_REGISTRY" \
+  "advanced-media templates are no longer checked against the billing-template registry"
 
 # The input-length-thinking-tiers preset was intentionally removed from the
 # picker.  Keep the historical expression format compatible instead: prices

@@ -3,6 +3,11 @@
 本文件记录 `计费方式/` 截图所要求的计费能力。它不是仅供展示的清单：
 `scripts/verify-core-compatibility.sh`、前端表达式测试和后端计费测试会在每次上游同步后验证这些能力。
 
+逐模板的稳定 key、名称、功能、字段、编辑布局、管理端/客户端展示和真实结算说明统一登记在
+[`billing-template-registry.md`](billing-template-registry.md)，机器可读合同位于
+`extensions/frontend/model-prices/billing-template-registry.ts`。以后新增计费模板或高级媒体规则时，
+必须同时更新这两份注册表和对应回归测试。
+
 | 截图计费结构 | 可视化入口 | 实际计费数据 |
 | --- | --- | --- |
 | 按生成图片张数 | 图片分辨率模板或空白规则 | `output_images` |
