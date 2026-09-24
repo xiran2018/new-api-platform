@@ -330,6 +330,7 @@ Object.assign(resources.zh, {
     "Boolean request option": "请求开关参数",
     "Per-request quantity tiers": "单次请求数量阶梯",
     "Generated image quantity tiers": "生成图片数量阶梯",
+    "Generated output images per image": "按输出图片张数计费",
     "Generated image quantity": "生成数量",
     "Tier discount": "折扣",
     "Chinese discount unit": "折",
@@ -343,6 +344,8 @@ Object.assign(resources.zh, {
       "根据所选请求参数是开启还是关闭进行计价。",
     "Prices each generated output image according to the output quantity tier.":
       "按照实际生成的输出图片数量匹配档位，并对每张输出图片计价。",
+    "Prices every generated output image at one configurable unit price.":
+      "按照实际生成的输出图片张数乘以可配置的每张单价计费。",
     "Prices generated video by output resolution and output duration.":
       "按照生成视频的输出分辨率和输出时长计价。",
     "Prices text-to-speech input per ten thousand Unicode characters; generated audio output is free.":
@@ -396,6 +399,7 @@ Object.assign(resources.zh, {
     "Audio enabled": "生成音频",
     "Input image count": "输入图片数",
     "Output image count": "输出图片数",
+    "Generated output image count": "实际生成图片数",
     "Duration in seconds": "生成时长",
     "Output video duration": "输出视频时长",
     "Character count": "字符数",

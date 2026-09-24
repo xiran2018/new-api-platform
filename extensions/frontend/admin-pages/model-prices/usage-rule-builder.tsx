@@ -11,8 +11,8 @@ import type {
   UsageRuleSet,
 } from "../../model-prices/types";
 
-export type TemplateKey = "image" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
-export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
+export type TemplateKey = "image" | "outputImageCount" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
+export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
 
 const requestFields = [
   "resolution",
@@ -23,6 +23,7 @@ const requestFields = [
   "audio",
   "input_images",
   "output_images",
+  "image_count",
   "seconds",
   "characters",
   "tts_input_characters",
@@ -41,6 +42,7 @@ const fieldLabels: Record<string, string> = {
   audio: "Audio enabled",
   input_images: "Input image count",
   output_images: "Output image count",
+  image_count: "Generated output image count",
   seconds: "Output video duration",
   characters: "Character count",
   tts_input_characters: "TTS input price",
@@ -127,12 +129,18 @@ export function syncExampleTierNames(rules: UsagePriceRule[], oldValue: UsageRul
 
 export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSet["execution"]): UsageRuleSet {
   const wrap = (rules: UsagePriceRule[]): UsageRuleSet => ({ version: 1, execution, rules });
+  const generatedImageMeter = execution === "request" ? "image_count" : "output_images";
   if (key === "image") {
     return wrap([
       rule("1K", [{ field: "resolution_tier", operator: "eq", value: "1K" }], [
         charge("input_images", "张"), charge("output_images", "张"),
       ]),
       rule("其他图片分辨率", [], [charge("input_images", "张"), charge("output_images", "张")]),
+    ]);
+  }
+  if (key === "outputImageCount") {
+    return wrap([
+      rule("按输出图片张数", [], [charge(generatedImageMeter, "张")]),
     ]);
   }
   if (key === "boolean") {
@@ -143,11 +151,11 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
   }
   if (key === "volume") {
     return wrap([
-      rule("≤ 25 张", [{ field: "output_images", operator: "lte", value: 25 }], [charge("output_images", "张", 0.3)]),
-      rule("26 - 125 张", [{ field: "output_images", operator: "lte", value: 125 }], [charge("output_images", "张", 0.275)]),
-      rule("126 - 250 张", [{ field: "output_images", operator: "lte", value: 250 }], [charge("output_images", "张", 0.25)]),
-      rule("251 - 1250 张", [{ field: "output_images", operator: "lte", value: 1250 }], [charge("output_images", "张", 0.225)]),
-      rule("> 1250 张", [], [charge("output_images", "张", 0.2)]),
+      rule("≤ 25 张", [{ field: generatedImageMeter, operator: "lte", value: 25 }], [charge(generatedImageMeter, "张", 0.3)]),
+      rule("26 - 125 张", [{ field: generatedImageMeter, operator: "lte", value: 125 }], [charge(generatedImageMeter, "张", 0.275)]),
+      rule("126 - 250 张", [{ field: generatedImageMeter, operator: "lte", value: 250 }], [charge(generatedImageMeter, "张", 0.25)]),
+      rule("251 - 1250 张", [{ field: generatedImageMeter, operator: "lte", value: 1250 }], [charge(generatedImageMeter, "张", 0.225)]),
+      rule("> 1250 张", [], [charge(generatedImageMeter, "张", 0.2)]),
     ]);
   }
   if (key === "video") {
@@ -192,6 +200,7 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   if (!rules.length) return fallback;
   const fields = new Set(rules.flatMap((item) => item.conditions.map((condition) => condition.field)));
   const meters = new Set(rules.flatMap((item) => item.charges.map((part) => part.meter)));
+  if (meters.has("image_count") && !fields.has("image_count")) return "outputImageCount";
   if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
   if (fields.has("task_type") || fields.has("output_spec")) return "taskMatrix";
   if (meters.has("count") && !fields.has("output_images")) return "voiceCount";
@@ -201,7 +210,7 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   if (fields.has("mode") && meters.has("seconds")) return "videoMode";
   if (fields.has("resolution_tier") || (fields.has("resolution") && !meters.has("seconds"))) return "image";
   if (fields.has("resolution") && meters.has("seconds")) return "video";
-  if (fields.has("output_images") || fields.has("count")) return "volume";
+  if (fields.has("output_images") || fields.has("image_count") || fields.has("count")) return "volume";
   if (fields.has("prompt_extend") || fields.has("audio")) return "boolean";
   return "blank";
 }
@@ -215,9 +224,11 @@ function valueLiteral(value: UsageRuleCondition["value"]) {
 }
 
 function conditionExpression(condition: UsageRuleCondition) {
-  const probe = `u(${JSON.stringify(condition.field.trim())})`;
+  const field = condition.field.trim();
+  const probe = field === "image_count" ? "image_count" : `u(${JSON.stringify(field)})`;
   const operators = { eq: "==", ne: "!=", lt: "<", lte: "<=", gt: ">", gte: ">=" } as const;
   const comparison = `${probe} ${operators[condition.operator]} ${valueLiteral(condition.value)}`;
+  if (field === "image_count") return comparison;
   return ["lt", "lte", "gt", "gte"].includes(condition.operator)
     ? `${probe} != nil && ${comparison}`
     : comparison;
@@ -226,8 +237,15 @@ function conditionExpression(condition: UsageRuleCondition) {
 export function usageRuleSetExpression(ruleSet: UsageRuleSet) {
   const scale = ruleSet.execution === "request" ? 1_000_000 : 1;
   const body = (item: UsagePriceRule) => {
-    const parts = item.charges
-      .filter((entry) => entry.price > 0)
+    const activeCharges = item.charges.filter((entry) => entry.price > 0);
+    const imageCountUnitPrice = activeCharges
+      .filter((entry) => entry.meter === "image_count")
+      .reduce((total, entry) => {
+        const divisor = entry.divisor || (entry.priceBasis === "million" ? 1_000_000 : unitDivisor(entry.unit));
+        return total + entry.price / divisor;
+      }, 0);
+    const parts = activeCharges
+      .filter((entry) => entry.meter !== "image_count")
       .map((entry) => {
         const divisor = entry.divisor || (entry.priceBasis === "million" ? 1_000_000 : unitDivisor(entry.unit));
         const price = Number((entry.price * scale / divisor).toPrecision(15));
@@ -235,7 +253,12 @@ export function usageRuleSetExpression(ruleSet: UsageRuleSet) {
         const measured = `u(${JSON.stringify(entry.meter.trim())})`;
         return `${measured} * ${price}`;
       });
-    return `tier(${JSON.stringify(item.label.trim() || "default")}, ${parts.join(" + ") || "0"})`;
+    const label = JSON.stringify(item.label.trim() || "default");
+    const regular = parts.length ? `tier(${label}, ${parts.join(" + ")})` : "";
+    const counted = imageCountUnitPrice > 0
+      ? `tier(${label}, fixed(${Number(imageCountUnitPrice.toPrecision(15))})) * image_count`
+      : "";
+    return [counted, regular].filter(Boolean).join(" + ") || `tier(${label}, 0)`;
   };
   let expression = body(ruleSet.rules.at(-1)!);
   for (let index = ruleSet.rules.length - 2; index >= 0; index -= 1) {
@@ -337,6 +360,7 @@ export function UsageRuleBuilder({
   const [templateKey, setTemplateKey] = useState<TemplateKey>(() => detectTemplateKey(value, defaultTemplate));
   const templateHelp: Record<TemplateKey, string> = {
     image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
+    outputImageCount: "Prices every generated output image at one configurable unit price.",
     boolean: "Prices the request according to whether the selected request option is enabled.",
     volume: "Prices each generated output image according to the output quantity tier.",
     video: "Prices generated video by output resolution and output duration.",
@@ -359,7 +383,7 @@ export function UsageRuleBuilder({
   );
   const meters = useMemo(
     () => ["request", ...fields.filter((field) => execution === "request"
-      ? ["input_images", "output_images", "count", "characters", "tts_input_characters", "tts_output_characters", "seconds"].includes(field)
+      ? ["input_images", "output_images", "image_count", "count", "characters", "tts_input_characters", "tts_output_characters", "seconds"].includes(field)
       : usageSchema?.[field]?.type === "number")],
     [execution, fields, usageSchema],
   );
@@ -401,6 +425,7 @@ export function UsageRuleBuilder({
             commitRules(createUsageRuleTemplate(nextTemplate, execution).rules);
           }}>
             {(execution === "request" || fields.includes("resolution_tier") || (fields.includes("resolution") && fields.includes("output_images"))) && <option value="image">{t("Output image resolution (1K/2K)")}</option>}
+            {(execution === "request" || fields.includes("output_images") || fields.includes("image_count")) && <option value="outputImageCount">{t("Generated output images per image")}</option>}
             {(execution === "request" || fields.includes("prompt_extend")) && <option value="boolean">{t("Boolean request option")}</option>}
             {(execution === "request" || fields.includes("output_images") || fields.includes("count")) && <option value="volume">{t("Generated image quantity tiers")}</option>}
             {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds"))) && <option value="video">{t("Output video resolution and duration")}</option>}

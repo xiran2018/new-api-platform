@@ -123,4 +123,36 @@ describe('screenshot-derived billing templates', () => {
       ).toMatchObject({ status: 'success' })
     }
   })
+
+  it('charges standard image generation by the actual output image count', () => {
+    const rules = createUsageRuleTemplate('outputImageCount', 'request')
+    rules.rules[0].charges[0].price = 0.5
+
+    const expression = usageRuleSetExpression(rules)
+
+    expect(expression).toContain('fixed(0.5)) * image_count')
+    expect(
+      evaluateBillingExpression(expression, {
+        imageCount: 3,
+        request: { body: { n: 3 } },
+      })
+    ).toMatchObject({
+      status: 'success',
+      cost: 1_500_000,
+    })
+  })
+
+  it('uses native image_count for requests and output_images usage for tasks', () => {
+    const requestExpression = usageRuleSetExpression(
+      createUsageRuleTemplate('volume', 'request')
+    )
+    const taskRules = createUsageRuleTemplate('outputImageCount', 'task')
+    taskRules.rules[0].charges[0].price = 0.5
+    const taskExpression = usageRuleSetExpression(taskRules)
+
+    expect(requestExpression).toContain('image_count')
+    expect(requestExpression).not.toContain('u("output_images")')
+    expect(taskExpression).toContain('u("output_images")')
+    expect(taskExpression).not.toContain('image_count')
+  })
 })

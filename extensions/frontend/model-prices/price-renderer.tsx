@@ -412,6 +412,7 @@ function UsageRuleSetRenderer({
   const conditionLabel = (condition: UsageRuleSet["rules"][number]["conditions"][number]) => {
     const field = t(({
       output_images: "Generated image quantity",
+      image_count: "Generated image quantity",
       input_images: "Input image count",
       seconds: "Output video duration",
       characters: "Character count",
@@ -425,6 +426,7 @@ function UsageRuleSetRenderer({
     return t(({
       input_images: "Input image count",
       output_images: "Output image count",
+      image_count: "Output image count",
       seconds: "Output video duration",
       characters: "Character count",
       tts_input_characters: "TTS input price",

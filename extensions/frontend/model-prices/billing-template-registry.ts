@@ -274,6 +274,25 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
       '分辨率由数字输入和 DPI/K/P 单位下拉组成，不得固定为只有 1K/2K。',
   },
   {
+    key: 'outputImageCount',
+    name: 'Generated output images per image',
+    purpose: '为普通图片生成接口设置统一的每张输出图片单价。',
+    execution: 'request-or-task',
+    conditionFields: [],
+    chargeMeters: ['image_count'],
+    units: ['张'],
+    defaultTiers: '一个无条件档位，管理员只需填写每张输出图片的价格。',
+    layout: {
+      editor: '单档位、单收费项，显示实际生成图片数、张和单价。',
+      managementDisplay: '显示每张输出图片价格，不展示 image_count 内部变量。',
+      publicDisplay: '显示输出图片单价，例如 ¥0.500 / 张。',
+    },
+    runtime:
+      '普通图片请求使用 core 原生 image_count：按请求 n 预扣，按实际返回图片张数结算。',
+    compatibility:
+      'request 模式必须生成 fixed(unitPrice) * image_count；异步任务若只有 output_images usage，继续使用任务 usage 结算，不得混淆。',
+  },
+  {
     key: 'boolean',
     name: 'Boolean request option',
     purpose: '根据请求布尔开关开启或关闭使用不同单价。',
@@ -295,8 +314,8 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     name: 'Generated image quantity tiers',
     purpose: '按生成图片数量区间使用阶梯单价。',
     execution: 'request-or-task',
-    conditionFields: ['output_images'],
-    chargeMeters: ['output_images'],
+    conditionFields: ['image_count'],
+    chargeMeters: ['image_count'],
     units: ['张'],
     defaultTiers: '≤25、26-125、126-250、251-1250、>1250 五个可编辑示例档。',
     layout: {
@@ -304,8 +323,10 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
       managementDisplay: '按数量档位展示每张单价。',
       publicDisplay: '按数量范围逐行展示。',
     },
-    runtime: '按 output_images 顺序命中首个档位，再按实际张数乘价。',
-    compatibility: '阈值、档位数和名称可修改，最后一档必须是无条件兜底。',
+    runtime:
+      '普通图片请求按 image_count 命中首个档位并结算；异步任务使用 output_images usage。',
+    compatibility:
+      '阈值、档位数和名称可修改，最后一档必须是无条件兜底；旧 output_images 规则仍须继续解析。',
   },
   {
     key: 'video',

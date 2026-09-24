@@ -1,6 +1,6 @@
 # 计费模板与高级媒体计费规则注册表
 
-最后核对日期：2026-09-23。
+最后核对日期：2026-09-24。
 
 本文件是计费功能的人工可读兼容合同。机器可读的完整合同位于
 `extensions/frontend/model-prices/billing-template-registry.ts`。模板的代码结构、组件名称和
@@ -110,8 +110,9 @@
 | 稳定 key / 名称 | 默认条件字段 | 默认收费字段和单位 | 默认布局与用途 | 真实结算和兼容要求 |
 | --- | --- | --- | --- | --- |
 | `image`<br>Output image resolution (1K/2K) | `resolution_tier` | `input_images`、`output_images` / 张 | 分辨率档位；同时支持参考图输入和生成图输出 | 数字 + DPI/K/P 下拉；1K/2K 只是模板示例 |
+| `outputImageCount`<br>Generated output images per image | 无 | 普通图片接口使用 `image_count` / 张；异步任务可使用 `output_images` | 单档位统一设置每张生成图片价格 | 普通图片接口按请求 `n` 预扣、按实际返回图片张数结算；不得退化为按请求次数计费 |
 | `boolean`<br>Boolean request option | `prompt_extend` | `request` / 次 | 开启条件档 + 关闭兜底档 | 布尔值必须使用启用/禁用下拉，可换成其他 schema 布尔字段 |
-| `volume`<br>Generated image quantity tiers | `output_images` | `output_images` / 张 | 多个数量区间阶梯价 | 阈值和档位数可编辑；修改阈值同步更新示例名称 |
+| `volume`<br>Generated image quantity tiers | 普通图片接口 `image_count`；异步任务 `output_images` | 对应图片数量 / 张 | 多个数量区间阶梯价 | 阈值和档位数可编辑；普通图片接口必须按原生 `image_count` 真实结算，旧 `output_images` 数据继续兼容 |
 | `video`<br>Output video resolution and duration | `resolution` | `seconds` / 秒、分钟、小时 | 按视频输出分辨率设置时长价 | 明确分辨率属于输出视频；按真实秒数和 divisor 结算 |
 | `videoAudio`<br>Video resolution, duration and audio switch | `resolution`、`audio` | `seconds` / 秒、分钟、小时 | 分辨率与有声/无声组合档位 | 同档所有条件同时匹配；有声档应在无声兜底前 |
 | `videoMode`<br>Video output mode and duration | `mode` | `seconds` / 秒、分钟、小时 | 标准/专业等模式的时长价格 | `wan-std` 只是示例，允许新增任意模式 |
