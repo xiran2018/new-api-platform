@@ -10,19 +10,24 @@ import {
 } from "@/features/pricing/lib/billing-expression/visual";
 import { tryParseVisualConfig } from "@/features/pricing/lib/tier-expr";
 import type { PriceBlock, PriceSpec, UsageRuleSet } from "./types";
+import { matchingUsageRuleSet } from "./usage-rule-expression";
+import {
+  DEFAULT_PRICE_FRACTION_DIGITS,
+  formatPriceDecimal,
+  isAudioDurationPriceField,
+  isAudioDurationUsageRuleSet,
+  priceFractionDigits,
+} from "./price-precision";
 
 const money = (
   value: number | null | undefined,
   currency: PricingCurrency,
+  fractionDigits = DEFAULT_PRICE_FRACTION_DIGITS,
 ) => {
   if (value == null) return "-";
   const converted = value * currency.exchangeRate;
   if (!Number.isFinite(converted)) return "-";
-  const rounded = Math.abs(converted) < 0.0005 ? 0 : converted;
-  return `${currency.symbol}${new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  }).format(rounded)}`;
+  return `${currency.symbol}${formatPriceDecimal(converted, fractionDigits)}`;
 };
 
 const hasNonZeroPrice = (
@@ -405,6 +410,7 @@ function UsageRuleSetRenderer({
   const { t } = useTranslation();
   const operator = { eq: "=", ne: "!=", lt: "<", lte: "≤", gt: ">", gte: "≥" } as const;
   const factor = 1 - discount / 100;
+  const audioDurationRuleSet = isAudioDurationUsageRuleSet(ruleSet);
   const showRuleDetails = ruleSet.rules.length > 1 || ruleSet.rules.some((rule) => rule.conditions.length > 0);
   const baseUnitPrice = ruleSet.rules
     .flatMap((rule) => rule.charges)
@@ -440,7 +446,13 @@ function UsageRuleSetRenderer({
         return (
           <div className="break-words" key={`${charge.meter}-${chargeIndex}`}>
             {label && <span className="mr-1 text-muted-foreground">{label}:</span>}
-            <b>{money(charge.price * factor, currency)}</b>
+            <b>{money(
+              charge.price * factor,
+              currency,
+              priceFractionDigits(
+                audioDurationRuleSet && charge.meter === "seconds",
+              ),
+            )}</b>
             <span className="ml-1 text-muted-foreground">/ {charge.unit}</span>
           </div>
         );
@@ -542,7 +554,7 @@ export function PriceRenderer({
   const displayedSpec = withDerivedPrices(spec);
   const displayedCompareSpec = withDerivedPrices(compareSpec);
   const requestMode = displayedSpec?.mode === "request";
-  const usageRuleSet = spec?.blocks?.[0]?.usageRuleSet;
+  const usageRuleSet = matchingUsageRuleSet(spec);
   const blocks = (displayedSpec?.blocks || []).filter(
     (block) =>
       displayedSpec?.mode === "table" ||
@@ -567,16 +579,20 @@ export function PriceRenderer({
   const comparisonDelta = (
     value: number | null | undefined,
     other: number | null | undefined,
+    fractionDigits = DEFAULT_PRICE_FRACTION_DIGITS,
   ) => {
     if (value == null || other == null) return null;
     const difference = value - other;
-    if (Math.abs(difference * currency.exchangeRate) < 0.0005) return null;
+    if (
+      Math.abs(difference * currency.exchangeRate) <
+      0.5 * 10 ** -fractionDigits
+    ) return null;
     return (
       <small
         className={`ml-1 text-[11px] font-medium ${difference > 0 ? "text-rose-500" : "text-emerald-500"}`}
       >
         {difference > 0 ? "+" : ""}
-        {money(difference, currency)}
+        {money(difference, currency, fractionDigits)}
       </small>
     );
   };
@@ -857,10 +873,19 @@ export function PriceRenderer({
                           <tr className="border-b last:border-b-0" key={row.field}>
                             <td className="break-words p-2.5 text-xs text-muted-foreground">{t(row.label)}</td>
                             <td className="break-words p-2.5">
-                              <b>{money(row.value, currency)}</b>
+                              <b>{money(
+                                row.value,
+                                currency,
+                                priceFractionDigits(
+                                  isAudioDurationPriceField(row.field),
+                                ),
+                              )}</b>
                               {showMarkup && comparisonDelta(
                                 row.value,
                                 comparedRows.find((candidate) => candidate.field === row.field)?.value,
+                                priceFractionDigits(
+                                  isAudioDurationPriceField(row.field),
+                                ),
                               )}
                               {unit && <span className="ml-1 text-xs text-muted-foreground">/ {unit}</span>}
                             </td>
@@ -959,7 +984,7 @@ export function PriceRenderer({
                   ["videoOutput", "Video output price"],
                   ["multimodalOutput", "Multimodal text output price"],
                 ] as const).map(([field, label]) =>
-                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency)}</b>{comparisonDelta(b[field], compared?.[field])}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
+                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency, priceFractionDigits(isAudioDurationPriceField(field)))}</b>{comparisonDelta(b[field], compared?.[field], priceFractionDigits(isAudioDurationPriceField(field)))}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
                 )}
               </div>
             )}

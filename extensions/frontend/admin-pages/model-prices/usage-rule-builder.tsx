@@ -10,6 +10,13 @@ import type {
   UsageRuleCondition,
   UsageRuleSet,
 } from "../../model-prices/types";
+import { usageRuleSetExpression } from "../../model-prices/usage-rule-expression";
+import {
+  formatPriceDecimal,
+  priceFractionDigits,
+} from "../../model-prices/price-precision";
+
+export { usageRuleSetExpression } from "../../model-prices/usage-rule-expression";
 
 export type TemplateKey = "image" | "outputImageCount" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
 export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
@@ -213,60 +220,6 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   if (fields.has("output_images") || fields.has("image_count") || fields.has("count")) return "volume";
   if (fields.has("prompt_extend") || fields.has("audio")) return "boolean";
   return "blank";
-}
-
-function valueLiteral(value: UsageRuleCondition["value"]) {
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  const trimmed = value.trim();
-  if (/^-?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) return trimmed;
-  if (trimmed === "true" || trimmed === "false") return trimmed;
-  return JSON.stringify(value);
-}
-
-function conditionExpression(condition: UsageRuleCondition) {
-  const field = condition.field.trim();
-  const probe = field === "image_count" ? "image_count" : `u(${JSON.stringify(field)})`;
-  const operators = { eq: "==", ne: "!=", lt: "<", lte: "<=", gt: ">", gte: ">=" } as const;
-  const comparison = `${probe} ${operators[condition.operator]} ${valueLiteral(condition.value)}`;
-  if (field === "image_count") return comparison;
-  return ["lt", "lte", "gt", "gte"].includes(condition.operator)
-    ? `${probe} != nil && ${comparison}`
-    : comparison;
-}
-
-export function usageRuleSetExpression(ruleSet: UsageRuleSet) {
-  const scale = ruleSet.execution === "request" ? 1_000_000 : 1;
-  const body = (item: UsagePriceRule) => {
-    const activeCharges = item.charges.filter((entry) => entry.price > 0);
-    const imageCountUnitPrice = activeCharges
-      .filter((entry) => entry.meter === "image_count")
-      .reduce((total, entry) => {
-        const divisor = entry.divisor || (entry.priceBasis === "million" ? 1_000_000 : unitDivisor(entry.unit));
-        return total + entry.price / divisor;
-      }, 0);
-    const parts = activeCharges
-      .filter((entry) => entry.meter !== "image_count")
-      .map((entry) => {
-        const divisor = entry.divisor || (entry.priceBasis === "million" ? 1_000_000 : unitDivisor(entry.unit));
-        const price = Number((entry.price * scale / divisor).toPrecision(15));
-        if (entry.meter === "request") return String(price);
-        const measured = `u(${JSON.stringify(entry.meter.trim())})`;
-        return `${measured} * ${price}`;
-      });
-    const label = JSON.stringify(item.label.trim() || "default");
-    const regular = parts.length ? `tier(${label}, ${parts.join(" + ")})` : "";
-    const counted = imageCountUnitPrice > 0
-      ? `tier(${label}, fixed(${Number(imageCountUnitPrice.toPrecision(15))})) * image_count`
-      : "";
-    return [counted, regular].filter(Boolean).join(" + ") || `tier(${label}, 0)`;
-  };
-  let expression = body(ruleSet.rules.at(-1)!);
-  for (let index = ruleSet.rules.length - 2; index >= 0; index -= 1) {
-    const item = ruleSet.rules[index];
-    const condition = item.conditions.map(conditionExpression).join(" && ");
-    expression = `${condition} ? ${body(item)} : ${expression}`;
-  }
-  return expression;
 }
 
 export function validateUsageRuleSet(ruleSet?: UsageRuleSet) {
@@ -481,6 +434,9 @@ export function UsageRuleBuilder({
                 );
                 const actualPrice = part.price * priceMultiplier;
                 const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
+                const fractionDigits = priceFractionDigits(
+                  templateKey === "audioSeconds" && part.meter === "seconds",
+                );
                 return (
                 <div className="grid gap-2 sm:grid-cols-[minmax(130px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_36px]" key={chargeIndex}>
                   <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={part.meter} onChange={(event) => { const meter = event.target.value; const charges = [...item.charges]; charges[chargeIndex] = { ...part, meter, unit: defaultUnit(meter, usageSchema) }; updateRule(ruleIndex, { ...item, charges }); }}>{meters.map((meter) => <option value={meter} key={meter}>{meter === "request" ? t("Per request") : fieldLabels[meter] ? t(fieldLabels[meter]) : meter}</option>)}</select>
@@ -491,9 +447,9 @@ export function UsageRuleBuilder({
                     <div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{currencySymbol}</span><Input className="pl-7" type="number" min={0} step="any" value={Number((part.price * exchangeRate).toPrecision(15))} onFocus={(event) => Number(event.currentTarget.value) === 0 && event.currentTarget.select()} onChange={(event) => { const charges = [...item.charges]; charges[chargeIndex] = { ...part, price: Math.max(0, Number(event.target.value) || 0) / exchangeRate }; updateRule(ruleIndex, { ...item, charges }); }} /></div>
                     {vendorPart ? (
                       <div className="text-xs text-muted-foreground">
-                        {t("Vendor price")}: {currencySymbol}{(vendorPart.price * exchangeRate).toFixed(3)}
+                        {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}
                         <span className={difference! > 0 ? "ml-2 text-rose-500" : difference! < 0 ? "ml-2 text-emerald-500" : "ml-2"}>
-                          {t("Difference")}: {difference! > 0 ? "+" : ""}{currencySymbol}{(difference! * exchangeRate).toFixed(3)}
+                          {t("Difference")}: {difference! > 0 ? "+" : ""}{currencySymbol}{formatPriceDecimal(difference! * exchangeRate, fractionDigits)}
                         </span>
                       </div>
                     ) : <div className="text-xs text-muted-foreground">{t("Vendor price is not set")}</div>}

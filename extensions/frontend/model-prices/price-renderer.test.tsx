@@ -9,8 +9,65 @@ import {
   publicPriceBlockGroups,
   publicPriceRows,
 } from './price-renderer'
+import { usageRuleSetExpression } from './usage-rule-expression'
+import type { UsageRuleSet } from './types'
 
 describe('expression price display', () => {
+  it('shows audio duration prices and differences with up to six decimals', () => {
+    render(
+      <PriceRenderer
+        tableLayout
+        showMarkup
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{
+          mode: 'expression',
+          blocks: [{ audioDuration: 0.00024, unit: '秒' }],
+        }}
+        compareSpec={{
+          mode: 'expression',
+          blocks: [{ audioDuration: 0.00022, unit: '秒' }],
+        }}
+      />
+    )
+
+    expect(screen.getByText('$0.00024')).toBeInTheDocument()
+    expect(screen.getByText('+$0.00002')).toBeInTheDocument()
+  })
+
+  it('shows advanced audio duration rules with six-decimal precision', () => {
+    const ruleSet: UsageRuleSet = {
+      version: 1,
+      execution: 'request',
+      rules: [
+        {
+          id: 'audio-duration',
+          label: 'Audio duration',
+          conditions: [],
+          charges: [{ meter: 'seconds', unit: '秒', price: 0.00022 }],
+        },
+      ],
+    }
+
+    render(
+      <PriceRenderer
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{
+          mode: 'expression',
+          blocks: [
+            {
+              baseExpression: usageRuleSetExpression(ruleSet),
+              usageRuleSet: ruleSet,
+            },
+          ],
+        }}
+      />
+    )
+
+    expect(screen.getByText('$0.00022')).toBeInTheDocument()
+  })
+
   it('keeps every expression preset registered with its full compatibility contract', () => {
     const presets = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
       (group) => group.presets

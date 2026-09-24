@@ -37,8 +37,16 @@ import type {
   UsageRuleSet,
 } from "../../model-prices/types";
 import {
-  UsageRuleBuilder,
+  matchingUsageRuleSet,
   usageRuleSetExpression,
+} from "../../model-prices/usage-rule-expression";
+import {
+  AUDIO_DURATION_PRICE_FRACTION_DIGITS,
+  isAudioDurationPriceField,
+} from "../../model-prices/price-precision";
+import {
+  createUsageRuleTemplate,
+  UsageRuleBuilder,
   validateUsageRuleSet,
 } from "./usage-rule-builder";
 
@@ -394,7 +402,7 @@ export function applyPricingDiscount(data: ModelRatioData, discount: number): Mo
     : { ...data, ratio: scaled(data.ratio) };
 }
 
-function displaySpec(
+export function runtimeDisplaySpec(
   data: ModelRatioData,
   discount?: number,
   baseData?: ModelRatioData,
@@ -453,6 +461,23 @@ function displaySpec(
   };
 }
 
+export function activeUsageRuleSetForDraft(
+  advancedPricingActive: boolean,
+  usageRuleSet: UsageRuleSet | undefined,
+  draft: ModelRatioData,
+): UsageRuleSet | undefined {
+  if (
+    !advancedPricingActive ||
+    !usageRuleSet ||
+    draft.billingMode !== "tiered_expr"
+  ) {
+    return undefined;
+  }
+  return draft.billingExpr?.trim() === usageRuleSetExpression(usageRuleSet).trim()
+    ? usageRuleSet
+    : undefined;
+}
+
 export type RuntimePricingEditorHandle = {
   save: () => Promise<void>;
 };
@@ -482,11 +507,12 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     : 1;
   const currencySymbol = pricingCurrency === "site" ? "¥" : "$";
   const [usageRuleSet, setUsageRuleSet] = useState<UsageRuleSet | undefined>(
-    currentPriceSpec?.blocks?.[0]?.usageRuleSet,
+    matchingUsageRuleSet(currentPriceSpec),
   );
   const [advancedPricingActive, setAdvancedPricingActive] = useState(
-    Boolean(currentPriceSpec?.blocks?.[0]?.usageRuleSet),
+    Boolean(matchingUsageRuleSet(currentPriceSpec)),
   );
+  const currentPriceSpecSignature = JSON.stringify(currentPriceSpec ?? null);
   const comparisonValue = (key: string, scope?: string) => {
     return vendorComparisonValue(vendorPriceSpec, key, scope);
   };
@@ -499,12 +525,19 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     const difference = Number.isFinite(entered)
       ? entered * (1 - discount / 100) - vendorPrice
       : undefined;
+    const audioDurationFormatOptions = isAudioDurationPriceField(key)
+      ? {
+          digitsLarge: AUDIO_DURATION_PRICE_FRACTION_DIGITS,
+          digitsSmall: AUDIO_DURATION_PRICE_FRACTION_DIGITS,
+          abbreviate: false,
+        }
+      : undefined;
     return (
       <div className="shrink-0 text-xs text-muted-foreground">
-        {t("Vendor price")}: {formatBillingCurrencyFromUSD(vendorPrice)}
+        {t("Vendor price")}: {formatBillingCurrencyFromUSD(vendorPrice, audioDurationFormatOptions)}
         {difference != null && (
           <span className={cn("ml-2 font-medium", difference > 0 ? "text-rose-500" : difference < 0 ? "text-emerald-500" : "text-muted-foreground")}>
-            {t("Difference")}: {difference > 0 ? "+" : ""}{formatBillingCurrencyFromUSD(difference)}
+            {t("Difference")}: {difference > 0 ? "+" : ""}{formatBillingCurrencyFromUSD(difference, audioDurationFormatOptions)}
           </span>
         )}
       </div>
@@ -513,8 +546,9 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   useEffect(() => {
     setEntry(null);
     setEditorOverride(null);
-    setUsageRuleSet(currentPriceSpec?.blocks?.[0]?.usageRuleSet);
-    setAdvancedPricingActive(Boolean(currentPriceSpec?.blocks?.[0]?.usageRuleSet));
+    const currentRuleSet = matchingUsageRuleSet(currentPriceSpec);
+    setUsageRuleSet(currentRuleSet);
+    setAdvancedPricingActive(Boolean(currentRuleSet));
     setDiscount(currentPriceSpec?.blocks?.[0]?.discount ?? 0);
     if (modelKey)
       void getModelPricing([modelKey])
@@ -547,7 +581,23 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
           }
         })
         .catch((error) => toast.error(error.message));
-  }, [modelKey, currentPriceSpec?.blocks?.[0]?.discount, t]);
+  }, [modelKey, currentPriceSpecSignature, t]);
+  const handleAdditionalPricingActiveChange = (active: boolean) => {
+    if (!active) {
+      setAdvancedPricingActive(false);
+      return;
+    }
+
+    const execution: UsageRuleSet["execution"] =
+      entry?.usage_schema && Object.keys(entry.usage_schema).length
+        ? "task"
+        : "request";
+    const nextRuleSet = usageRuleSet?.rules?.length
+      ? usageRuleSet
+      : createUsageRuleTemplate(execution === "task" ? "blank" : "image", execution);
+    setUsageRuleSet(nextRuleSet);
+    setAdvancedPricingActive(true);
+  };
   const save = async () => {
     if (!entry) return;
     if (advancedPricingActive) {
@@ -557,13 +607,21 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
         return;
       }
     }
-    const draft = await ref.current?.commitDraft();
+    const draft = advancedPricingActive && usageRuleSet
+      ? {
+          name: modelKey,
+          billingMode: "tiered_expr" as const,
+          billingExpr: usageRuleSetExpression(usageRuleSet),
+          requestRuleExpr: "",
+        }
+      : await ref.current?.commitDraft();
     if (!draft) return;
     draft.name = modelKey;
-    const activeRuleSet = usageRuleSet && draft.billingMode === "tiered_expr" &&
-      draft.billingExpr?.trim() === usageRuleSetExpression(usageRuleSet).trim()
-      ? usageRuleSet
-      : undefined;
+    const activeRuleSet = activeUsageRuleSetForDraft(
+      advancedPricingActive,
+      usageRuleSet,
+      draft,
+    );
     const billedDraft = applyPricingDiscount(draft, discount);
     setSaving(true);
     try {
@@ -576,7 +634,15 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       ]);
       const refreshed = await getModelPricing([modelKey]);
       setEntry(refreshed.entries[0] || null);
-      await onSaved(displaySpec(billedDraft, discount || undefined, draft, activeRuleSet));
+      await onSaved(runtimeDisplaySpec(
+        billedDraft,
+        discount || undefined,
+        draft,
+        activeRuleSet,
+      ));
+      setUsageRuleSet(activeRuleSet);
+      setAdvancedPricingActive(Boolean(activeRuleSet));
+      setEditorOverride({ ...draft, name: modelKey });
       toast.success(t("Runtime pricing saved"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Save failed"));
@@ -594,16 +660,9 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       return;
     }
     if (vendorRuleSet?.rules?.length) {
-      const expression = usageRuleSetExpression(vendorRuleSet);
       setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
       setUsageRuleSet(vendorRuleSet);
       setAdvancedPricingActive(true);
-      setEditorOverride({
-        name: modelKey,
-        billingMode: "tiered_expr",
-        billingExpr: expression,
-        requestRuleExpr: "",
-      });
       toast.success(t("Vendor pricing template and prices synchronized"));
       return;
     }
@@ -667,7 +726,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
             </Button>
           }
           additionalPricingActive={advancedPricingActive}
-          onAdditionalPricingActiveChange={setAdvancedPricingActive}
+          onAdditionalPricingActiveChange={handleAdditionalPricingActiveChange}
           additionalPricingTab={{
             label: t("Advanced media pricing rules"),
             content: (
@@ -678,14 +737,8 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
                   usageSchema={entry.usage_schema}
                   exchangeRate={exchangeRate}
                   currencySymbol={currencySymbol}
-                  onApply={(nextRuleSet, expression) => {
+                  onApply={(nextRuleSet) => {
                     setUsageRuleSet(nextRuleSet);
-                    setEditorOverride({
-                      name: modelKey,
-                      billingMode: "tiered_expr",
-                      billingExpr: expression,
-                      requestRuleExpr: "",
-                    });
                   }}
                 />
             ),

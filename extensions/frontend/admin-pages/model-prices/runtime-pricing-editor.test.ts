@@ -1,14 +1,110 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeUsageRuleSetForDraft,
   applyPricingDiscount,
+  runtimeDisplaySpec,
   vendorComparisonValue,
   vendorEditorData,
 } from "./runtime-pricing-editor";
-import type { PriceSpec } from "../../model-prices/types";
+import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
 
 import { PLATFORM_BILLING_PRESET_GROUPS } from "@/platform/model-prices/expression-presets";
 import { compileBillingExpression } from "@/features/pricing/lib/billing-expression/parser";
+import { matchingUsageRuleSet } from "../../model-prices/usage-rule-expression";
+
+const advancedRuleSet: UsageRuleSet = {
+  version: 1,
+  execution: "request",
+  rules: [
+    {
+      id: "default",
+      label: "Default image",
+      conditions: [],
+      charges: [{ meter: "image_count", unit: "张", price: 0.5 }],
+    },
+  ],
+};
+
+describe("pricing mode metadata", () => {
+  const advancedExpression =
+    'tier("Default image", fixed(0.5)) * image_count';
+
+  it("keeps advanced rules only while the advanced pricing tab is active", () => {
+    const draft = {
+      name: "image-model",
+      billingMode: "tiered_expr" as const,
+      billingExpr: advancedExpression,
+    };
+
+    expect(activeUsageRuleSetForDraft(true, advancedRuleSet, draft))
+      .toBe(advancedRuleSet);
+    expect(activeUsageRuleSetForDraft(false, advancedRuleSet, draft))
+      .toBeUndefined();
+  });
+
+  it("drops stale advanced rules after selecting a different expression template", () => {
+    const draft = {
+      name: "token-model",
+      billingMode: "tiered_expr" as const,
+      billingExpr: 'tier("tokens", p * 2 + c * 8)',
+    };
+    const activeRuleSet = activeUsageRuleSetForDraft(
+      true,
+      advancedRuleSet,
+      draft,
+    );
+    const spec = runtimeDisplaySpec(draft, undefined, draft, activeRuleSet);
+
+    expect(activeRuleSet).toBeUndefined();
+    expect(spec.blocks?.[0]?.usageRuleSet).toBeUndefined();
+    expect(spec.blocks?.[0]?.baseExpression).toBe(draft.billingExpr);
+  });
+
+  it("stores the new template without metadata from the previously saved template", () => {
+    const templateA = {
+      name: "tiered-model",
+      billingMode: "tiered_expr" as const,
+      billingExpr: 'tier("A", p * 1 + c * 2)',
+    };
+    const templateB = {
+      ...templateA,
+      billingExpr: 'tier("B", p * 3 + c * 4)',
+    };
+
+    const first = runtimeDisplaySpec(templateA, undefined, templateA);
+    const second = runtimeDisplaySpec(templateB, undefined, templateB);
+
+    expect(first.blocks?.[0]?.baseExpression).toContain('tier("A"');
+    expect(second.blocks?.[0]?.baseExpression).toContain('tier("B"');
+    expect(second.blocks?.[0]?.baseExpression).not.toContain('tier("A"');
+    expect(second.blocks?.[0]?.usageRuleSet).toBeUndefined();
+  });
+
+  it("ignores advanced-rule metadata left behind by an older buggy save", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [{
+        baseExpression: 'tier("new template", p * 3 + c * 4)',
+        usageRuleSet: advancedRuleSet,
+      }],
+    };
+
+    expect(matchingUsageRuleSet(spec)).toBeUndefined();
+  });
+
+  it("keeps advanced-rule metadata when it still matches the saved expression", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [{
+        baseExpression: advancedExpression,
+        usageRuleSet: advancedRuleSet,
+      }],
+    };
+
+    expect(matchingUsageRuleSet(spec)).toBe(advancedRuleSet);
+  });
+});
 
 describe("applyPricingDiscount", () => {
   it("scales a fixed request leaf without wrapping the expression", () => {
