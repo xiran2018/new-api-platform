@@ -146,6 +146,26 @@
 4. 管理端模型价格列表和客户端模型价格页面都通过公共价格渲染器显示；不得出现“编辑器能保存，
    但列表无法显示”或“列表能显示，但实际结算仍用旧价格”的分叉。
 
+## 原厂价格比较的稳定性合同
+
+“实际价格”输入框旁的原厂价格和差值属于跨模板兼容能力，不得依赖某个模板当前的数组布局。
+历史上反复出现“原厂价格已保存但提示未设置”，根因是比较逻辑只读取第一个价格块、要求档位
+名称完全相同，或按高级媒体规则的数组下标匹配。后续实现和上游同步必须遵守：
+
+1. 普通、按次和表达式价格必须扫描全部 `PriceSpec.blocks`；每个表达式块必须独立解析，禁止把
+   多个完整表达式直接拼接后解析。
+2. 表达式价格先按规范化后的档位名称和变量（如 `p`、`c`、`aud_s`、`fixed`）精确匹配。
+   档位改名后，仅当该变量在全部原厂价格中只有一个唯一数值时才允许回退；存在多个不同价格时
+   必须提示无法确定，禁止猜测并显示错误价格。
+3. 高级媒体计费规则禁止按 `rules[ruleIndex]` 配对。必须按结算方式、条件字段/运算符/值、档位
+   名称以及收费项的 meter/unit 语义匹配；增删、改名或重排档位后仍应找到正确原厂价格。
+4. 高级规则无法精确匹配时，也只能在相同 meter/unit 具有唯一价格时安全回退；多个候选价格
+   必须保持“原厂价格未设置/无法确定”，不能拿其他档位的价格进行比较。
+5. 保存表达式时，`baseExpression` 是该块的权威原厂价格来源；同一块遗留的规范化字段不得覆盖
+   表达式中的价格。有效的 `usageRuleSet` 可以位于任意价格块，不能只读取第一个块。
+6. 修改比较算法时必须保留回归测试：非首块价格、多表达式块、档位改名、多个候选拒绝猜测、
+   高级规则重排、跨 request/task 拒绝比较。兼容性脚本失败时不得通过删除测试绕过。
+
 ## 上游同步后的必检项目
 
 ```bash
@@ -155,6 +175,7 @@ cd core/new-api/web
 BUN_TMPDIR=/data/new-api-tmp bun run typecheck
 BUN_TMPDIR=/data/new-api-tmp bunx vitest run \
   src/platform/model-prices/price-renderer.test.tsx \
+  src/platform/admin-pages/model-prices/runtime-pricing-editor.test.ts \
   src/platform/admin-pages/model-prices/usage-rule-builder.test.ts \
   src/features/system-settings/models/__tests__/visual-billing-editor.test.tsx
 ```

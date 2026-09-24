@@ -11,7 +11,17 @@ import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
 
 import { PLATFORM_BILLING_PRESET_GROUPS } from "@/platform/model-prices/expression-presets";
 import { compileBillingExpression } from "@/features/pricing/lib/billing-expression/parser";
+import {
+  parseVisualBillingDocument,
+  type VisualPricingNode,
+} from "@/features/pricing/lib/billing-expression/visual";
 import { matchingUsageRuleSet } from "../../model-prices/usage-rule-expression";
+
+function visualTierLabels(node: VisualPricingNode): string[] {
+  return node.kind === "tier"
+    ? [node.label]
+    : [...visualTierLabels(node.yes), ...visualTierLabels(node.no)];
+}
 
 const advancedRuleSet: UsageRuleSet = {
   version: 1,
@@ -241,6 +251,19 @@ describe("vendorComparisonValue", () => {
     expect(vendorComparisonValue(spec, "cc")).toBe(0.25);
   });
 
+  it("reads normalized vendor prices from blocks after the first block", () => {
+    const spec: PriceSpec = {
+      mode: "token",
+      blocks: [
+        { label: "metadata only" },
+        { label: "vendor token price", input: 1.25, output: 5 },
+      ],
+    };
+
+    expect(vendorComparisonValue(spec, "p", "vendor token price")).toBe(1.25);
+    expect(vendorComparisonValue(spec, "c", "vendor token price")).toBe(5);
+  });
+
   it("reads baseExpression vendor prices, including shared input prices", () => {
     const spec: PriceSpec = {
       mode: "expression",
@@ -257,6 +280,41 @@ describe("vendorComparisonValue", () => {
     expect(vendorComparisonValue(spec, "c", "non-thinking output")).toBe(9.6);
   });
 
+  it("parses each expression block independently", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [
+        { label: "input", baseExpression: 'tier("input", p * 1.8)' },
+        { label: "output", baseExpression: 'tier("output", c * 9.6)' },
+      ],
+    };
+
+    expect(vendorComparisonValue(spec, "p", "input")).toBe(1.8);
+    expect(vendorComparisonValue(spec, "c", "output")).toBe(9.6);
+  });
+
+  it("uses a unique vendor price after a tier is renamed", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [{ baseExpression: 'tier("old tier name", c * 9.6)' }],
+    };
+
+    expect(vendorComparisonValue(spec, "c", "new tier name")).toBe(9.6);
+  });
+
+  it("does not guess after a tier is renamed when vendor prices differ", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [{
+        baseExpression:
+          'len <= 128000 ? tier("short", c * 9.6) : tier("long", c * 12.7)',
+      }],
+    };
+
+    expect(vendorComparisonValue(spec, "c", "renamed tier")).toBeUndefined();
+    expect(vendorComparisonValue(spec, "c", " short  ")).toBe(9.6);
+  });
+
   it("resolves a comparison price for every visual expression preset", () => {
     for (const group of PLATFORM_BILLING_PRESET_GROUPS) {
       for (const preset of group.presets) {
@@ -264,14 +322,33 @@ describe("vendorComparisonValue", () => {
           mode: "expression",
           blocks: [{ baseExpression: preset.expr }],
         };
-        const values = [
-          vendorComparisonValue(spec, "p"),
-          vendorComparisonValue(spec, "c"),
-          vendorComparisonValue(spec, "aud_s"),
-        ];
+        const document = parseVisualBillingDocument(preset.expr);
+        expect(document, preset.key).not.toBeNull();
+        const scopes = document ? visualTierLabels(document.root) : [];
+        const values = [undefined, ...scopes].flatMap((scope) => [
+          vendorComparisonValue(spec, "p", scope),
+          vendorComparisonValue(spec, "c", scope),
+          vendorComparisonValue(spec, "aud_s", scope),
+          vendorComparisonValue(spec, "fixed", scope),
+        ]);
         expect(values.some((value) => typeof value === "number"), preset.key)
           .toBe(true);
       }
     }
+  });
+});
+
+describe("matchingUsageRuleSet", () => {
+  it("finds valid advanced pricing metadata outside the first block", () => {
+    const expression = 'tier("Default image", fixed(0.5)) * image_count';
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [
+        { label: "metadata" },
+        { baseExpression: expression, usageRuleSet: advancedRuleSet },
+      ],
+    };
+
+    expect(matchingUsageRuleSet(spec)).toBe(advancedRuleSet);
   });
 });

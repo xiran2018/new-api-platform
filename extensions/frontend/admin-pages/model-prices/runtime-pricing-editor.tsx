@@ -139,13 +139,64 @@ function priceSpecExpressionSource(spec?: PriceSpec): string {
     .join("\n");
 }
 
-function findTier(
-  node: VisualPricingNode | undefined,
-  label?: string,
-): Extract<VisualPricingNode, { kind: "tier" }> | undefined {
-  if (!node) return undefined;
-  if (node.kind === "tier") return !label || node.label === label ? node : undefined;
-  return findTier(node.yes, label) || findTier(node.no, label);
+type VendorComparisonCandidate = {
+  value: number;
+  scope?: string;
+};
+
+function normalizedComparisonScope(scope?: string) {
+  const normalized = scope?.trim().replace(/\s+/g, " ");
+  return normalized || undefined;
+}
+
+function addVendorComparisonCandidate(
+  candidates: VendorComparisonCandidate[],
+  value: unknown,
+  scope?: string,
+) {
+  if (value == null || value === "") return;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return;
+  candidates.push({ value: numeric, scope: normalizedComparisonScope(scope) });
+}
+
+function collectVisualComparisonCandidates(
+  node: VisualPricingNode,
+  key: string,
+  candidates: VendorComparisonCandidate[],
+) {
+  if (node.kind === "branch") {
+    collectVisualComparisonCandidates(node.yes, key, candidates);
+    collectVisualComparisonCandidates(node.no, key, candidates);
+    return;
+  }
+  if (key === "fixed" && node.billingUnit === "request") {
+    addVendorComparisonCandidate(candidates, node.fixedPrice, node.label);
+  }
+  for (const price of [...(node.sharedPrices || []), ...node.prices]) {
+    if (price.variable === key) {
+      addVendorComparisonCandidate(candidates, price.value, node.label);
+    }
+  }
+}
+
+function uniqueCandidateValue(candidates: VendorComparisonCandidate[]) {
+  const values = [...new Set(candidates.map(({ value }) => value))];
+  return values.length === 1 ? values[0] : undefined;
+}
+
+function resolveVendorComparisonCandidate(
+  candidates: VendorComparisonCandidate[],
+  scope?: string,
+) {
+  const normalizedScope = normalizedComparisonScope(scope);
+  if (normalizedScope) {
+    const exact = candidates.filter((candidate) => candidate.scope === normalizedScope);
+    if (exact.length) return uniqueCandidateValue(exact);
+  }
+  // A renamed tier is still safe to compare when this variable has exactly one
+  // vendor price. Never guess when several distinct prices are available.
+  return uniqueCandidateValue(candidates);
 }
 
 /**
@@ -159,44 +210,56 @@ export function vendorComparisonValue(
   key: string,
   scope?: string,
 ): number | undefined {
+  const candidates: VendorComparisonCandidate[] = [];
   const displayField = COMPARISON_FIELD_BY_VARIABLE[key];
-  if (displayField) {
-    const direct = spec?.blocks?.[0]?.[displayField];
-    if (typeof direct === "number" && Number.isFinite(direct)) return direct;
-  }
-  const legacy = vendorComparison(spec);
   const legacyKey = ({
+    p: "input",
     input: "input",
+    c: "completion",
     completion: "completion",
+    cr: "cache",
     cache: "cache",
+    cc: "createCache",
     createCache: "createCache",
+    img: "image",
     image: "image",
+    ai: "audioInput",
     audioInput: "audioInput",
+    ao: "audioOutput",
     audioOutput: "audioOutput",
+    fixed: "request",
     request: "request",
   } as Record<string, keyof PriceComparison>)[key];
-  if (legacyKey) {
-    const value = legacy[legacyKey];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  for (const block of spec?.blocks || []) {
+    const expressionSource = block.baseExpression || block.note || "";
+    if (expressionSource) {
+      // Parse blocks independently. Concatenating multiple complete expressions
+      // produces invalid syntax and previously hid otherwise valid vendor prices.
+      const expression = splitBillingExprAndRequestRules(expressionSource).billingExpr;
+      const document = parseVisualBillingDocument(expression);
+      if (document) {
+        for (const price of document.shared?.prices || []) {
+          if (price.variable === key) {
+            addVendorComparisonCandidate(candidates, price.value, block.label);
+          }
+        }
+        collectVisualComparisonCandidates(document.root, key, candidates);
+      }
+      // baseExpression is authoritative for expression blocks; normalized legacy
+      // fields in the same block may be stale remnants from an older template.
+      continue;
+    }
+    if (displayField) {
+      addVendorComparisonCandidate(candidates, block[displayField], block.label);
+    }
+    if (legacyKey) {
+      const legacy = vendorComparison({ ...spec, blocks: [block] });
+      addVendorComparisonCandidate(candidates, legacy[legacyKey], block.label);
+    }
   }
-  const document = parseVisualBillingDocument(
-    splitBillingExprAndRequestRules(priceSpecExpressionSource(spec)).billingExpr,
-  );
-  const shared = document?.shared?.prices.find((item) => item.variable === key);
-  const sharedValue = shared ? Number(shared.value) : undefined;
-  if (typeof sharedValue === "number" && Number.isFinite(sharedValue)) {
-    return sharedValue;
-  }
-  const tier = findTier(document?.root, scope);
-  if (!tier) return undefined;
-  if (key === "fixed") {
-    return tier.billingUnit === "request"
-      ? Number(tier.fixedPrice)
-      : undefined;
-  }
-  const price = tier.prices.find((item) => item.variable === key);
-  const value = price ? Number(price.value) : undefined;
-  return Number.isFinite(value) ? value : undefined;
+
+  return resolveVendorComparisonCandidate(candidates, scope);
 }
 
 function editorData(
@@ -653,7 +716,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const syncVendorPrice = async () => {
     const current = await ref.current?.commitDraft();
     if (!current) return;
-    const vendorRuleSet = vendorPriceSpec?.blocks?.[0]?.usageRuleSet;
+    const vendorRuleSet = matchingUsageRuleSet(vendorPriceSpec);
     const vendor = vendorEditorData(modelKey, vendorPriceSpec);
     if (!vendor) {
       toast.error(t("No vendor price is available for the selected pricing mode"));
@@ -667,8 +730,8 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       return;
     }
     setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
-    setUsageRuleSet(vendorPriceSpec?.blocks?.[0]?.usageRuleSet);
-    setAdvancedPricingActive(Boolean(vendorPriceSpec?.blocks?.[0]?.usageRuleSet));
+    setUsageRuleSet(vendorRuleSet);
+    setAdvancedPricingActive(Boolean(vendorRuleSet));
     setEditorOverride(vendor);
     toast.success(t("Vendor price synchronized"));
   };
@@ -732,7 +795,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
             content: (
                 <UsageRuleBuilder
                   value={usageRuleSet}
-                  comparisonValue={vendorPriceSpec?.blocks?.[0]?.usageRuleSet}
+                  comparisonValue={matchingUsageRuleSet(vendorPriceSpec)}
                   priceMultiplier={1 - discount / 100}
                   usageSchema={entry.usage_schema}
                   exchangeRate={exchangeRate}

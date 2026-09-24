@@ -9,11 +9,112 @@ import { PLATFORM_BILLING_PRESET_GROUPS } from '@/platform/model-prices/expressi
 import {
   BILLING_TEMPLATE_KEYS,
   createUsageRuleTemplate,
+  findComparisonUsageCharge,
   syncExampleTierNames,
   usageRuleSetExpression,
   usageFieldLabel,
   validateUsageRuleSet,
 } from './usage-rule-builder'
+import type {
+  UsagePriceCharge,
+  UsagePriceRule,
+  UsageRuleSet,
+} from '../../model-prices/types'
+
+describe('vendor usage-rule comparison', () => {
+  const outputCharge: UsagePriceCharge = {
+    meter: 'seconds',
+    unit: '秒',
+    price: 0.12,
+  }
+  const actualRule: UsagePriceRule = {
+    id: 'actual-hd',
+    label: 'HD output',
+    conditions: [{ field: 'resolution', operator: 'eq', value: '1080P' }],
+    charges: [outputCharge],
+  }
+
+  it('matches the vendor tier by semantics after rules are reordered', () => {
+    const vendor: UsageRuleSet = {
+      version: 1,
+      execution: 'request',
+      rules: [
+        {
+          id: 'fallback',
+          label: 'Fallback',
+          conditions: [],
+          charges: [{ meter: 'seconds', unit: '秒', price: 0.2 }],
+        },
+        {
+          id: 'vendor-hd',
+          label: 'HD output',
+          conditions: [{ field: 'resolution', operator: 'eq', value: '1080P' }],
+          charges: [{ meter: 'seconds', unit: '秒', price: 0.1 }],
+        },
+      ],
+    }
+
+    expect(
+      findComparisonUsageCharge(vendor, 'request', actualRule, outputCharge)
+        ?.price
+    ).toBe(0.1)
+  })
+
+  it('survives a tier rename when the matching charge has one unique price', () => {
+    const vendor: UsageRuleSet = {
+      version: 1,
+      execution: 'request',
+      rules: [{
+        id: 'old',
+        label: 'Old tier name',
+        conditions: [{ field: 'quality', operator: 'eq', value: 'standard' }],
+        charges: [{ meter: 'seconds', unit: '秒', price: 0.1 }],
+      }],
+    }
+
+    expect(
+      findComparisonUsageCharge(vendor, 'request', actualRule, outputCharge)
+        ?.price
+    ).toBe(0.1)
+  })
+
+  it('refuses an ambiguous meter/unit fallback instead of showing a wrong price', () => {
+    const vendor: UsageRuleSet = {
+      version: 1,
+      execution: 'request',
+      rules: [
+        {
+          id: 'sd',
+          label: 'SD',
+          conditions: [{ field: 'resolution', operator: 'eq', value: '720P' }],
+          charges: [{ meter: 'seconds', unit: '秒', price: 0.08 }],
+        },
+        {
+          id: 'uhd',
+          label: 'UHD',
+          conditions: [{ field: 'resolution', operator: 'eq', value: '4K' }],
+          charges: [{ meter: 'seconds', unit: '秒', price: 0.2 }],
+        },
+      ],
+    }
+
+    expect(
+      findComparisonUsageCharge(vendor, 'request', actualRule, outputCharge)
+    ).toBeUndefined()
+  })
+
+  it('does not compare request rules with task-settlement rules', () => {
+    const vendor: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      rules: [{ ...actualRule, charges: [{ ...outputCharge, price: 0.1 }] }],
+    }
+
+    expect(
+      findComparisonUsageCharge(vendor, 'request', actualRule, outputCharge)
+    ).toBeUndefined()
+  })
+})
 
 describe('screenshot-derived billing templates', () => {
   it('labels seconds as audio duration only in the audio-duration template', () => {

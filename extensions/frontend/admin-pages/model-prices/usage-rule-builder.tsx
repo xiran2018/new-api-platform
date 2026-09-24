@@ -3,6 +3,7 @@ import { CopyPlus, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PricingAmountInput } from "@/features/model-pricing/pricing-amount-input";
 import type { BillingUsageSchema } from "@/features/pricing/types";
 import type {
   UsagePriceCharge,
@@ -64,6 +65,69 @@ export function usageFieldLabel(field: string, templateKey: TemplateKey) {
     return "Audio duration";
   }
   return fieldLabels[field] || field;
+}
+
+function normalizedRuleText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function conditionSignature(conditions: UsageRuleCondition[]) {
+  return conditions
+    .map((condition) => JSON.stringify([
+      normalizedRuleText(condition.field),
+      condition.operator,
+      typeof condition.value,
+      typeof condition.value === "string"
+        ? normalizedRuleText(condition.value)
+        : condition.value,
+    ]))
+    .sort()
+    .join("|");
+}
+
+function uniqueComparisonCharge(
+  rules: UsagePriceRule[],
+  charge: UsagePriceCharge,
+) {
+  const candidates = rules.flatMap((rule) => rule.charges).filter(
+    (candidate) =>
+      normalizedRuleText(candidate.meter) === normalizedRuleText(charge.meter) &&
+      normalizedRuleText(candidate.unit) === normalizedRuleText(charge.unit),
+  );
+  const prices = [...new Set(candidates.map((candidate) => candidate.price))];
+  return prices.length === 1 ? candidates[0] : undefined;
+}
+
+/**
+ * Match an actual-price charge to its vendor-price counterpart by rule meaning,
+ * never by array position. This keeps comparisons valid after tiers are
+ * reordered, inserted, deleted or renamed. Ambiguous matches deliberately
+ * return undefined instead of showing the wrong vendor price.
+ */
+export function findComparisonUsageCharge(
+  comparisonValue: UsageRuleSet | undefined,
+  execution: UsageRuleSet["execution"],
+  rule: UsagePriceRule,
+  charge: UsagePriceCharge,
+) {
+  if (!comparisonValue || comparisonValue.execution !== execution) return undefined;
+  const signature = conditionSignature(rule.conditions);
+  const label = normalizedRuleText(rule.label);
+  const sameConditions = comparisonValue.rules.filter(
+    (candidate) => conditionSignature(candidate.conditions) === signature,
+  );
+  const sameConditionsAndLabel = sameConditions.filter(
+    (candidate) => normalizedRuleText(candidate.label) === label,
+  );
+  return uniqueComparisonCharge(sameConditionsAndLabel, charge)
+    || uniqueComparisonCharge(sameConditions, charge)
+    || uniqueComparisonCharge(
+      comparisonValue.rules.filter(
+        (candidate) => normalizedRuleText(candidate.label) === label,
+      ),
+      charge,
+    )
+    || uniqueComparisonCharge(comparisonValue.rules, charge);
 }
 
 const id = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -314,6 +378,11 @@ export function UsageRuleBuilder({
   onApply: (ruleSet: UsageRuleSet, expression: string) => void;
 }) {
   const { t } = useTranslation();
+  const pricingCurrency = useMemo(() => ({
+    label: currencySymbol,
+    symbol: currencySymbol,
+    exchangeRate,
+  }), [currencySymbol, exchangeRate]);
   const execution: UsageRuleSet["execution"] = usageSchema && Object.keys(usageSchema).length ? "task" : "request";
   const defaultTemplate: TemplateKey = execution === "task" ? "blank" : "image";
   const [rules, setRules] = useState<UsagePriceRule[]>(() => value?.rules || createUsageRuleTemplate(defaultTemplate, execution).rules);
@@ -436,8 +505,11 @@ export function UsageRuleBuilder({
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">{t("Charges in this tier")}</div>
               {item.charges.map((part, chargeIndex) => {
-                const vendorPart = comparisonValue?.rules[ruleIndex]?.charges.find(
-                  (candidate) => candidate.meter === part.meter && candidate.unit === part.unit,
+                const vendorPart = findComparisonUsageCharge(
+                  comparisonValue,
+                  execution,
+                  item,
+                  part,
                 );
                 const actualPrice = part.price * priceMultiplier;
                 const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
@@ -451,7 +523,20 @@ export function UsageRuleBuilder({
                     {unitOptions(part.meter, usageSchema).map((unit) => <option value={unit} key={unit}>{unit}</option>)}
                   </select>
                   <div className="space-y-1">
-                    <div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{currencySymbol}</span><Input className="pl-7" type="number" min={0} step="any" value={Number((part.price * exchangeRate).toPrecision(15))} onFocus={(event) => Number(event.currentTarget.value) === 0 && event.currentTarget.select()} onChange={(event) => { const charges = [...item.charges]; charges[chargeIndex] = { ...part, price: Math.max(0, Number(event.target.value) || 0) / exchangeRate }; updateRule(ruleIndex, { ...item, charges }); }} /></div>
+                    <PricingAmountInput
+                      className="h-9"
+                      currency={pricingCurrency}
+                      fractionDigits={fractionDigits}
+                      value={part.price}
+                      onChange={(next) => {
+                        const charges = [...item.charges];
+                        charges[chargeIndex] = {
+                          ...part,
+                          price: Math.max(0, Number(next) || 0),
+                        };
+                        updateRule(ruleIndex, { ...item, charges });
+                      }}
+                    />
                     {vendorPart ? (
                       <div className="text-xs text-muted-foreground">
                         {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}

@@ -6,9 +6,13 @@ editor="$repo_root/core/new-api/web/src/features/system-settings/models/tiered-p
 sheet="$repo_root/core/new-api/web/src/features/system-settings/models/model-pricing-sheet.tsx"
 price_inputs="$repo_root/core/new-api/web/src/features/system-settings/models/model-pricing-inputs.tsx"
 tier_price_fields="$repo_root/core/new-api/web/src/features/system-settings/models/tier-price-fields.tsx"
+pricing_amount_input="$repo_root/core/new-api/web/src/features/model-pricing/pricing-amount-input.tsx"
+pricing_format="$repo_root/core/new-api/web/src/features/system-settings/models/pricing-format.ts"
 addon_context="$repo_root/extensions/frontend/model-prices/pricing-field-addon.tsx"
 adapter="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.tsx"
 usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.tsx"
+runtime_pricing_test="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.test.ts"
+usage_rule_test="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.test.ts"
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
 renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.tsx"
 capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
@@ -72,9 +76,25 @@ while IFS= read -r key; do
 done < <(sed -n "s/^[[:space:]]*key: '\([^']*\)'.*/\1/p" "$template_registry" | sort -u)
 require_text "$renderer_test" "EXPRESSION_TEMPLATE_REGISTRY" \
   "expression presets are no longer checked against the billing-template registry"
-require_text "$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.test.ts" \
+require_text "$usage_rule_test" \
   "ADVANCED_MEDIA_TEMPLATE_REGISTRY" \
   "advanced-media templates are no longer checked against the billing-template registry"
+require_text "$usage_rule_builder" "fractionDigits={fractionDigits}" \
+  "advanced audio-duration price inputs no longer preserve six-decimal precision"
+require_text "$adapter" "resolveVendorComparisonCandidate" \
+  "vendor price comparison no longer scans and safely resolves all price blocks"
+require_text "$adapter" "Parse blocks independently" \
+  "multiple vendor expression blocks may be concatenated and lost again"
+require_text "$usage_rule_builder" "findComparisonUsageCharge" \
+  "advanced-media vendor prices are no longer matched by rule semantics"
+require_text "$runtime_pricing_test" "reads normalized vendor prices from blocks after the first block" \
+  "the non-first-block vendor-price regression test was lost"
+require_text "$runtime_pricing_test" "does not guess after a tier is renamed when vendor prices differ" \
+  "the ambiguous vendor-price safety regression test was lost"
+require_text "$usage_rule_test" "matches the vendor tier by semantics after rules are reordered" \
+  "the reordered advanced-rule vendor-price regression test was lost"
+require_text "$template_registry_doc" "原厂价格比较的稳定性合同" \
+  "the vendor-price comparison maintenance contract was lost"
 
 # The input-length-thinking-tiers preset was intentionally removed from the
 # picker.  Keep the historical expression format compatible instead: prices
@@ -112,6 +132,12 @@ require_text "$sheet" "PricingFieldAddonProvider" "the generic pricing-field pro
 require_text "$addon_context" "createContext" "the isolated pricing-field extension context is missing"
 require_text "$price_inputs" "<PricingFieldAddon" "legacy price fields no longer mount the generic extension slot"
 require_text "$tier_price_fields" "<PricingFieldAddon" "visual expression fields no longer mount the generic extension slot"
+require_text "$tier_price_fields" "fractionDigits={variable.key === 'aud_s' ? 6 : undefined}" \
+  "audio-duration price inputs no longer request six-decimal precision"
+require_text "$pricing_amount_input" "fractionDigits?: number" \
+  "the generic pricing input lost configurable display precision"
+require_text "$pricing_format" "decimals = PRICE_DISPLAY_DECIMALS" \
+  "the pricing formatter lost configurable display precision"
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/types.ts" "vid_o" "visual video-output pricing variable was lost"
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/types.ts" "aud_s" "visual audio-duration pricing variable was lost"
 require_text "$repo_root/core/new-api/web/src/features/pricing/lib/billing-expression/visual.ts" "request-comparison" "visual request-parameter pricing conditions were lost"

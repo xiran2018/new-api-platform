@@ -70,12 +70,13 @@ export function usageRuleSetExpression(ruleSet: UsageRuleSet) {
 
 /** Ignore legacy advanced-rule metadata when it no longer describes the saved expression. */
 export function matchingUsageRuleSet(spec?: PriceSpec): UsageRuleSet | undefined {
-  const block = spec?.blocks?.[0];
-  const ruleSet = block?.usageRuleSet;
-  if (!ruleSet?.rules?.length) return undefined;
-  const savedExpression = (block?.baseExpression || block?.note || "").trim();
-  if (!savedExpression) return ruleSet;
-  return usageRuleSetExpression(ruleSet).trim() === savedExpression
-    ? ruleSet
-    : undefined;
+  for (const block of spec?.blocks || []) {
+    const ruleSet = block.usageRuleSet;
+    if (!ruleSet?.rules?.length) continue;
+    const savedExpression = (block.baseExpression || block.note || "").trim();
+    if (!savedExpression || usageRuleSetExpression(ruleSet).trim() === savedExpression) {
+      return ruleSet;
+    }
+  }
+  return undefined;
 }
