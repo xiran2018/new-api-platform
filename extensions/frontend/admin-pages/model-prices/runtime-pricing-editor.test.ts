@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyPricingDiscount,
   vendorComparisonValue,
+  vendorEditorData,
 } from "./runtime-pricing-editor";
 import type { PriceSpec } from "../../model-prices/types";
 
@@ -35,6 +36,35 @@ describe("applyPricingDiscount", () => {
 
     expect(result.billingExpr).toContain("p * 1.8");
     expect(result.billingExpr).toContain("c * 7.2");
+  });
+});
+
+describe("vendorEditorData", () => {
+  it("uses a stored expression even when the legacy mode flag is stale", () => {
+    const result = vendorEditorData("tiered-model", {
+      mode: "token",
+      blocks: [{
+        input: 2,
+        baseExpression: 'tier("0-128K", p * 2 + c * 8)',
+      }],
+    });
+
+    expect(result?.billingMode).toBe("tiered_expr");
+    expect(result?.billingExpr).toContain('tier("0-128K"');
+  });
+
+  it("prefers the saved base expression over normalized token fields", () => {
+    const result = vendorEditorData("tiered-model", {
+      mode: "expression",
+      blocks: [{
+        input: 2,
+        note: 'tier("old", p * 1 + c * 2)',
+        baseExpression: 'tier("new", p * 3 + c * 4)',
+      }],
+    });
+
+    expect(result?.billingMode).toBe("tiered_expr");
+    expect(result?.billingExpr).toContain('tier("new"');
   });
 });
 

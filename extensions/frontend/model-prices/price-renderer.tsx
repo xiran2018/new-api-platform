@@ -297,24 +297,25 @@ export function expressionPriceBlocks(source: string, multiplier = 1): PriceBloc
 
 function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
   if (!spec?.blocks?.length) return spec;
-  if (spec.mode === "expression") {
-    const source = spec.blocks[0];
-    const baseExpression = source.baseExpression || source.note || "";
-    const config = tryParseVisualConfig(
-      splitBillingExprAndRequestRules(baseExpression).billingExpr,
-    );
+  const source = spec.blocks[0];
+  const baseExpression = source.baseExpression ||
+    ((spec.mode === "expression" || spec.mode == null) ? source.note || "" : "");
+  if (baseExpression) {
+    const billingExpression = splitBillingExprAndRequestRules(baseExpression).billingExpr;
+    const config = tryParseVisualConfig(billingExpression);
     const multiplier = source.baseExpression && source.discount
       ? 1 - source.discount / 100
       : 1;
     if (!config) {
       const blocks = expressionPriceBlocks(
-        splitBillingExprAndRequestRules(baseExpression).billingExpr,
+        billingExpression,
         multiplier,
       );
-      return blocks?.length ? { ...spec, blocks } : spec;
+      return blocks?.length ? { ...spec, mode: "expression", blocks } : spec;
     }
     return {
       ...spec,
+      mode: "expression",
       blocks: config.tiers.map((tier) => ({
         label: tier.label,
         input: tier.input_unit_cost * multiplier,
@@ -546,8 +547,8 @@ export function PriceRenderer({
       blockHasVisiblePrice(block, requestMode),
   );
   const expression =
-    spec?.mode === "expression"
-      ? spec.blocks?.[0]?.baseExpression || spec.blocks?.[0]?.note || ""
+    displayedSpec?.mode === "expression"
+      ? spec?.blocks?.[0]?.baseExpression || spec?.blocks?.[0]?.note || ""
       : "";
   const expressionUsesTime =
     /\b(?:hour|minute|weekday|month|day)\s*\(/.test(expression);
@@ -559,7 +560,7 @@ export function PriceRenderer({
       time: "Time windows",
       tiered: "Tiered pricing",
       table: "Custom table",
-    } as Record<string, string>)[spec?.mode || "token"] || "Token pricing",
+    } as Record<string, string>)[displayedSpec?.mode || spec?.mode || "token"] || "Token pricing",
   );
   const comparisonDelta = (
     value: number | null | undefined,

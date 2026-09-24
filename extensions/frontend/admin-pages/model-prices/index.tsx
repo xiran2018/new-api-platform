@@ -195,6 +195,14 @@ function SpecEditor({
       ...value,
       blocks: blocks.map((b, j) => (j === i ? { ...b, [key]: v } : b)),
     });
+  const setExpression = (i: number, expression: string) =>
+    onChange({
+      ...value,
+      mode: "expression",
+      blocks: blocks.map((b, j) =>
+        j === i ? { ...b, note: expression, baseExpression: expression } : b,
+      ),
+    });
   const legacyDraft = () => {
     const block = blocks[0];
     if (!block) return null;
@@ -409,7 +417,7 @@ function SpecEditor({
             <div className="space-y-2 overflow-visible md:col-span-2 [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static">
               <div className="text-sm font-medium">{t("Pricing expression")}</div>
               {(() => {
-                const expression = splitBillingExprAndRequestRules(b.note || "");
+                const expression = splitBillingExprAndRequestRules(b.note || b.baseExpression || "");
                 return (
                   <TieredPricingEditor
                     currency={pricingCurrency}
@@ -417,10 +425,10 @@ function SpecEditor({
                     billingExpr={expression.billingExpr}
                     requestRuleExpr={expression.requestRuleExpr}
                     onBillingExprChange={(next) =>
-                      set(i, "note", combineBillingExpr(next, expression.requestRuleExpr))
+                      setExpression(i, combineBillingExpr(next, expression.requestRuleExpr))
                     }
                     onRequestRuleExprChange={(next) =>
-                      set(i, "note", combineBillingExpr(expression.billingExpr, next))
+                      setExpression(i, combineBillingExpr(expression.billingExpr, next))
                     }
                   />
                 );
@@ -499,6 +507,10 @@ export function ModelPriceManagementPage() {
     [columnWidths, setColumnWidths] = useState(loadColumnWidths),
     [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(20);
+  const editRef = useRef<ModelPrice | null>(null);
+  useEffect(() => {
+    editRef.current = edit;
+  }, [edit]);
   useEffect(() => {
     localStorage.setItem(columnWidthStorageKey, JSON.stringify(columnWidths));
   }, [columnWidths]);
@@ -1031,7 +1043,7 @@ export function ModelPriceManagementPage() {
               {tab === "vendor" ? (
                 <SpecEditor
                   value={edit.vendorPriceSpec}
-                  onChange={(v) => setEdit({ ...edit, vendorPriceSpec: v })}
+                  onChange={(v) => setEdit((current) => current ? { ...current, vendorPriceSpec: v } : current)}
                   source={edit.upstreamSource}
                   modelKey={edit.modelKey}
                 />
@@ -1042,10 +1054,12 @@ export function ModelPriceManagementPage() {
                   vendorPriceSpec={edit.vendorPriceSpec}
                   currentPriceSpec={edit.llmapiPriceSpec}
                   onSaved={async (spec) => {
-                    const next = { ...edit, llmapiPriceSpec: spec };
-                    if (edit.id) {
+                    const base = editRef.current || edit;
+                    if (!base) return;
+                    const next = { ...base, llmapiPriceSpec: spec };
+                    if (base.id) {
                       await api.put(
-                        `/api/platform/admin/model-prices/${edit.id}`,
+                        `/api/platform/admin/model-prices/${base.id}`,
                         next,
                       );
                       setEdit(next);

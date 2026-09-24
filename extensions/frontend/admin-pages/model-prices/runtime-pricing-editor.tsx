@@ -123,8 +123,7 @@ function vendorComparison(spec?: PriceSpec): PriceComparison {
 }
 
 function priceSpecExpressionSource(spec?: PriceSpec): string {
-  if (spec?.mode !== "expression") return "";
-  return (spec.blocks || [])
+  return (spec?.blocks || [])
     .map((block) => block.baseExpression || block.note || "")
     .filter(Boolean)
     .join("\n");
@@ -219,9 +218,9 @@ function editorData(
   return data;
 }
 
-function vendorEditorData(modelKey: string, spec?: PriceSpec): ModelRatioData | null {
+export function vendorEditorData(modelKey: string, spec?: PriceSpec): ModelRatioData | null {
   const expressionSource = priceSpecExpressionSource(spec);
-  if (spec?.mode === "expression" && expressionSource) {
+  if (expressionSource) {
     const expression = splitBillingExprAndRequestRules(expressionSource);
     return {
       name: modelKey,
@@ -510,10 +509,6 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
         requestRuleExpr: "",
       });
       toast.success(t("Vendor pricing template and prices synchronized"));
-      return;
-    }
-    if (vendor.billingMode !== current.billingMode) {
-      toast.error(t("No vendor price is available for the selected pricing mode"));
       return;
     }
     setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);

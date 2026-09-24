@@ -104,11 +104,10 @@ describe('expression price display', () => {
         tableLayout
         timezone='Asia/Shanghai'
         spec={{
-          mode: 'expression',
           blocks: [
             {
               label: 'Input length + thinking output',
-              baseExpression:
+              note:
                 '(p * 1.8) + (param("enable_thinking") == true ? tier("thinking", c * 10.8) : tier("non-thinking", c * 9.6))',
             },
           ],
