@@ -59,6 +59,13 @@ const fieldLabels: Record<string, string> = {
   output_spec: "Output specification",
 };
 
+export function usageFieldLabel(field: string, templateKey: TemplateKey) {
+  if (field === "seconds" && templateKey === "audioSeconds") {
+    return "Audio duration";
+  }
+  return fieldLabels[field] || field;
+}
+
 const id = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 const charge = (meter = "request", unit = "次", price = 0): UsagePriceCharge => ({
@@ -408,7 +415,7 @@ export function UsageRuleBuilder({
                 <div className="text-xs font-medium text-muted-foreground">{t("Match all conditions")}</div>
                 {item.conditions.map((condition, conditionIndex) => (
                   <div className="grid gap-2 sm:grid-cols-[minmax(120px,1fr)_110px_minmax(120px,1fr)_36px]" key={conditionIndex}>
-                    <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={condition.field} onChange={(event) => { const field = event.target.value; const conditions = [...item.conditions]; conditions[conditionIndex] = { field, operator: "eq", value: defaultConditionValue(field, usageSchema) }; updateRule(ruleIndex, { ...item, conditions }); }}>{fields.map((field) => <option value={field} key={field}>{fieldLabels[field] ? `${t(fieldLabels[field])} (${field})` : field}</option>)}</select>
+                    <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={condition.field} onChange={(event) => { const field = event.target.value; const conditions = [...item.conditions]; conditions[conditionIndex] = { field, operator: "eq", value: defaultConditionValue(field, usageSchema) }; updateRule(ruleIndex, { ...item, conditions }); }}>{fields.map((field) => <option value={field} key={field}>{fieldLabels[field] ? `${t(usageFieldLabel(field, templateKey))} (${field})` : field}</option>)}</select>
                     <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={condition.operator} onChange={(event) => { const conditions = [...item.conditions]; conditions[conditionIndex] = { ...condition, operator: event.target.value as UsageRuleCondition["operator"] }; updateRule(ruleIndex, { ...item, conditions }); }}>
                       <option value="eq">=</option><option value="ne">!=</option>
                       {(usageSchema?.[condition.field]?.type === "number" || ["input_images", "output_images", "count", "characters", "tts_input_characters", "tts_output_characters", "seconds"].includes(condition.field)) && <><option value="lte">≤</option><option value="lt">&lt;</option><option value="gte">≥</option><option value="gt">&gt;</option></>}
@@ -439,7 +446,7 @@ export function UsageRuleBuilder({
                 );
                 return (
                 <div className="grid gap-2 sm:grid-cols-[minmax(130px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_36px]" key={chargeIndex}>
-                  <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={part.meter} onChange={(event) => { const meter = event.target.value; const charges = [...item.charges]; charges[chargeIndex] = { ...part, meter, unit: defaultUnit(meter, usageSchema) }; updateRule(ruleIndex, { ...item, charges }); }}>{meters.map((meter) => <option value={meter} key={meter}>{meter === "request" ? t("Per request") : fieldLabels[meter] ? t(fieldLabels[meter]) : meter}</option>)}</select>
+                  <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={part.meter} onChange={(event) => { const meter = event.target.value; const charges = [...item.charges]; charges[chargeIndex] = { ...part, meter, unit: defaultUnit(meter, usageSchema) }; updateRule(ruleIndex, { ...item, charges }); }}>{meters.map((meter) => <option value={meter} key={meter}>{meter === "request" ? t("Per request") : t(usageFieldLabel(meter, templateKey))}</option>)}</select>
                   <select className="flex h-9 rounded-md border bg-background px-2 text-sm" value={part.unit} onChange={(event) => { const charges = [...item.charges]; charges[chargeIndex] = { ...part, unit: event.target.value }; updateRule(ruleIndex, { ...item, charges }); }}>
                     {unitOptions(part.meter, usageSchema).map((unit) => <option value={unit} key={unit}>{unit}</option>)}
                   </select>

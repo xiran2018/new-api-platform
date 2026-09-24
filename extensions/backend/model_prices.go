@@ -73,6 +73,24 @@ type publicModelPrice struct {
 	LLMAPIPriceSpec json.RawMessage `json:"llmapiPriceSpec"`
 }
 
+type storedModelFlags struct {
+	published  bool
+	apiEnabled bool
+}
+
+func discoveredModelFlags(stored map[string]storedModelFlags, name string, defaultPublished, defaultAPIEnabled bool) (bool, bool) {
+	if flags, exists := stored[name]; exists {
+		if !flags.published {
+			return false, false
+		}
+		return true, flags.apiEnabled
+	}
+	if !defaultPublished {
+		return false, false
+	}
+	return true, defaultAPIEnabled
+}
+
 func registerModelPriceRoutes(r *gin.RouterGroup) {
 	r.GET("/model-prices", listAdminModelPrices)
 	r.POST("/model-prices/sync-preview", saveModelPriceSyncPreview)
@@ -262,13 +280,18 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		return err
 	}
 	var storedRows []modelPriceCatalog
-	if err := db.Select("model_key", "llm_api_price_spec").Find(&storedRows).Error; err != nil {
+	if err := db.Select("model_key", "llm_api_price_spec", "published", "api_enabled").Find(&storedRows).Error; err != nil {
 		return err
 	}
 	storedBlockMetadata := make(map[string]map[string]any, len(storedRows))
 	storedPriceSpecs := make(map[string]json.RawMessage, len(storedRows))
+	storedFlags := make(map[string]storedModelFlags, len(storedRows))
 	for _, row := range storedRows {
 		storedPriceSpecs[row.ModelKey] = row.LLMAPIPriceSpec
+		storedFlags[row.ModelKey] = storedModelFlags{
+			published:  row.Published,
+			apiEnabled: row.APIEnabled,
+		}
 		var spec struct {
 			Blocks []map[string]any `json:"blocks"`
 		}
@@ -361,13 +384,21 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		} else if stored, exists := storedPriceSpecs[name]; exists {
 			priceSpec = stored
 		}
-		_, visibleInModelSquare := pricingByName[name]
+		published := metadata.Status == 1
+		apiEnabled := published && metadata.APIEnabled
+		// Exact metadata is the source of truth for the two switches. Pattern
+		// metadata cannot be updated through the exact-model setters, so retain
+		// the administrator's platform values for those catalogue rows.
+		if metadata.NameRule != model.NameRuleExact {
+			_, visibleInModelSquare := pricingByName[name]
+			published, apiEnabled = discoveredModelFlags(storedFlags, name, visibleInModelSquare, false)
+		}
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "CNY", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
-			Published:         visibleInModelSquare, APIEnabled: metadata.APIEnabled, MetadataManaged: true, SortOrder: index,
+			Published:         published, APIEnabled: apiEnabled, MetadataManaged: true, SortOrder: index,
 		})
 	}
 	// Model management is the metadata catalogue, while price management must
@@ -397,12 +428,13 @@ func syncExistingModelPrices(db *gorm.DB) error {
 			priceSpec = stored
 		}
 		_, visibleInModelSquare := pricingByName[name]
+		published, apiEnabled := discoveredModelFlags(storedFlags, name, visibleInModelSquare, false)
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "CNY", Timezone: "Asia/Shanghai",
 			VendorPriceSpec: json.RawMessage(`{}`), LLMAPIPriceSpec: priceSpec,
 			RuntimePricingRef: json.RawMessage(`{"source":"new-api"}`),
-			Published:         visibleInModelSquare, APIEnabled: false, MetadataManaged: true, SortOrder: len(rows),
+			Published:         published, APIEnabled: apiEnabled, MetadataManaged: true, SortOrder: len(rows),
 		})
 	}
 	return db.Transaction(func(tx *gorm.DB) error {

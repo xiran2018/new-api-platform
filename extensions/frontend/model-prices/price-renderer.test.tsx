@@ -7,6 +7,7 @@ import {
   PriceRenderer,
   expressionPriceBlocks,
   publicPriceBlockGroups,
+  publicPriceRowUnit,
   publicPriceRows,
 } from './price-renderer'
 import { usageRuleSetExpression } from './usage-rule-expression'
@@ -66,6 +67,14 @@ describe('expression price display', () => {
     )
 
     expect(screen.getByText('$0.00022')).toBeInTheDocument()
+    expect(screen.getByText('Audio duration:')).toBeInTheDocument()
+    expect(screen.getByText('/ 秒')).toBeInTheDocument()
+    expect(screen.queryByText('/ 1M tokens')).not.toBeInTheDocument()
+  })
+
+  it('uses seconds for audio-duration expression fields instead of token units', () => {
+    expect(publicPriceRowUnit('audioDuration', '1M tokens')).toBe('秒')
+    expect(publicPriceRowUnit('audioInput', '1M tokens')).toBe('1M tokens')
   })
 
   it('keeps every expression preset registered with its full compatibility contract', () => {

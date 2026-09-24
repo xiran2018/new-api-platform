@@ -76,6 +76,13 @@ export type PublicPriceRow = {
   value: number;
 };
 
+export function publicPriceRowUnit(
+  field: PublicPriceRowField,
+  blockUnit?: string,
+) {
+  return field === "audioDuration" ? "秒" : blockUnit || "";
+}
+
 const PRICE_ROW_FIELDS: ReadonlyArray<{
   field: PublicPriceRowField;
   label: string;
@@ -429,6 +436,9 @@ function UsageRuleSetRenderer({
   };
   const meterLabel = (meter: string) => {
     if (["request", "count"].includes(meter)) return "";
+    if (meter === "seconds" && audioDurationRuleSet) {
+      return t("Audio duration");
+    }
     return t(({
       input_images: "Input image count",
       output_images: "Output image count",
@@ -887,7 +897,7 @@ export function PriceRenderer({
                                   isAudioDurationPriceField(row.field),
                                 ),
                               )}
-                              {unit && <span className="ml-1 text-xs text-muted-foreground">/ {unit}</span>}
+                              {publicPriceRowUnit(row.field, unit) && <span className="ml-1 text-xs text-muted-foreground">/ {publicPriceRowUnit(row.field, unit)}</span>}
                             </td>
                           </tr>
                         ))}
@@ -983,9 +993,10 @@ export function PriceRenderer({
                   ["videoInput", "Video input price"],
                   ["videoOutput", "Video output price"],
                   ["multimodalOutput", "Multimodal text output price"],
-                ] as const).map(([field, label]) =>
-                  hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency, priceFractionDigits(isAudioDurationPriceField(field)))}</b>{comparisonDelta(b[field], compared?.[field], priceFractionDigits(isAudioDurationPriceField(field)))}{unit && <span className="ml-1 text-muted-foreground">/ {unit}</span>}</div> : null,
-                )}
+                ] as const).map(([field, label]) => {
+                  const fieldUnit = publicPriceRowUnit(field, unit);
+                  return hasNonZeroPrice(b[field]) ? <div key={field}>{t(label)}: <b>{money(b[field], currency, priceFractionDigits(isAudioDurationPriceField(field)))}</b>{comparisonDelta(b[field], compared?.[field], priceFractionDigits(isAudioDurationPriceField(field)))}{fieldUnit && <span className="ml-1 text-muted-foreground">/ {fieldUnit}</span>}</div> : null;
+                })}
               </div>
             )}
             {!pricesOnly && displayedSpec?.mode === "table" && b.table?.headers?.length && (

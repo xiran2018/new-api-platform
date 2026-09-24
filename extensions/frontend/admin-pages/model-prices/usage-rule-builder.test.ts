@@ -11,10 +11,15 @@ import {
   createUsageRuleTemplate,
   syncExampleTierNames,
   usageRuleSetExpression,
+  usageFieldLabel,
   validateUsageRuleSet,
 } from './usage-rule-builder'
 
 describe('screenshot-derived billing templates', () => {
+  it('labels seconds as audio duration only in the audio-duration template', () => {
+    expect(usageFieldLabel('seconds', 'audioSeconds')).toBe('Audio duration')
+    expect(usageFieldLabel('seconds', 'video')).toBe('Output video duration')
+  })
   it('updates generated media tier names without rewriting custom labels or prices', () => {
     const original = createUsageRuleTemplate('volume', 'request').rules
     const changed = syncExampleTierNames(original, 25, 30)

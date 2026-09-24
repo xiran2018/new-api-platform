@@ -51,10 +51,11 @@ import {
   RuntimePricingEditor,
   type RuntimePricingEditorHandle,
 } from "./runtime-pricing-editor";
+import { specEditorMode, type SpecEditorMode } from "./spec-editor-mode";
 import { UsageRuleBuilder, validateUsageRuleSet } from "./usage-rule-builder";
 
-const defaultColumnWidths = [240, 180, 140, 340, 460, 96];
-const minimumColumnWidths = [160, 120, 110, 220, 260, 80];
+const defaultColumnWidths = [240, 180, 140, 340, 460, 140, 120, 96];
+const minimumColumnWidths = [160, 120, 110, 220, 260, 110, 90, 80];
 const columnWidthStorageKey = "platform-model-price-column-widths";
 
 function loadColumnWidths() {
@@ -180,8 +181,7 @@ function SpecEditor({
           : audioInput * audioOutputRatio,
     };
   });
-  type SpecMode = "token" | "request" | "expression" | "media";
-  const [mode, setMode] = useState<SpecMode>("expression");
+  const [mode, setMode] = useState<SpecEditorMode>(() => specEditorMode(value));
   const lanes = [
     ["output", "Completion price"],
     ["cache", "Cache read price"],
@@ -234,7 +234,9 @@ function SpecEditor({
     };
   };
   useEffect(() => {
-    setMode("expression");
+    const restoredMode = specEditorMode(value);
+    setMode(restoredMode);
+    if (restoredMode === "media") return;
     if (value.mode !== "token" && value.mode !== "request") return;
     const draft = legacyDraft();
     if (!draft) {
@@ -296,7 +298,7 @@ function SpecEditor({
       <Tabs
         value={mode}
         onValueChange={(next) => {
-          const nextMode = next as SpecMode;
+          const nextMode = next as SpecEditorMode;
           setMode(nextMode);
           if (next === "media") {
             onChange({
@@ -718,6 +720,14 @@ export function ModelPriceManagementPage() {
             {t("Actual price")}
             {resizeHandle(4, true)}
           </div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-center">
+            {t("Model square visibility")}
+            {resizeHandle(5, true)}
+          </div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-center">
+            {t("Allow API calls")}
+            {resizeHandle(6, true)}
+          </div>
           <div role="columnheader" className="border-b p-3 text-center">{t("Actions")}</div>
         </div>
         <div role="rowgroup" className="text-sm">
@@ -799,6 +809,30 @@ export function ModelPriceManagementPage() {
                       />
                     </div>
                     {resizeHandle(4)}
+                  </div>
+                  <div role="cell" className="relative min-w-0 border-r p-3 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                        r.published
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {r.published ? t("Enabled") : t("Disabled")}
+                    </span>
+                    {resizeHandle(5)}
+                  </div>
+                  <div role="cell" className="relative min-w-0 border-r p-3 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                        r.apiEnabled
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {r.apiEnabled ? t("Enabled") : t("Disabled")}
+                    </span>
+                    {resizeHandle(6)}
                   </div>
                   <div role="cell" className="min-w-0 whitespace-nowrap bg-background p-3 text-center group-hover:bg-muted/30">
                     <Button
