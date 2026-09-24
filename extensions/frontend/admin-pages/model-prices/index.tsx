@@ -54,9 +54,12 @@ import {
 import { specEditorMode, type SpecEditorMode } from "./spec-editor-mode";
 import { UsageRuleBuilder, validateUsageRuleSet } from "./usage-rule-builder";
 
-const defaultColumnWidths = [240, 180, 140, 340, 460, 140, 120, 96];
-const minimumColumnWidths = [160, 120, 110, 220, 260, 110, 90, 80];
-const columnWidthStorageKey = "platform-model-price-column-widths";
+const defaultColumnWidths = [240, 180, 140, 140, 120, 340, 460, 96];
+const minimumColumnWidths = [160, 120, 110, 110, 90, 220, 260, 80];
+// Column order changed when visibility and API status moved before the wide
+// price columns. Use a new key so widths saved for the old order cannot make
+// the two status columns unexpectedly huge or the price columns unreadable.
+const columnWidthStorageKey = "platform-model-price-column-widths-v2";
 
 function loadColumnWidths() {
   if (typeof window === "undefined") return defaultColumnWidths;
@@ -715,17 +718,17 @@ export function ModelPriceManagementPage() {
           <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Model name")}{resizeHandle(0, true)}</div>
           <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Vendor")}{resizeHandle(1, true)}</div>
           <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Display currency")}{resizeHandle(2, true)}</div>
-          <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Vendor original price")}{resizeHandle(3, true)}</div>
-          <div role="columnheader" className="relative border-b border-r p-3 text-left">
-            {t("Actual price")}
-            {resizeHandle(4, true)}
-          </div>
           <div role="columnheader" className="relative border-b border-r p-3 text-center">
             {t("Model square visibility")}
-            {resizeHandle(5, true)}
+            {resizeHandle(3, true)}
           </div>
           <div role="columnheader" className="relative border-b border-r p-3 text-center">
             {t("Allow API calls")}
+            {resizeHandle(4, true)}
+          </div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-left">{t("Vendor original price")}{resizeHandle(5, true)}</div>
+          <div role="columnheader" className="relative border-b border-r p-3 text-left">
+            {t("Actual price")}
             {resizeHandle(6, true)}
           </div>
           <div role="columnheader" className="border-b p-3 text-center">{t("Actions")}</div>
@@ -782,6 +785,30 @@ export function ModelPriceManagementPage() {
                     </span>
                     {resizeHandle(2)}
                   </div>
+                  <div role="cell" className="relative min-w-0 border-r p-3 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                        r.published
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {r.published ? t("Enabled") : t("Disabled")}
+                    </span>
+                    {resizeHandle(3)}
+                  </div>
+                  <div role="cell" className="relative min-w-0 border-r p-3 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                        r.apiEnabled
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {r.apiEnabled ? t("Enabled") : t("Disabled")}
+                    </span>
+                    {resizeHandle(4)}
+                  </div>
                   <div role="cell" className="relative min-w-0 overflow-hidden border-r p-3">
                     <div className="w-full min-w-0 overflow-hidden [contain:inline-size]">
                       <PriceRenderer
@@ -794,7 +821,7 @@ export function ModelPriceManagementPage() {
                         tableLayout
                       />
                     </div>
-                    {resizeHandle(3)}
+                    {resizeHandle(5)}
                   </div>
                   <div role="cell" className="relative min-w-0 overflow-hidden border-r p-3">
                     <div className="w-full min-w-0 overflow-hidden [contain:inline-size]">
@@ -808,30 +835,6 @@ export function ModelPriceManagementPage() {
                         tableLayout
                       />
                     </div>
-                    {resizeHandle(4)}
-                  </div>
-                  <div role="cell" className="relative min-w-0 border-r p-3 text-center">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                        r.published
-                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {r.published ? t("Enabled") : t("Disabled")}
-                    </span>
-                    {resizeHandle(5)}
-                  </div>
-                  <div role="cell" className="relative min-w-0 border-r p-3 text-center">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                        r.apiEnabled
-                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {r.apiEnabled ? t("Enabled") : t("Disabled")}
-                    </span>
                     {resizeHandle(6)}
                   </div>
                   <div role="cell" className="min-w-0 whitespace-nowrap bg-background p-3 text-center group-hover:bg-muted/30">

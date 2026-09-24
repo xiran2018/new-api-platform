@@ -14,7 +14,7 @@ import { usageRuleSetExpression } from './usage-rule-expression'
 import type { UsageRuleSet } from './types'
 
 describe('expression price display', () => {
-  it('shows audio duration prices and differences with up to six decimals', () => {
+  it('shows audio duration prices and differences with six decimals', () => {
     render(
       <PriceRenderer
         tableLayout
@@ -32,8 +32,8 @@ describe('expression price display', () => {
       />
     )
 
-    expect(screen.getByText('$0.00024')).toBeInTheDocument()
-    expect(screen.getByText('+$0.00002')).toBeInTheDocument()
+    expect(screen.getByText('$0.000240')).toBeInTheDocument()
+    expect(screen.getByText('+$0.000020')).toBeInTheDocument()
   })
 
   it('shows advanced audio duration rules with six-decimal precision', () => {
@@ -66,10 +66,35 @@ describe('expression price display', () => {
       />
     )
 
-    expect(screen.getByText('$0.00022')).toBeInTheDocument()
+    expect(screen.getByText('$0.000220')).toBeInTheDocument()
     expect(screen.getByText('Audio duration:')).toBeInTheDocument()
     expect(screen.getByText('/ 秒')).toBeInTheDocument()
     expect(screen.queryByText('/ 1M tokens')).not.toBeInTheDocument()
+  })
+
+  it('keeps the speech-recognition per-second preset at six decimals', () => {
+    const preset = PLATFORM_BILLING_PRESET_GROUPS
+      .flatMap((group) => group.presets)
+      .find((candidate) => candidate.key === 'audio-transcription-per-second')
+
+    expect(preset).toBeDefined()
+    const blocks = expressionPriceBlocks(preset!.expr, 1 / 1_000_000)
+    expect(blocks?.[0]?.audioDuration).toBeCloseTo(0.00022, 12)
+
+    render(
+      <PriceRenderer
+        tableLayout
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{
+          mode: 'expression',
+          blocks: [{ audioDuration: blocks![0].audioDuration, unit: '秒' }],
+        }}
+      />
+    )
+
+    expect(screen.getByText('$0.000220')).toBeInTheDocument()
+    expect(screen.getByText('/ 秒')).toBeInTheDocument()
   })
 
   it('uses seconds for audio-duration expression fields instead of token units', () => {

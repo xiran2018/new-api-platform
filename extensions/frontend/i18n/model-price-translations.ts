@@ -82,8 +82,10 @@ const resources: Record<string, Record<string, string>> = {
     "Multimodal text output price": "多模态文本输出价格",
     "Pure text requests use the pure text output price; requests containing image, video, or audio input use the multimodal text output price. When audio is generated, text output is not charged and only audio output is billed.":
       "纯文本请求使用纯文本输出价格；请求包含图片、视频或音频输入时使用多模态文本输出价格；生成音频时不收取文本输出费用，仅按音频输出计费。",
-    "Audio transcription per second": "语音识别按秒计费",
-    "Audio duration pricing": "音频时长计费",
+    "Uploaded audio transcription per second": "上传音频转写按秒计费",
+    "Generated audio/media task duration pricing": "生成音频/媒体任务时长计费",
+    "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
+      "适用于能够提供 seconds 时长的生成音频或媒体任务。上传音频的语音识别或转写，请改用“上传音频转写按秒计费”。",
     "Audio duration": "音频时长",
     "Audio duration price": "音频时长价格",
     "Per second": "每秒",
@@ -222,6 +224,10 @@ const resources: Record<string, Record<string, string>> = {
     "Select upstream channel": "選擇同步渠道",
     "Confirm selection": "確認選擇",
     Search: "搜尋",
+    "Uploaded audio transcription per second": "上傳音訊轉錄按秒計費",
+    "Generated audio/media task duration pricing": "生成音訊/媒體任務時長計費",
+    "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
+      "適用於能提供 seconds 時長的生成音訊或媒體任務。上傳音訊的語音識別或轉錄，請改用「上傳音訊轉錄按秒計費」。",
   },
   en: {
     "Model prices": "Model prices",
@@ -244,6 +250,10 @@ const resources: Record<string, Record<string, string>> = {
     "Default tier": "Default tier",
     "Non-thinking mode": "Non-thinking mode",
     "Thinking mode": "Thinking mode",
+    "Uploaded audio transcription per second": "Uploaded audio transcription per second",
+    "Generated audio/media task duration pricing": "Generated audio/media task duration pricing",
+    "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
+      "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.",
   },
   fr: {
     "Model prices": "Prix des modèles",
@@ -256,6 +266,10 @@ const resources: Record<string, Record<string, string>> = {
     "Visible to administrators only": "Visible uniquement par les administrateurs",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Temporairement indisponible. Bientôt disponible.",
+    "Uploaded audio transcription per second": "Transcription audio téléversée facturée à la seconde",
+    "Generated audio/media task duration pricing": "Tarification de la durée des tâches audio/média générées",
+    "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
+      "À utiliser pour les tâches audio ou média générées qui fournissent une durée en secondes. Pour l’ASR ou la transcription d’un audio téléversé, choisissez la tarification de transcription à la seconde.",
   },
   ja: {
     "Model prices": "モデル価格",
@@ -268,6 +282,10 @@ const resources: Record<string, Record<string, string>> = {
     "Visible to administrators only": "管理者のみ閲覧できます",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "現在利用できません。近日公開予定です。",
+    "Uploaded audio transcription per second": "アップロード音声の文字起こし（秒単位課金）",
+    "Generated audio/media task duration pricing": "生成音声・メディアタスクの時間課金",
+    "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
+      "秒数を提供する生成音声またはメディアタスクに使用します。アップロード音声のASR・文字起こしには、アップロード音声の秒単位課金を選択してください。",
   },
   ru: {
     "Model prices": "Цены моделей",
@@ -280,6 +298,10 @@ const resources: Record<string, Record<string, string>> = {
     "Visible to administrators only": "Видно только администраторам",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Временно недоступно. Скоро будет доступно.",
+    "Uploaded audio transcription per second": "Транскрибация загруженного аудио с посекундной оплатой",
+    "Generated audio/media task duration pricing": "Тарификация длительности генерируемого аудио/медиазадач",
+    "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
+      "Используйте для генерируемого аудио или медиазадач, которые передают длительность в seconds. Для ASR или транскрибации загруженного аудио выберите посекундную тарификацию загруженного аудио.",
   },
   vi: {
     "Model prices": "Giá mô hình",
@@ -292,6 +314,10 @@ const resources: Record<string, Record<string, string>> = {
     "Visible to administrators only": "Chỉ quản trị viên có thể xem",
     "Temporarily unavailable. Coming soon, please stay tuned.":
       "Tạm thời chưa khả dụng. Sắp ra mắt, vui lòng đón chờ.",
+    "Uploaded audio transcription per second": "Phiên âm âm thanh tải lên tính theo giây",
+    "Generated audio/media task duration pricing": "Tính phí thời lượng tác vụ âm thanh/phương tiện được tạo",
+    "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
+      "Dùng cho âm thanh được tạo hoặc tác vụ phương tiện có cung cấp thời lượng seconds. Với ASR hoặc phiên âm âm thanh tải lên, hãy chọn tính phí phiên âm theo giây.",
   },
 };
 

@@ -327,7 +327,7 @@ export function UsageRuleBuilder({
     videoAudio: "Prices generated video by output resolution, output duration and whether audio is enabled.",
     videoMode: "Prices generated video by output mode and duration.",
     imageVideo: "Prices uploaded images and generated video separately.",
-    audioSeconds: "Prices music, speech or transcription by duration.",
+    audioSeconds: "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.",
     ttsCharacters: "Prices text-to-speech input per ten thousand Unicode characters; generated audio output is free.",
     voiceCount: "Prices voice enrollment by the number of voices.",
     taskMatrix: "Prices combinations of task type and output specification.",
@@ -392,7 +392,7 @@ export function UsageRuleBuilder({
             {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds") && fields.includes("audio"))) && <option value="videoAudio">{t("Video resolution, duration and audio switch")}</option>}
             {(execution === "request" || (fields.includes("mode") && fields.includes("seconds"))) && <option value="videoMode">{t("Video output mode and duration")}</option>}
             {(execution === "request" || (fields.includes("input_images") && fields.includes("resolution") && fields.includes("seconds"))) && <option value="imageVideo">{t("Input image and output video")}</option>}
-            {(execution === "request" || fields.includes("seconds")) && <option value="audioSeconds">{t("Audio duration pricing")}</option>}
+            {(execution === "request" || fields.includes("seconds")) && <option value="audioSeconds">{t("Generated audio/media task duration pricing")}</option>}
             {(execution === "request" || fields.includes("tts_input_characters")) && <option value="ttsCharacters">{t("Text-to-speech per 10K characters")}</option>}
             {(execution === "request" || fields.includes("count")) && <option value="voiceCount">{t("Voice enrollment count")}</option>}
             {(execution === "request" || (fields.includes("task_type") && fields.includes("output_spec"))) && <option value="taskMatrix">{t("Task type and output specification matrix")}</option>}

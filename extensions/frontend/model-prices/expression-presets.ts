@@ -64,7 +64,7 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
       },
       {
         key: 'audio-transcription-per-second',
-        label: 'Audio transcription per second',
+        label: 'Uploaded audio transcription per second',
         expr: 'tier("audio_transcription", p * 0 + c * 0 + aud_s * 220)',
       },
     ],

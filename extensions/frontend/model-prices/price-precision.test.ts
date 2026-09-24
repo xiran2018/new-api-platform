@@ -13,10 +13,10 @@ describe("price display precision", () => {
   it("preserves audio duration prices through six decimal places", () => {
     expect(
       formatPriceDecimal(0.00022, AUDIO_DURATION_PRICE_FRACTION_DIGITS),
-    ).toBe("0.00022");
+    ).toBe("0.000220");
     expect(
       formatPriceDecimal(0.00002, AUDIO_DURATION_PRICE_FRACTION_DIGITS),
-    ).toBe("0.00002");
+    ).toBe("0.000020");
   });
 
   it("keeps the existing three-decimal behavior for other prices", () => {

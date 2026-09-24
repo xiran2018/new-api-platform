@@ -237,19 +237,19 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
   },
   {
     key: 'audio-transcription-per-second',
-    name: 'Audio transcription per second',
+    name: 'Uploaded audio transcription per second',
     group: 'multimodal',
-    purpose: '音频转写按实际音频秒数计费。',
+    purpose: '上传音频的语音识别、转写或翻译，按系统读取到的输入音频秒数计费。',
     conditionFields: [],
     priceFields: ['aud_s'],
     unit: '每秒',
     layout: {
-      editor: '通用价格字段编辑器，音频时长单位紧邻字段显示。',
-      managementDisplay: '显示音频时长价格。',
-      publicDisplay: '显示按秒计费价格，不显示 aud_s 变量名。',
+      editor: '显示“输入音频时长价格”，明确系统读取上传音频并通过 aud_s 计费。',
+      managementDisplay: '显示输入音频时长价格，并与生成音频/媒体任务时长区分。',
+      publicDisplay: '显示按秒计费价格并固定保留 6 位小数，不显示 aud_s 变量名。',
     },
     runtime: '使用 usage 中的 aud_s 乘以秒单价。',
-    compatibility: '前端变量、Go 表达式绑定和结算 usage 映射三处都必须存在。',
+    compatibility: '仅用于系统可读取上传音频时长的 ASR/转写/翻译请求；不得与渠道或媒体任务提供的 seconds 混用。前端变量、Go 表达式绑定和结算 usage 映射三处都必须存在；价格精度固定为小数点后 6 位。',
   },
 ] as const satisfies readonly ExpressionTemplateContract[]
 
@@ -399,8 +399,8 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
   },
   {
     key: 'audioSeconds',
-    name: 'Audio duration pricing',
-    purpose: '音频、音乐或语音按输出时长计费。',
+    name: 'Generated audio/media task duration pricing',
+    purpose: '生成音频或媒体任务按渠道、任务适配器提供的 seconds 时长计费。',
     execution: 'request-or-task',
     conditionFields: [],
     chargeMeters: ['seconds'],
@@ -412,7 +412,7 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
       publicDisplay: '显示按秒/分钟/小时价格。',
     },
     runtime: '按实际 seconds 和 divisor 结算。',
-    compatibility: '单位必须紧邻音频时长计费字段显示。',
+    compatibility: '必须确认请求或任务适配器会提供 seconds；上传音频 ASR/转写应改用 aud_s 模板。单位必须紧邻音频时长计费字段显示。',
   },
   {
     key: 'ttsCharacters',

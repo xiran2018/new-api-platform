@@ -38,10 +38,10 @@ export function formatPriceDecimal(value: number, fractionDigits: number) {
   const zeroThreshold = 0.5 * 10 ** -fractionDigits;
   const displayValue = Math.abs(value) < zeroThreshold ? 0 : value;
   return new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: Math.min(
-      DEFAULT_PRICE_FRACTION_DIGITS,
-      fractionDigits,
-    ),
+    // Audio-duration prices such as ASR per-second rates commonly need values
+    // like 0.000220. Keep the requested precision instead of trimming them
+    // back to the generic three-decimal display used by other price fields.
+    minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(displayValue);
 }
