@@ -15,6 +15,8 @@ import {
   combineBillingExpr,
   splitBillingExprAndRequestRules,
 } from "@/features/pricing/lib/billing-expr";
+import { compileBillingExpression } from "@/features/pricing/lib/billing-expression/parser";
+import type { ExpressionNode } from "@/features/pricing/lib/billing-expression/types";
 import {
   parseVisualBillingDocument,
   serializeVisualBillingDocument,
@@ -258,6 +260,90 @@ function hasConfiguredPrice(entry: ModelPricingEntry) {
   );
 }
 
+const BILLING_PRICE_VARIABLES = new Set([
+  "p",
+  "c",
+  "cr",
+  "cc",
+  "cc1h",
+  "img",
+  "img_cr",
+  "img_o",
+  "ai",
+  "ao",
+  "vid",
+  "vid_o",
+  "aud_s",
+]);
+
+function expressionChildren(node: ExpressionNode): ExpressionNode[] {
+  switch (node.kind) {
+    case "call":
+      return node.args;
+    case "unary":
+      return [node.operand];
+    case "binary":
+      return [node.left, node.right];
+    case "conditional":
+      return [node.condition, node.yes, node.no];
+    default:
+      return [];
+  }
+}
+
+function isUsagePriceMeter(node: ExpressionNode): boolean {
+  return (
+    (node.kind === "variable" && BILLING_PRICE_VARIABLES.has(node.name)) ||
+    (node.kind === "call" && node.name === "u" && node.args.length === 1)
+  );
+}
+
+function scaledLiteral(value: number, factor: number): string {
+  return String(Number((value * factor).toPrecision(15)));
+}
+
+/**
+ * Scale price literals without changing the billing-expression structure.
+ *
+ * Fixed pricing has a deliberately strict grammar: `tier(name, fixed(price))`
+ * may be multiplied by a request quantity such as `image_count`, but the
+ * complete expression cannot be wrapped in another numeric multiplier. Only
+ * the literal prices are therefore patched; tier bounds, request conditions
+ * and quantity multipliers remain untouched.
+ */
+function scaleBillingExpressionPrices(source: string, factor: number): string | null {
+  const compiled = compileBillingExpression(source);
+  if (compiled.status !== "ready") return null;
+
+  const patches = new Map<number, { start: number; end: number; text: string }>();
+  const addNumericLiteral = (node: ExpressionNode) => {
+    if (node.kind !== "literal" || typeof node.value !== "number") return;
+    patches.set(node.start, {
+      start: node.start,
+      end: node.end,
+      text: scaledLiteral(node.value, factor),
+    });
+  };
+
+  const visit = (node: ExpressionNode) => {
+    if (node.kind === "call" && node.name === "fixed" && node.args.length === 1) {
+      addNumericLiteral(node.args[0]);
+    } else if (node.kind === "binary" && node.operator === "*") {
+      if (isUsagePriceMeter(node.left)) addNumericLiteral(node.right);
+      if (isUsagePriceMeter(node.right)) addNumericLiteral(node.left);
+    }
+    expressionChildren(node).forEach(visit);
+  };
+  visit(compiled.ast);
+
+  if (patches.size === 0) return null;
+  let result = source;
+  for (const patch of [...patches.values()].sort((a, b) => b.start - a.start)) {
+    result = result.slice(0, patch.start) + patch.text + result.slice(patch.end);
+  }
+  return compileBillingExpression(result).status === "ready" ? result : null;
+}
+
 export function applyPricingDiscount(data: ModelRatioData, discount: number): ModelRatioData {
   const factor = 1 - discount / 100;
   const scaled = (value?: string) =>
@@ -274,14 +360,17 @@ export function applyPricingDiscount(data: ModelRatioData, discount: number): Mo
         }
         return {
           ...node,
-          fixedPrice: node.fixedPrice === "" ? "" : String(Number(node.fixedPrice) * factor),
+          fixedPrice:
+            node.fixedPrice === ""
+              ? ""
+              : scaledLiteral(Number(node.fixedPrice), factor),
           sharedPrices: node.sharedPrices?.map((price) => ({
             ...price,
-            value: String(Number(price.value) * factor),
+            value: scaledLiteral(Number(price.value), factor),
           })),
           prices: node.prices.map((price) => ({
             ...price,
-            value: String(Number(price.value) * factor),
+            value: scaledLiteral(Number(price.value), factor),
           })),
         };
       };
@@ -291,7 +380,14 @@ export function applyPricingDiscount(data: ModelRatioData, discount: number): Mo
       });
       if (serialized.ok) return { ...data, billingExpr: serialized.source };
     }
-    return { ...data, billingExpr: `(${data.billingExpr || "p * 0 + c * 0"}) * ${factor}` };
+    const billingExpr = scaleBillingExpressionPrices(
+      data.billingExpr || 'tier("base", p * 0 + c * 0)',
+      factor,
+    );
+    if (!billingExpr) {
+      throw new Error("Unable to safely apply the price adjustment to this billing expression");
+    }
+    return { ...data, billingExpr };
   }
   return data.billingMode === "per-request"
     ? { ...data, price: scaled(data.price) }
