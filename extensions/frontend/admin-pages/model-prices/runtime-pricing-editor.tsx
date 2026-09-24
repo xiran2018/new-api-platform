@@ -142,6 +142,7 @@ function priceSpecExpressionSource(spec?: PriceSpec): string {
 type VendorComparisonCandidate = {
   value: number;
   scope?: string;
+  scopeId?: string;
 };
 
 function normalizedComparisonScope(scope?: string) {
@@ -153,31 +154,59 @@ function addVendorComparisonCandidate(
   candidates: VendorComparisonCandidate[],
   value: unknown,
   scope?: string,
+  scopeId?: string,
 ) {
   if (value == null || value === "") return;
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return;
-  candidates.push({ value: numeric, scope: normalizedComparisonScope(scope) });
+  candidates.push({
+    value: numeric,
+    scope: normalizedComparisonScope(scope),
+    scopeId,
+  });
+}
+
+function collectTierComparisonCandidates(
+  node: Extract<VisualPricingNode, { kind: "tier" }>,
+  key: string,
+  candidates: VendorComparisonCandidate[],
+  scopeId: string,
+) {
+  if (key === "fixed" && node.billingUnit === "request") {
+    addVendorComparisonCandidate(candidates, node.fixedPrice, node.label, scopeId);
+  }
+  for (const price of [...(node.sharedPrices || []), ...node.prices]) {
+    if (price.variable === key) {
+      addVendorComparisonCandidate(candidates, price.value, node.label, scopeId);
+    }
+  }
 }
 
 function collectVisualComparisonCandidates(
   node: VisualPricingNode,
   key: string,
   candidates: VendorComparisonCandidate[],
+  prefix = "",
 ) {
-  if (node.kind === "branch") {
-    collectVisualComparisonCandidates(node.yes, key, candidates);
-    collectVisualComparisonCandidates(node.no, key, candidates);
-    return;
+  // Mirror VisualBillingDocumentEditor's numbered rule layout. Unlike parser
+  // source offsets and editable tier labels, this path remains stable when a
+  // user changes a price or renames a tier and later reopens the editor.
+  const rules: VisualPricingNode[] = [];
+  let current = node;
+  while (current.kind === "branch") {
+    rules.push(current);
+    current = current.no;
   }
-  if (key === "fixed" && node.billingUnit === "request") {
-    addVendorComparisonCandidate(candidates, node.fixedPrice, node.label);
-  }
-  for (const price of [...(node.sharedPrices || []), ...node.prices]) {
-    if (price.variable === key) {
-      addVendorComparisonCandidate(candidates, price.value, node.label);
+  rules.push(current);
+  rules.forEach((rule, index) => {
+    const scopeId = `${prefix}${index + 1}`;
+    const tier = rule.kind === "tier" ? rule : rule.yes;
+    if (tier.kind === "tier") {
+      collectTierComparisonCandidates(tier, key, candidates, scopeId);
+    } else {
+      collectVisualComparisonCandidates(tier, key, candidates, `${scopeId}.`);
     }
-  }
+  });
 }
 
 function uniqueCandidateValue(candidates: VendorComparisonCandidate[]) {
@@ -188,7 +217,12 @@ function uniqueCandidateValue(candidates: VendorComparisonCandidate[]) {
 function resolveVendorComparisonCandidate(
   candidates: VendorComparisonCandidate[],
   scope?: string,
+  scopeId?: string,
 ) {
+  if (scopeId) {
+    const structural = candidates.filter((candidate) => candidate.scopeId === scopeId);
+    if (structural.length) return uniqueCandidateValue(structural);
+  }
   const normalizedScope = normalizedComparisonScope(scope);
   if (normalizedScope) {
     const exact = candidates.filter((candidate) => candidate.scope === normalizedScope);
@@ -209,6 +243,7 @@ export function vendorComparisonValue(
   spec: PriceSpec | undefined,
   key: string,
   scope?: string,
+  scopeId?: string,
 ): number | undefined {
   const candidates: VendorComparisonCandidate[] = [];
   const displayField = COMPARISON_FIELD_BY_VARIABLE[key];
@@ -241,7 +276,7 @@ export function vendorComparisonValue(
       if (document) {
         for (const price of document.shared?.prices || []) {
           if (price.variable === key) {
-            addVendorComparisonCandidate(candidates, price.value, block.label);
+            addVendorComparisonCandidate(candidates, price.value, block.label, "shared");
           }
         }
         collectVisualComparisonCandidates(document.root, key, candidates);
@@ -259,7 +294,7 @@ export function vendorComparisonValue(
     }
   }
 
-  return resolveVendorComparisonCandidate(candidates, scope);
+  return resolveVendorComparisonCandidate(candidates, scope, scopeId);
 }
 
 function editorData(
@@ -576,11 +611,11 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     Boolean(matchingUsageRuleSet(currentPriceSpec)),
   );
   const currentPriceSpecSignature = JSON.stringify(currentPriceSpec ?? null);
-  const comparisonValue = (key: string, scope?: string) => {
-    return vendorComparisonValue(vendorPriceSpec, key, scope);
+  const comparisonValue = (key: string, scope?: string, scopeId?: string) => {
+    return vendorComparisonValue(vendorPriceSpec, key, scope, scopeId);
   };
-  const renderPriceAddon = ({ key, scope, value }: { key: string; scope?: string; value: string }) => {
-    const vendorPrice = comparisonValue(key, scope);
+  const renderPriceAddon = ({ key, scope, scopeId, value }: { key: string; scope?: string; scopeId?: string; value: string }) => {
+    const vendorPrice = comparisonValue(key, scope, scopeId);
     if (vendorPrice == null || !Number.isFinite(vendorPrice)) {
       return <div className="shrink-0 text-xs text-muted-foreground">{t("Vendor price is not set")}</div>;
     }

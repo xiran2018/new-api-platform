@@ -23,6 +23,41 @@ function visualTierLabels(node: VisualPricingNode): string[] {
     : [...visualTierLabels(node.yes), ...visualTierLabels(node.no)];
 }
 
+function visualPriceFields(
+  node: VisualPricingNode,
+  prefix = "",
+): Array<{ key: string; scope: string; scopeId: string }> {
+  const rules: VisualPricingNode[] = [];
+  let current = node;
+  while (current.kind === "branch") {
+    rules.push(current);
+    current = current.no;
+  }
+  rules.push(current);
+  return rules.flatMap((rule, index) => {
+    const scopeId = `${prefix}${index + 1}`;
+    const tier = rule.kind === "tier" ? rule : rule.yes;
+    if (tier.kind === "branch") {
+      return visualPriceFields(tier, `${scopeId}.`);
+    }
+    return [
+      ...(tier.billingUnit === "request"
+        ? [{ key: "fixed", scope: tier.label, scopeId }]
+        : []),
+      ...(tier.sharedPrices || []).map((price) => ({
+        key: price.variable,
+        scope: tier.label,
+        scopeId,
+      })),
+      ...tier.prices.map((price) => ({
+        key: price.variable,
+        scope: tier.label,
+        scopeId,
+      })),
+    ];
+  });
+}
+
 const advancedRuleSet: UsageRuleSet = {
   version: 1,
   execution: "request",
@@ -315,6 +350,20 @@ describe("vendorComparisonValue", () => {
     expect(vendorComparisonValue(spec, "c", " short  ")).toBe(9.6);
   });
 
+  it("uses the stable visual rule path when tier names are duplicated", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [{
+        baseExpression:
+          'len <= 128000 ? tier("same tier", c * 9.6) : tier("same tier", c * 12.7)',
+      }],
+    };
+
+    expect(vendorComparisonValue(spec, "c", "same tier")).toBeUndefined();
+    expect(vendorComparisonValue(spec, "c", "same tier", "1")).toBe(9.6);
+    expect(vendorComparisonValue(spec, "c", "same tier", "2")).toBe(12.7);
+  });
+
   it("resolves a comparison price for every visual expression preset", () => {
     for (const group of PLATFORM_BILLING_PRESET_GROUPS) {
       for (const preset of group.presets) {
@@ -333,6 +382,35 @@ describe("vendorComparisonValue", () => {
         ]);
         expect(values.some((value) => typeof value === "number"), preset.key)
           .toBe(true);
+      }
+    }
+  });
+
+  it("resolves the vendor price beside every field loaded by vendor sync", () => {
+    for (const group of PLATFORM_BILLING_PRESET_GROUPS) {
+      for (const preset of group.presets) {
+        const spec: PriceSpec = {
+          mode: "expression",
+          blocks: [{ baseExpression: preset.expr }],
+        };
+        const document = parseVisualBillingDocument(preset.expr);
+        expect(document, preset.key).not.toBeNull();
+        if (!document) continue;
+        const fields = [
+          ...(document.shared?.prices || []).map((price) => ({
+            key: price.variable,
+            scope: "Shared input pricing",
+            scopeId: "shared",
+          })),
+          ...visualPriceFields(document.root),
+        ];
+        expect(fields.length, preset.key).toBeGreaterThan(0);
+        for (const field of fields) {
+          expect(
+            vendorComparisonValue(spec, field.key, field.scope, field.scopeId),
+            `${preset.key}: ${field.scopeId}/${field.scope}/${field.key}`,
+          ).toBeTypeOf("number");
+        }
       }
     }
   });

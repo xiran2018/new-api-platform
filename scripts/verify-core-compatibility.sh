@@ -6,6 +6,7 @@ editor="$repo_root/core/new-api/web/src/features/system-settings/models/tiered-p
 sheet="$repo_root/core/new-api/web/src/features/system-settings/models/model-pricing-sheet.tsx"
 price_inputs="$repo_root/core/new-api/web/src/features/system-settings/models/model-pricing-inputs.tsx"
 tier_price_fields="$repo_root/core/new-api/web/src/features/system-settings/models/tier-price-fields.tsx"
+visual_billing_editor="$repo_root/core/new-api/web/src/features/system-settings/models/visual-billing-document-editor.tsx"
 pricing_amount_input="$repo_root/core/new-api/web/src/features/model-pricing/pricing-amount-input.tsx"
 pricing_format="$repo_root/core/new-api/web/src/features/system-settings/models/pricing-format.ts"
 addon_context="$repo_root/extensions/frontend/model-prices/pricing-field-addon.tsx"
@@ -83,6 +84,14 @@ require_text "$usage_rule_builder" "fractionDigits={fractionDigits}" \
   "advanced audio-duration price inputs no longer preserve six-decimal precision"
 require_text "$adapter" "resolveVendorComparisonCandidate" \
   "vendor price comparison no longer scans and safely resolves all price blocks"
+require_text "$addon_context" "scopeId?: string" \
+  "the stable vendor-price field identity was lost from the platform addon seam"
+require_text "$tier_price_fields" "scopeId={props.scopeId}" \
+  "the upstream visual pricing fields no longer pass the stable comparison identity"
+require_text "$visual_billing_editor" "scopeId={props.number}" \
+  "visual pricing tiers no longer expose their stable structural path"
+require_text "$adapter" "candidate.scopeId === scopeId" \
+  "vendor price comparison no longer prioritizes the stable structural path"
 require_text "$adapter" "Parse blocks independently" \
   "multiple vendor expression blocks may be concatenated and lost again"
 require_text "$usage_rule_builder" "findComparisonUsageCharge" \
@@ -91,6 +100,8 @@ require_text "$runtime_pricing_test" "reads normalized vendor prices from blocks
   "the non-first-block vendor-price regression test was lost"
 require_text "$runtime_pricing_test" "does not guess after a tier is renamed when vendor prices differ" \
   "the ambiguous vendor-price safety regression test was lost"
+require_text "$runtime_pricing_test" "uses the stable visual rule path when tier names are duplicated" \
+  "the duplicate-tier-name vendor-price regression test was lost"
 require_text "$usage_rule_test" "matches the vendor tier by semantics after rules are reordered" \
   "the reordered advanced-rule vendor-price regression test was lost"
 require_text "$template_registry_doc" "原厂价格比较的稳定性合同" \

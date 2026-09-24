@@ -3,6 +3,8 @@ import { createContext, useContext, type ReactNode } from "react";
 export type PricingFieldAddonInput = {
   key: string;
   scope?: string;
+  /** Stable structural position of the field inside a visual pricing tree. */
+  scopeId?: string;
   value: string;
 };
 
