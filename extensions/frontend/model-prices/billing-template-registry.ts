@@ -164,6 +164,28 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       '图片输出 img_o、音频输入 ai、音频输出 ao 的前后端变量和结算映射必须保留。',
   },
   {
+    key: 'audio-image-input-text-audio-output',
+    name: 'Audio/image input + text/audio output pricing',
+    group: 'multimodal',
+    purpose:
+      '音频输入、图片输入、文本输出和音频输出分别计价；输入字段在前，输出字段在后。',
+    conditionFields: [],
+    priceFields: ['ai', 'img', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '可视化四字段编辑器；音频输入、图片输入、文本输出、音频输出均可独立填写。',
+      managementDisplay:
+        '单行横向显示，顺序固定为音频输入、图片输入、文本输出、音频输出；保留原厂价格和差值。',
+      publicDisplay:
+        '单行横向显示，输入价格在前、输出价格在后，不显示表达式或内部变量。',
+    },
+    runtime:
+      '按 ai、img、c、ao 对应的实际 usage 数量分别乘以单价后求和。',
+    compatibility:
+      '使用现有 ai/img/c/ao 变量和表达式结算，不改变后端协议；截图中的价格只是示例，不能固化到模板。',
+  },
+  {
     key: 'unified-multimodal-input-audio-output',
     name: 'Unified text/image/video input + separate audio pricing',
     group: 'multimodal',
@@ -179,6 +201,50 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
     },
     runtime: 'ao 大于 0 时使用文本+音频输出分支，否则使用文本输出分支。',
     compatibility: '视频输入 vid 和音频输出 ao 必须参与真实计费。',
+  },
+  {
+    key: 'shared-text-image-input-audio-output-modes',
+    name: 'Shared text/image/video input + audio input + multimodal/audio output pricing',
+    group: 'multimodal',
+    purpose:
+      '文本、图片、视频共用一个输入价格，音频输入单独计价；输出分为多模态文本和仅音频计费的文本+音频两种模式。',
+    conditionFields: ['ao > 0'],
+    priceFields: ['p+img+vid', 'ai', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '专用四字段可视化编辑器；文本/图片/视频共用输入价格，音频输入、 多模态文本输出和文本+音频输出分别填写。',
+      managementDisplay:
+        '单行四列横向显示，顺序为文本/图片/视频输入、音频输入、文本输出（多模态输入）、文本+音频输出（仅音频计费）。',
+      publicDisplay:
+        '与管理端相同的单行四列分组表，输入列在前、输出列在后，不显示表达式源码或内部变量名。',
+    },
+    runtime:
+      '保存时共享输入价格同时写入 p、img、vid；按 ai 计音频输入，ao 大于 0 的请求按音频输出计费，否则按 c 计多模态文本输出。',
+    compatibility:
+      '模板 key、shared text/image/video input 标签、p/img/vid 双写语义和 ao 输出分支必须保留；不得用截图中的价格替代可编辑参数。',
+  },
+  {
+    key: 'shared-text-image-audio-output-modes',
+    name: 'Shared text/image input + audio input + multimodal/audio output pricing',
+    group: 'multimodal',
+    purpose:
+      '文本和图片共用一个输入价格，音频输入单独计价；输出分为多模态文本和仅音频计费的文本+音频两种模式。',
+    conditionFields: ['ao > 0'],
+    priceFields: ['p+img', 'ai', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '专用四字段可视化编辑器；文本/图片共用输入价格，音频输入、多模态文本输出和文本+音频输出分别填写。',
+      managementDisplay:
+        '单行四列横向显示，顺序为文本/图片输入、音频输入、文本输出（多模态输入）、文本+音频输出（仅音频计费）。',
+      publicDisplay:
+        '与管理端相同的单行四列分组表，输入列在前、输出列在后，不显示表达式源码或内部变量名。',
+    },
+    runtime:
+      '保存时共享输入价格同时写入 p、img；按 ai 计音频输入，ao 大于 0 的请求按音频输出计费，否则按 c 计多模态文本输出。',
+    compatibility:
+      '使用独立模板 key 和 shared text/image input 标签；旧的 shared text/image/video 模板保持不变，截图中的价格不能固化为业务限制。',
   },
   {
     key: 'omni-output-modes',

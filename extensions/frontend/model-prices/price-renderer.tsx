@@ -140,6 +140,11 @@ type OmniOutputPriceSet = {
   audio: PriceBlock;
 };
 
+type SharedTextImageAudioOutputPriceSet = {
+  multimodal: PriceBlock;
+  audio: PriceBlock;
+};
+
 const omniOutputKind = (block: PriceBlock): keyof OmniOutputPriceSet | null => {
   const label = (block.label || "").toLowerCase();
   if (label.startsWith("pure text output")) return "pure";
@@ -156,6 +161,32 @@ function omniOutputPriceSet(blocks: PriceBlock[]): OmniOutputPriceSet | null {
   }
   return found.pure && found.multimodal && found.audio
     ? found as OmniOutputPriceSet
+    : null;
+}
+
+const sharedTextImageAudioOutputKind = (
+  block: PriceBlock,
+): keyof SharedTextImageAudioOutputPriceSet | null => {
+  const label = (block.label || "").toLowerCase();
+  if (
+    !label.includes("shared text/image/video input") &&
+    !label.includes("shared text/image input")
+  ) return null;
+  if (label.startsWith("multimodal text output")) return "multimodal";
+  if (label.startsWith("text+audio output")) return "audio";
+  return null;
+};
+
+function sharedTextImageAudioOutputPriceSet(
+  blocks: PriceBlock[],
+): SharedTextImageAudioOutputPriceSet | null {
+  const found: Partial<SharedTextImageAudioOutputPriceSet> = {};
+  for (const block of blocks) {
+    const kind = sharedTextImageAudioOutputKind(block);
+    if (kind && !found[kind]) found[kind] = block;
+  }
+  return found.multimodal && found.audio
+    ? found as SharedTextImageAudioOutputPriceSet
     : null;
 }
 
@@ -630,15 +661,45 @@ export function PriceRenderer({
           const omniPrices = omniOutputPriceSet(blocks);
           const comparedOmniPrices = omniOutputPriceSet(displayedCompareSpec?.blocks || []);
           const omniBlocks = new Set(omniPrices ? Object.values(omniPrices) : []);
+          const sharedTextImageAudioPrices = sharedTextImageAudioOutputPriceSet(blocks);
+          const comparedSharedTextImageAudioPrices = sharedTextImageAudioOutputPriceSet(
+            displayedCompareSpec?.blocks || [],
+          );
+          const sharedTextImageAudioBlocks = new Set(
+            sharedTextImageAudioPrices ? Object.values(sharedTextImageAudioPrices) : [],
+          );
+          const audioImageBlocks = new Set(
+            blocks.filter((block) =>
+              /^audio\/image input \+ text\/audio output/i.test(block.label || ""),
+            ),
+          );
           const groups = publicPriceBlockGroups(
-            blocks.filter((block) => !omniBlocks.has(block)),
+            blocks.filter(
+              (block) =>
+                !omniBlocks.has(block) &&
+                !sharedTextImageAudioBlocks.has(block) &&
+                !audioImageBlocks.has(block),
+            ),
           );
           const comparedOmniBlocks = new Set(
             comparedOmniPrices ? Object.values(comparedOmniPrices) : [],
           );
+          const comparedSharedTextImageAudioBlocks = new Set(
+            comparedSharedTextImageAudioPrices
+              ? Object.values(comparedSharedTextImageAudioPrices)
+              : [],
+          );
+          const comparedAudioImageBlocks = new Set(
+            (displayedCompareSpec?.blocks || []).filter((block) =>
+              /^audio\/image input \+ text\/audio output/i.test(block.label || ""),
+            ),
+          );
           const compareGroups = publicPriceBlockGroups(
             (displayedCompareSpec?.blocks || []).filter(
-              (block) => !comparedOmniBlocks.has(block),
+              (block) =>
+                !comparedOmniBlocks.has(block) &&
+                !comparedSharedTextImageAudioBlocks.has(block) &&
+                !comparedAudioImageBlocks.has(block),
             ),
           );
           const compareGroupFor = (group: PublicPriceBlockGroup) =>
@@ -669,8 +730,166 @@ export function PriceRenderer({
               {unit && <span className="ml-1 text-xs text-muted-foreground">/ {unit}</span>}
             </>
           );
+          const audioImageBlock = blocks.find((block) =>
+            /^audio\/image input \+ text\/audio output/i.test(block.label || ""),
+          );
+          const comparedAudioImageBlock = displayedCompareSpec?.blocks?.find((block) =>
+            /^audio\/image input \+ text\/audio output/i.test(block.label || ""),
+          );
+          const audioImageFields = [
+            { field: "audioInput" as const, label: "Audio input price", kind: "input" as const },
+            { field: "image" as const, label: "Image input price", kind: "input" as const },
+            { field: "output" as const, label: "Text output price", kind: "output" as const },
+            { field: "audioOutput" as const, label: "Audio output price", kind: "output" as const },
+          ].filter(({ field }) => hasNonZeroPrice(audioImageBlock?.[field]));
           return (
             <>
+              {sharedTextImageAudioPrices && (() => {
+                const unit =
+                  sharedTextImageAudioPrices.multimodal.unit ||
+                  sharedTextImageAudioPrices.audio.unit ||
+                  "";
+                const inputBlock = sharedTextImageAudioPrices.multimodal;
+                const comparedInputBlock = comparedSharedTextImageAudioPrices?.multimodal;
+                const imagePrice = priceValue(inputBlock, "image");
+                const videoPrice = priceValue(inputBlock, "videoInput");
+                const inputPrice = priceValue(inputBlock, "input");
+                const comparedImagePrice = priceValue(comparedInputBlock, "image");
+                const comparedVideoPrice = priceValue(comparedInputBlock, "videoInput");
+                const comparedInputPrice = priceValue(comparedInputBlock, "input");
+                const mediaPrices = [imagePrice, videoPrice].filter(
+                  (value): value is number => value != null,
+                );
+                const comparedMediaPrices = [comparedImagePrice, comparedVideoPrice].filter(
+                  (value): value is number => value != null,
+                );
+                const sameMediaPrice =
+                  mediaPrices.length === 0 ||
+                  mediaPrices.every((value) => value === mediaPrices[0]);
+                const sharedInput = inputPrice ?? mediaPrices[0];
+                const comparedSharedInput = comparedInputPrice ?? comparedMediaPrices[0];
+                const hasVideoInput = videoPrice != null;
+                const sharedInputLabel = hasVideoInput
+                  ? "Text/image/video input"
+                  : "Text/image input";
+                return (
+                  <div className="overflow-x-auto rounded-md border bg-muted/25">
+                    <table className="min-w-[760px] table-fixed text-left text-xs">
+                      <thead className="bg-muted/60 text-muted-foreground">
+                        <tr>
+                          <th colSpan={2} className="border-b border-r p-2 text-center font-medium">
+                            {t("Input unit price")}
+                          </th>
+                          <th colSpan={2} className="border-b p-2 text-center font-medium">
+                            {t("Output unit price")}
+                          </th>
+                        </tr>
+                        <tr>
+                          <th className="border-r p-2 font-medium">{t(sharedInputLabel)}</th>
+                          <th className="border-r p-2 font-medium">{t("Audio input")}</th>
+                          <th className="border-r p-2 font-medium">
+                            {t("Text output")}
+                            <span className="ml-1 font-normal">({t("Multimodal input")})</span>
+                          </th>
+                          <th className="p-2 font-medium">
+                            {t("Text + audio output")}
+                            <span className="ml-1 font-normal">({t("Audio only billed")})</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t align-top">
+                          <td className="break-words border-r p-2.5">
+                            {sameMediaPrice ? renderPrice(sharedInput, unit, comparedSharedInput) : (
+                              <div className="space-y-1">
+                                {renderPrice(inputPrice, unit, comparedInputPrice)}
+                                {hasNonZeroPrice(imagePrice) && (
+                                  <div>{t("Image input")}: {renderPrice(imagePrice, unit, comparedImagePrice)}</div>
+                                )}
+                                {hasNonZeroPrice(videoPrice) && (
+                                  <div>{t("Video input")}: {renderPrice(videoPrice, unit, comparedVideoPrice)}</div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="break-words border-r p-2.5">
+                            {renderPrice(
+                              priceValue(inputBlock, "audioInput"),
+                              unit,
+                              priceValue(comparedInputBlock, "audioInput"),
+                            )}
+                          </td>
+                          <td className="break-words border-r p-2.5">
+                            {renderPrice(
+                              priceValue(sharedTextImageAudioPrices.multimodal, "output"),
+                              unit,
+                              priceValue(comparedSharedTextImageAudioPrices?.multimodal, "output"),
+                            )}
+                          </td>
+                          <td className="break-words p-2.5">
+                            {renderPrice(
+                              priceValue(sharedTextImageAudioPrices.audio, "audioOutput"),
+                              unit,
+                              priceValue(comparedSharedTextImageAudioPrices?.audio, "audioOutput"),
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+              {audioImageBlock && audioImageFields.length > 0 && (() => {
+                const inputFields = audioImageFields.filter(({ kind }) => kind === "input");
+                const outputFields = audioImageFields.filter(({ kind }) => kind === "output");
+                const unit = audioImageBlock.unit || "";
+                return (
+                  <div className="overflow-x-auto rounded-md border bg-muted/25">
+                    <table className="min-w-[680px] w-full table-fixed text-left text-xs">
+                      <thead className="bg-muted/60 text-muted-foreground">
+                        <tr>
+                          {inputFields.length > 0 && (
+                            <th colSpan={inputFields.length} className="border-b border-r p-2 text-center font-medium">
+                              {t("Input unit price")}
+                            </th>
+                          )}
+                          {outputFields.length > 0 && (
+                            <th colSpan={outputFields.length} className="border-b p-2 text-center font-medium">
+                              {t("Output unit price")}
+                            </th>
+                          )}
+                        </tr>
+                        <tr>
+                          {audioImageFields.map(({ field, label }, index) => (
+                            <th
+                              className={`p-2 font-medium ${index < audioImageFields.length - 1 ? "border-r" : ""}`}
+                              key={field}
+                            >
+                              {t(label)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t align-top">
+                          {audioImageFields.map(({ field }, index) => (
+                            <td
+                              className={`break-words p-2.5 ${index < audioImageFields.length - 1 ? "border-r" : ""}`}
+                              key={field}
+                            >
+                              {renderPrice(
+                                audioImageBlock[field] ?? undefined,
+                                unit,
+                                comparedAudioImageBlock?.[field] ?? undefined,
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
               {omniPrices && (() => {
                 const unit = omniPrices.pure.unit || omniPrices.multimodal.unit || omniPrices.audio.unit || "";
                 const inputBlock = omniPrices.pure;

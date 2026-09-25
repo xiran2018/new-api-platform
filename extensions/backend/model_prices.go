@@ -280,13 +280,20 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		return err
 	}
 	var storedRows []modelPriceCatalog
-	if err := db.Select("model_key", "llm_api_price_spec", "published", "api_enabled").Find(&storedRows).Error; err != nil {
+	if err := db.Select("model_key", "vendor", "llm_api_price_spec", "published", "api_enabled").Find(&storedRows).Error; err != nil {
 		return err
 	}
+	// Vendor is editable in the platform catalogue. Preserve the stored value
+	// when rebuilding rows from model/channel metadata so a refresh cannot
+	// overwrite an administrator's explicit vendor selection.
+	storedVendors := make(map[string]string, len(storedRows))
 	storedBlockMetadata := make(map[string]map[string]any, len(storedRows))
 	storedPriceSpecs := make(map[string]json.RawMessage, len(storedRows))
 	storedFlags := make(map[string]storedModelFlags, len(storedRows))
 	for _, row := range storedRows {
+		if vendor := strings.TrimSpace(row.Vendor); vendor != "" {
+			storedVendors[row.ModelKey] = vendor
+		}
 		storedPriceSpecs[row.ModelKey] = row.LLMAPIPriceSpec
 		storedFlags[row.ModelKey] = storedModelFlags{
 			published:  row.Published,
@@ -372,6 +379,9 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		if vendor == "" {
 			vendor = "Other"
 		}
+		if storedVendor := storedVendors[name]; storedVendor != "" {
+			vendor = storedVendor
+		}
 		tagsRaw := metadata.Tags
 		if tagsRaw == "" {
 			tagsRaw = pricing.Tags
@@ -420,6 +430,9 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		if vendor == "" {
 			vendor = "Other"
 		}
+		if storedVendor := storedVendors[name]; storedVendor != "" {
+			vendor = storedVendor
+		}
 		tagsJSON, _ := json.Marshal(splitModelTags(pricing.Tags))
 		priceSpec := json.RawMessage(`{}`)
 		if hasPricing && configuredPricing[name] {
@@ -445,8 +458,9 @@ func syncExistingModelPrices(db *gorm.DB) error {
 			return nil
 		}
 		return tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "model_key"}},
-			DoUpdates: clause.AssignmentColumns([]string{"display_name", "vendor", "tags", "llm_api_price_spec", "runtime_pricing_ref", "published", "api_enabled", "metadata_managed", "sort_order"}),
+			Columns: []clause.Column{{Name: "model_key"}},
+			// Keep the manually selected vendor when metadata is synchronized.
+			DoUpdates: clause.AssignmentColumns([]string{"display_name", "tags", "llm_api_price_spec", "runtime_pricing_ref", "published", "api_enabled", "metadata_managed", "sort_order"}),
 		}).CreateInBatches(rows, 200).Error
 	})
 }

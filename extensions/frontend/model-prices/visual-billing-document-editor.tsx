@@ -19,12 +19,19 @@ export type PlatformVisualBillingDocumentEditorProps = {
 }
 
 type OmniOutputKind = 'pure' | 'multimodal' | 'audio'
+type SharedTextImageAudioOutputKind = 'multimodal' | 'audio'
 type OmniTierMatch = {
+  tier: Extract<VisualPricingNode, { kind: 'tier' }>
+  scopeId: string
+}
+type SharedTextImageAudioOutputTierMatch = {
   tier: Extract<VisualPricingNode, { kind: 'tier' }>
   scopeId: string
 }
 
 const SHARED_MEDIA_MARKER = 'shared image/video input'
+const SHARED_TEXT_IMAGE_VIDEO_MARKER = 'shared text/image/video input'
+const SHARED_TEXT_IMAGE_MARKER = 'shared text/image input'
 
 function omniOutputKind(label: string): OmniOutputKind | null {
   const normalized = label.toLowerCase()
@@ -60,6 +67,47 @@ function collectOmniTiers(
   return result
 }
 
+function sharedTextImageAudioOutputKind(
+  label: string
+): SharedTextImageAudioOutputKind | null {
+  const normalized = label.toLowerCase()
+  if (
+    !normalized.includes(SHARED_TEXT_IMAGE_VIDEO_MARKER) &&
+    !normalized.includes(SHARED_TEXT_IMAGE_MARKER)
+  ) return null
+  if (normalized.startsWith('multimodal text output')) return 'multimodal'
+  if (normalized.startsWith('text+audio output')) return 'audio'
+  return null
+}
+
+function collectSharedTextImageAudioOutputTiers(
+  node: VisualPricingNode,
+  result = new Map<
+    SharedTextImageAudioOutputKind,
+    SharedTextImageAudioOutputTierMatch
+  >(),
+  prefix = ''
+) {
+  const rules: VisualPricingNode[] = []
+  let current = node
+  while (current.kind === 'branch') {
+    rules.push(current)
+    current = current.no
+  }
+  rules.push(current)
+  rules.forEach((rule, index) => {
+    const scopeId = `${prefix}${index + 1}`
+    const tier = rule.kind === 'tier' ? rule : rule.yes
+    if (tier.kind === 'branch') {
+      collectSharedTextImageAudioOutputTiers(tier, result, `${scopeId}.`)
+      return
+    }
+    const kind = sharedTextImageAudioOutputKind(tier.label)
+    if (kind) result.set(kind, { tier, scopeId })
+  })
+  return result
+}
+
 export function supportsPlatformVisualBillingDocumentEditor(
   document: VisualBillingDocument
 ) {
@@ -72,6 +120,26 @@ export function supportsPlatformVisualBillingDocumentEditor(
       sharedVariables.has(variable as VisualPrice['variable'])
     ) &&
     tiers.has('pure') &&
+    tiers.has('multimodal') &&
+    tiers.has('audio')
+  )
+}
+
+export function supportsSharedTextImageAudioOutputEditor(
+  document: VisualBillingDocument
+) {
+  const sharedVariables = new Set(
+    document.shared?.prices.map((price) => price.variable) || []
+  )
+  const tiers = collectSharedTextImageAudioOutputTiers(document.root)
+  const hasTextImageOnlyMarker = Array.from(tiers.values()).some(({ tier }) =>
+    tier.label.toLowerCase().includes(SHARED_TEXT_IMAGE_MARKER)
+  )
+  return (
+    ['p', 'img', 'ai'].every((variable) =>
+      sharedVariables.has(variable as VisualPrice['variable'])
+    ) &&
+    (sharedVariables.has('vid') || hasTextImageOnlyMarker) &&
     tiers.has('multimodal') &&
     tiers.has('audio')
   )
@@ -120,6 +188,24 @@ function updateOmniTier(
     : node
 }
 
+function updateSharedTextImageAudioOutputTier(
+  node: VisualPricingNode,
+  kind: SharedTextImageAudioOutputKind,
+  variable: VisualPrice['variable'],
+  value: string
+): VisualPricingNode {
+  if (node.kind === 'branch') {
+    return {
+      ...node,
+      yes: updateSharedTextImageAudioOutputTier(node.yes, kind, variable, value),
+      no: updateSharedTextImageAudioOutputTier(node.no, kind, variable, value),
+    }
+  }
+  return sharedTextImageAudioOutputKind(node.label) === kind
+    ? { ...node, prices: updatePrices(node.prices, [variable], value) }
+    : node
+}
+
 function PriceCell({
   label,
   value,
@@ -160,9 +246,141 @@ function PriceCell({
   )
 }
 
+function SharedTextImageAudioOutputEditor(
+  props: PlatformVisualBillingDocumentEditorProps
+) {
+  const { t } = useTranslation()
+  const shared = props.document.shared
+  const tiers = collectSharedTextImageAudioOutputTiers(props.document.root)
+  if (!shared || tiers.size !== 2) return null
+  const hasVideo = shared.prices.some((price) => price.variable === 'vid')
+  const sharedInputLabel = hasVideo
+    ? 'Text/image/video input'
+    : 'Text/image input'
+  const sharedInputHint = hasVideo
+    ? 'One price is applied to text, image, and video input.'
+    : 'One price is applied to text and image input.'
+
+  const updateShared = (variables: VisualPrice['variable'][], value: string) =>
+    props.onChange({
+      ...props.document,
+      shared: {
+        ...shared,
+        prices: updatePrices(shared.prices, variables, value),
+      },
+    })
+  const updateOutput = (
+    kind: SharedTextImageAudioOutputKind,
+    variable: VisualPrice['variable'],
+    value: string
+  ) =>
+    props.onChange({
+      ...props.document,
+      root: updateSharedTextImageAudioOutputTier(
+        props.document.root,
+        kind,
+        variable,
+        value
+      ),
+    })
+
+  return (
+    <section className='space-y-3 rounded-xl border bg-muted/20 p-3'>
+      <div>
+        <p className='text-sm font-medium'>
+          {t(
+            hasVideo
+              ? 'Shared text/image/video input + audio input + multimodal/audio output pricing'
+              : 'Shared text/image input + audio input + multimodal/audio output pricing'
+          )}
+        </p>
+        <p className='mt-1 text-xs text-muted-foreground'>
+          {t(
+            hasVideo
+              ? 'Text, image, and video share one input price. Audio input and the two output modes are priced separately.'
+              : 'Text and image share one input price. Audio input and the two output modes are priced separately.'
+          )}
+        </p>
+      </div>
+      <div className='overflow-x-auto rounded-md border bg-background'>
+        <table className='min-w-[760px] table-fixed text-sm'>
+          <thead className='bg-muted/60 text-xs text-muted-foreground'>
+            <tr>
+              <th colSpan={2} className='border-b border-r p-2 text-center font-medium'>
+                {t('Input unit price')}
+              </th>
+              <th colSpan={2} className='border-b p-2 text-center font-medium'>
+                {t('Output unit price')}
+              </th>
+            </tr>
+            <tr>
+              <th className='border-r p-2 text-left font-medium'>
+                {t(sharedInputLabel)}
+              </th>
+              <th className='border-r p-2 text-left font-medium'>{t('Audio input')}</th>
+              <th className='border-r p-2 text-left font-medium'>
+                {t('Text output')}
+                <span className='ml-1 font-normal'>({t('Multimodal input')})</span>
+              </th>
+              <th className='p-2 text-left font-medium'>
+                {t('Text + audio output')}
+                <span className='ml-1 font-normal'>({t('Audio only billed')})</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className='border-t'>
+              <PriceCell
+                label={t(sharedInputLabel)}
+                value={priceValue(shared.prices, 'p')}
+                currency={props.currency}
+                onChange={(value) =>
+                  updateShared(hasVideo ? ['p', 'img', 'vid'] : ['p', 'img'], value)
+                }
+                hint={t(sharedInputHint)}
+                addonKey='p'
+                addonScopeId='shared'
+              />
+              <PriceCell
+                label={t('Audio input')}
+                value={priceValue(shared.prices, 'ai')}
+                currency={props.currency}
+                onChange={(value) => updateShared(['ai'], value)}
+                addonKey='ai'
+                addonScopeId='shared'
+              />
+              <PriceCell
+                label={t('Text output (multimodal input)')}
+                value={priceValue(tiers.get('multimodal')?.tier.prices, 'c')}
+                currency={props.currency}
+                onChange={(value) => updateOutput('multimodal', 'c', value)}
+                addonKey='c'
+                addonScope={tiers.get('multimodal')?.tier.label}
+                addonScopeId={tiers.get('multimodal')?.scopeId}
+              />
+              <PriceCell
+                label={t('Text + audio output (audio only billed)')}
+                value={priceValue(tiers.get('audio')?.tier.prices, 'ao')}
+                currency={props.currency}
+                onChange={(value) => updateOutput('audio', 'ao', value)}
+                addonKey='ao'
+                addonScope={tiers.get('audio')?.tier.label}
+                addonScopeId={tiers.get('audio')?.scopeId}
+              />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 export function PlatformVisualBillingDocumentEditor(
   props: PlatformVisualBillingDocumentEditorProps
 ) {
+  if (supportsSharedTextImageAudioOutputEditor(props.document)) {
+    return <SharedTextImageAudioOutputEditor {...props} />
+  }
   const { t } = useTranslation()
   const shared = props.document.shared
   const tiers = collectOmniTiers(props.document.root)

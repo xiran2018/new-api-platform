@@ -70,7 +70,10 @@ for key in \
   two-range-thinking-output \
   three-range-shared-input-thinking-output \
   text-image-audio-split \
+  audio-image-input-text-audio-output \
   unified-multimodal-input-audio-output \
+  shared-text-image-input-audio-output-modes \
+  shared-text-image-audio-output-modes \
   omni-output-modes \
   omni-shared-media-input-output-modes \
   live-translation-multimodal \
@@ -235,6 +238,7 @@ require_text "$model_pricing_api" "api.patch('/api/option/model_pricing'" "the u
 require_text "$model_table" "useModelPricing(" "model management no longer reads the shared runtime-pricing configuration"
 require_text "$platform_backend" "model.GetPricing()" "platform display prices are no longer refreshed from runtime pricing"
 require_text "$platform_backend" "visibleInModelSquare" "public model prices no longer use the model-square visibility set"
-require_text "$platform_backend" '"display_name", "vendor", "tags"' "public model metadata may become stale after model synchronization"
+require_text "$platform_backend" "storedVendors" "manual vendor selections must survive model synchronization"
+require_text "$platform_backend" '"display_name", "tags"' "public model metadata fields must refresh without overwriting the saved vendor"
 
 echo "Core pricing compatibility: ok"

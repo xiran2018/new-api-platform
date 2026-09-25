@@ -55,7 +55,12 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
       {
         key: 'shared-text-image-input-audio-output-modes',
         label: 'Shared text/image/video input + audio input + multimodal/audio output pricing',
-        expr: '(p * 1 + img * 1 + vid * 1 + ai * 1) + (ao > 0 ? tier("text+audio output (audio only, shared text/image/video input)", c * 0 + ao * 1) : ((img > 0 || ai > 0 || vid > 0) ? tier("multimodal text output (shared text/image/video input)", c * 1) : tier("pure text output (shared text/image/video input)", c * 1)))',
+        expr: '(p * 1 + img * 1 + vid * 1 + ai * 1) + (ao > 0 ? tier("text+audio output (audio only, shared text/image/video input)", c * 0 + ao * 1) : tier("multimodal text output (shared text/image/video input)", c * 1))',
+      },
+      {
+        key: 'shared-text-image-audio-output-modes',
+        label: 'Shared text/image input + audio input + multimodal/audio output pricing',
+        expr: '(p * 1 + img * 1 + ai * 1) + (ao > 0 ? tier("text+audio output (audio only, shared text/image input)", c * 0 + ao * 1) : tier("multimodal text output (shared text/image input)", c * 1))',
       },
       {
         key: 'omni-output-modes',

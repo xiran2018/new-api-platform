@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import { evaluateBillingExpression } from '@/features/pricing/lib/billing-expression/runtime'
+
 import { EXPRESSION_TEMPLATE_REGISTRY } from './billing-template-registry'
 import { PLATFORM_BILLING_PRESET_GROUPS } from './expression-presets'
 import {
@@ -353,6 +355,50 @@ describe('expression price display', () => {
       expect(screen.queryByText(/ao > 0/)).not.toBeInTheDocument()
     }
   )
+
+  it('renders audio/image input and text/audio output pricing in one input-first row', () => {
+    const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
+      (group) => group.presets,
+    ).find((item) => item.key === 'audio-image-input-text-audio-output')
+    expect(preset).toBeDefined()
+
+    const blocks = expressionPriceBlocks(preset?.expr || '')
+    expect(blocks).toEqual([
+      expect.objectContaining({
+        label: 'audio/image input + text/audio output',
+        audioInput: 1,
+        image: 1,
+        output: 1,
+        audioOutput: 1,
+      }),
+    ])
+    expect(
+      evaluateBillingExpression(preset!.expr, {
+        tokens: { ai: 100, img: 100, c: 100, ao: 100 },
+      }),
+    ).toMatchObject({
+      status: 'success',
+      cost: 400,
+      matchedTier: 'audio/image input + text/audio output',
+    })
+
+    render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: preset?.expr }] }}
+      />,
+    )
+
+    expect(document.querySelectorAll('table')).toHaveLength(1)
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(1)
+    expect(screen.getByText('Audio input price')).toBeInTheDocument()
+    expect(screen.getByText('Image input price')).toBeInTheDocument()
+    expect(screen.getByText('Text output price')).toBeInTheDocument()
+    expect(screen.getByText('Audio output price')).toBeInTheDocument()
+    expect(screen.getByText('Input unit price')).toBeInTheDocument()
+    expect(screen.getByText('Output unit price')).toBeInTheDocument()
+  })
 
   it('keeps different legacy image and video prices in one Omni table cell', () => {
     render(
