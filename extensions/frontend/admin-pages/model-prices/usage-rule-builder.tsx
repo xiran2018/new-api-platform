@@ -255,7 +255,7 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
   if (key === "audioSeconds") return wrap([rule("Audio duration", [], [charge("seconds", "秒")])]);
   if (key === "ttsCharacters") {
     return wrap([
-      rule("按字符计费", [], [
+      rule("按万字符计费", [], [
         charge("tts_input_characters", "万字符", 0.8),
         charge("tts_output_characters", "万字符", 0),
       ]),

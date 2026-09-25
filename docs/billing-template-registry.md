@@ -88,6 +88,7 @@
 | --- | --- | --- | --- | --- |
 | `text-image-audio-split`<br>Text/image/audio split pricing | `p/c/img/img_o/ai/ao` 分别计价 | 通用 Token 价格字段网格 | 竖向显示所有非零模态价格 | 所有模态 usage 分别乘价求和；前后端及 Go 映射必须保留 |
 | `audio-image-input-text-audio-output`<br>Audio/image input + text/audio output pricing | 音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 可视化四字段编辑器；截图中的价格仅为示例，可自由修改 | 管理端和客户端均为单行横向表格，顺序为输入音频、输入图片、输出文本、输出音频 | 使用现有 `ai/img/c/ao` 变量真实结算；不需要新增 Go usage 变量；不显示原始表达式 |
+| `audio-image-input-text-audio-output-simple`<br>Simple audio/image input + text/audio output pricing | 管理员只填写音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 直接显示四个价格输入框，不打开表达式条件菜单 | 管理端和客户端均为单行四列表格，输入在前、输出在后 | 与旧模板使用相同 `ai/img/c/ao` 真实结算语义，仅提供管理员友好的编辑入口 |
 | `unified-multimodal-input-audio-output`<br>Unified text/image/video input + separate audio pricing | `p/c/img/vid/ai/ao`；按 `ao > 0` 分输出模式 | 文本输出与文本+音频输出两个可视化分支 | 显示可读输出模式，不显示 `ao` 条件 | `vid`、`ao` 必须参与真实结算 |
 | `shared-text-image-input-audio-output-modes`<br>Shared text/image/video input + audio input + multimodal/audio output pricing | 文本/图片/视频共享输入价格（保存到 `p/img/vid`）、音频输入 `ai`、多模态文本输出 `c`、文本+音频输出 `ao` | 专用四字段可视化编辑器；共享输入只填写一次，输出按两种模式分别填写 | 管理端和客户端均为单行四列表格，输入在前、输出在后；不显示表达式源码 | 使用 `p/img/vid/ai/c/ao` 真实结算；`ao > 0` 的请求使用仅音频输出分支；不得删除共享输入标签和双写语义 |
 | `shared-text-image-audio-output-modes`<br>Shared text/image input + audio input + multimodal/audio output pricing | 文本/图片共享输入价格（保存到 `p/img`）、音频输入 `ai`、多模态文本输出 `c`、文本+音频输出 `ao` | 专用四字段可视化编辑器；共享输入只填写一次，输出按两种模式分别填写 | 管理端和客户端均为单行四列表格，输入在前、输出在后；不显示表达式源码 | 使用 `p/img/ai/c/ao` 真实结算；`ao > 0` 的请求使用仅音频输出分支；与旧的含视频模板独立兼容 |
@@ -123,7 +124,7 @@
 | `videoMode`<br>Video output mode and duration | `mode` | `seconds` / 秒、分钟、小时 | 标准/专业等模式的时长价格 | `wan-std` 只是示例，允许新增任意模式 |
 | `imageVideo`<br>Input image and output video | `mode`、`resolution` | `input_images` / 张；`seconds` / 时长 | 输入图片与输出视频混合计价 | 界面和显示必须明确输入/输出方向 |
 | `audioSeconds`<br>Audio duration pricing | 无 | `seconds` / 秒、分钟、小时 | 音频、音乐、语音时长价 | 单位紧邻“音频时长计费”显示 |
-| `ttsCharacters`<br>Text-to-speech per 10K characters | 无 | `tts_input_characters`、`tts_output_characters` / 字符、千字符、万字符 | 同档录入 TTS 输入和输出字符价 | 输出允许为 0 或非零；客户端不显示内部变量名；不得产生重复音频输入价格 |
+| `ttsCharacters`<br>Text-to-speech per 10K characters | 无 | `tts_input_characters`、`tts_output_characters` / 字符、千字符、万字符 | 同档录入 TTS 输入和输出字符价；默认档位明确为“按万字符计费” | 输出允许为 0 或非零；客户端不显示内部变量名；不得产生重复音频输入价格 |
 | `voiceCount`<br>Voice enrollment count | 无 | `count` / 音色、个 | 音色注册或声音复刻数量价 | 客户端使用业务名称“音色数量”，不显示 `count` |
 | `taskMatrix`<br>Task type and output specification matrix | `task_type`、`output_spec` | `request` / 次 | 任务类型 × 输出规格组合矩阵 | 优先使用 usage schema 枚举；默认 3D 组合只是示例 |
 | `blank`<br>Blank rule | 自定义 | 默认 `request` / 次，可改为 schema 数值字段 | 从空白档位创建任意规则 | 必须保持“最后一档无条件、前置档有条件、价格非负”的校验 |

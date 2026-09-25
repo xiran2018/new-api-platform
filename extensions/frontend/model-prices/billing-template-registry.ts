@@ -186,6 +186,24 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       '使用现有 ai/img/c/ao 变量和表达式结算，不改变后端协议；截图中的价格只是示例，不能固化到模板。',
   },
   {
+    key: 'audio-image-input-text-audio-output-simple',
+    name: 'Simple audio/image input + text/audio output pricing',
+    group: 'multimodal',
+    purpose:
+      '面向管理员的简化表单：只填写音频输入、图片输入、文本输出和音频输出四个价格。',
+    conditionFields: [],
+    priceFields: ['ai', 'img', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '直接显示四个价格输入框，不要求管理员编辑表达式或条件菜单。',
+      managementDisplay: '单行四列，输入音频、输入图片在前，输出文本、输出音频在后。',
+      publicDisplay: '与管理端相同的单行四列表格，不显示表达式源码。',
+    },
+    runtime: '按 ai、img、c、ao 对应的实际 usage 数量分别乘以单价后求和。',
+    compatibility:
+      '这是原 audio-image-input-text-audio-output 模板的管理员友好别名，不覆盖旧数据和旧模板。',
+  },
+  {
     key: 'unified-multimodal-input-audio-output',
     name: 'Unified text/image/video input + separate audio pricing',
     group: 'multimodal',
@@ -526,7 +544,7 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     conditionFields: [],
     chargeMeters: ['tts_input_characters', 'tts_output_characters'],
     units: ['字符', '千字符', '万字符'],
-    defaultTiers: '一个按字符计费档；输入默认示例 0.8/万字符，输出默认 0。',
+    defaultTiers: '一个按万字符计费档；输入默认示例 0.8/万字符，输出默认 0。',
     layout: {
       editor: '同一档位两个收费项，只保留一个音频输入相关价格语义。',
       managementDisplay: '输入字符价和输出字符价在同一档位显示。',

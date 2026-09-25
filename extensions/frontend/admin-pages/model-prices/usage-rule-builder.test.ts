@@ -261,4 +261,30 @@ describe('screenshot-derived billing templates', () => {
     expect(taskExpression).toContain('u("output_images")')
     expect(taskExpression).not.toContain('image_count')
   })
+
+  it('charges TTS input by ten-thousand characters and keeps zero output free', () => {
+    const rules = createUsageRuleTemplate('ttsCharacters', 'request')
+    expect(rules.rules[0].label).toBe('按万字符计费')
+    expect(rules.rules[0].charges).toEqual([
+      { meter: 'tts_input_characters', unit: '万字符', price: 0.8 },
+      { meter: 'tts_output_characters', unit: '万字符', price: 0 },
+    ])
+
+    const expression = usageRuleSetExpression(rules)
+    expect(expression).toContain('u("tts_input_characters") * 80')
+    expect(expression).not.toContain('tts_output_characters')
+
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: {
+          tts_input_characters: 10_000,
+          tts_output_characters: 10_000,
+        },
+      }),
+    ).toMatchObject({
+      status: 'success',
+      cost: 800_000,
+      matchedTier: '按万字符计费',
+    })
+  })
 })

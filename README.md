@@ -8,6 +8,9 @@ See `docs/extension-architecture.md` for the stable integration seams and upgrad
 计费表达式模板的兼容规则、可视化编辑要求和上游同步保护见
 [`docs/billing-mode-compatibility.md`](docs/billing-mode-compatibility.md)。新增模板前请先阅读其中的
 “新增共享输入价 + 三段输入长度 + 思考/非思考输出价模板的约束”章节。
+上游同步的默认规则是“保留已有功能”：不得随意删除或覆盖 `extensions/` 中已实现的代码和功能；
+只有在确认 core 中的旧实现已经失效、且已完成兼容适配和回归测试后，才允许替换。以后执行同步时，
+直接使用 `./scripts/sync-upstream.sh --check`、`--merge` 或 `--sync`，无需重复附加这项要求。
 全部表达式模板和高级媒体计费规则的名称、字段、布局、展示与真实结算合同见
 [`docs/billing-template-registry.md`](docs/billing-template-registry.md)。新增或修改任何计费模板时，
 必须同时更新机器注册表、该文档和回归测试，否则兼容检查会失败。

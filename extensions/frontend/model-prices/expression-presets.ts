@@ -48,6 +48,11 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'tier("audio/image input + text/audio output", ai * 1 + img * 1 + c * 1 + ao * 1)',
       },
       {
+        key: 'audio-image-input-text-audio-output-simple',
+        label: 'Simple audio/image input + text/audio output pricing',
+        expr: 'tier("audio/image input + text/audio output", ai * 1 + img * 1 + c * 1 + ao * 1)',
+      },
+      {
         key: 'unified-multimodal-input-audio-output',
         label: 'Unified text/image/video input + separate audio pricing',
         expr: 'ao > 0 ? tier("text+audio output", p * 7 + c * 0 + img * 7 + vid * 7 + ai * 53 + ao * 213) : tier("text output", p * 7 + c * 40 + img * 7 + vid * 7 + ai * 53 + ao * 0)',

@@ -21,6 +21,7 @@ renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.t
 capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
 template_registry="$repo_root/extensions/frontend/model-prices/billing-template-registry.ts"
 template_registry_doc="$repo_root/docs/billing-template-registry.md"
+compatibility_contract_doc="$repo_root/docs/billing-mode-compatibility.md"
 vendor_price_regression_doc="$repo_root/docs/vendor-price-sync-regression.md"
 sync_upstream_script="$repo_root/scripts/sync-upstream.sh"
 compatibility_workflow="$repo_root/.github/workflows/verify-upstream-compatibility.yml"
@@ -76,6 +77,7 @@ for key in \
   shared-text-image-audio-output-modes \
   shared-text-image-video-audio-output-simple \
   shared-text-image-audio-output-simple \
+  audio-image-input-text-audio-output-simple \
   omni-output-modes \
   omni-shared-media-input-output-modes \
   live-translation-multimodal \
@@ -88,6 +90,10 @@ require_text "$template_registry" "EXPRESSION_TEMPLATE_REGISTRY" \
   "the machine-readable expression-template registry was lost"
 require_text "$template_registry" "ADVANCED_MEDIA_TEMPLATE_REGISTRY" \
   "the machine-readable advanced-media registry was lost"
+require_text "$compatibility_contract_doc" "永久上游同步规则" \
+  "the permanent upstream synchronization contract was lost"
+require_text "$compatibility_contract_doc" "是平台功能的归属目录" \
+  "the rule protecting platform extensions from upstream deletion was lost"
 require_text "$template_registry_doc" "登记与检查制度" \
   "the human-readable billing-template maintenance contract was lost"
 while IFS= read -r key; do

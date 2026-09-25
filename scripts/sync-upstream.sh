@@ -3,9 +3,66 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 core_dir="$repo_root/core/new-api"
-upstream_url="https://github.com/QuantumNous/new-api.git"
+# SSH is the default because this repository already uses SSH for the
+# upstream checkout and it avoids the intermittent HTTPS/GnuTLS failures seen
+# on the deployment network. Existing remotes are never overwritten.
+upstream_url="git@github.com:QuantumNous/new-api.git"
 tmp_root="${PLATFORM_TMP_DIR:-/data/new-api-tmp}"
 mkdir -p "$tmp_root"
+
+# Core files that carry stable platform extension seams. If an upstream
+# refactor removes one of these seams, restore the last local version after
+# the merge; the upstream change can then be ported deliberately instead of
+# silently deleting platform functionality.
+protected_core_seams=(
+  "web/src/features/system-settings/models/model-pricing-sheet.tsx|PricingFieldAddonProvider"
+  "web/src/features/system-settings/models/model-pricing-inputs.tsx|PricingFieldAddon"
+  "web/src/features/system-settings/models/tier-price-fields.tsx|PricingFieldAddon"
+  "web/src/features/system-settings/models/tiered-pricing-editor.tsx|PLATFORM_BILLING_PRESET_GROUPS"
+  "web/src/features/system-settings/models/visual-billing-document-editor.tsx|supportsPlatformVisualBillingDocumentEditor"
+)
+
+restore_removed_platform_seams() {
+  local before_commit="$1"
+  local entry path marker
+  for entry in "${protected_core_seams[@]}"; do
+    path="${entry%%|*}"
+    marker="${entry#*|}"
+    if git -C "$core_dir" show "$before_commit:$path" 2>/dev/null | grep -Fq "$marker" \
+      && ! grep -Fq "$marker" "$core_dir/$path" 2>/dev/null; then
+      git -C "$core_dir" checkout "$before_commit" -- "$path"
+      echo "Preserved platform seam in core/$path (upstream removed $marker)."
+    fi
+  done
+}
+
+# The platform extensions are intentionally outside core/new-api. Keep a
+# manifest of files that were already missing before this run so a future
+# sync/assembly change cannot silently delete an existing extension file.
+declare -A extension_files_missing_before=()
+while IFS= read -r extension_file; do
+  [[ -z "$extension_file" ]] && continue
+  if [[ ! -e "$repo_root/$extension_file" ]]; then
+    extension_files_missing_before["$extension_file"]=1
+  fi
+done < <(git -C "$repo_root" ls-files -- extensions)
+
+verify_extensions_preserved() {
+  local missing=()
+  while IFS= read -r extension_file; do
+    [[ -z "$extension_file" ]] && continue
+    if [[ ! -e "$repo_root/$extension_file" ]] && [[ -z "${extension_files_missing_before[$extension_file]+x}" ]]; then
+      missing+=("$extension_file")
+    fi
+  done < <(git -C "$repo_root" ls-files -- extensions)
+
+  if ((${#missing[@]} > 0)); then
+    echo "Refusing to continue: an existing platform extension file disappeared during sync:" >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    echo "Restore the extension and resolve the change explicitly before retrying." >&2
+    exit 1
+  fi
+}
 
 usage() {
   cat <<EOF
@@ -45,6 +102,8 @@ if [[ -n "$(git -C "$core_dir" status --porcelain)" ]]; then
   echo "Commit or stash them before running this script." >&2
   exit 1
 fi
+
+verify_extensions_preserved
 
 git -C "$core_dir" switch main
 git -C "$core_dir" config rerere.enabled true
@@ -105,6 +164,7 @@ if [[ "$mode" == "--check" ]]; then
   exit 0
 fi
 
+core_before_commit="$(git -C "$core_dir" rev-parse HEAD)"
 if ! git -C "$core_dir" merge --no-edit upstream/main; then
   git -C "$core_dir" rerere
   if ! git -C "$core_dir" diff --quiet --diff-filter=U; then
@@ -117,7 +177,18 @@ if ! git -C "$core_dir" merge --no-edit upstream/main; then
   echo "All merge conflicts were resolved from recorded rerere resolutions."
 fi
 
+restore_removed_platform_seams "$core_before_commit"
+
+# Restoring a protected seam changes the merge result after Git has created
+# the merge commit. Include that restoration in the same merge commit so
+# --sync can never push an upstream-only result accidentally.
+if [[ -n "$(git -C "$core_dir" status --porcelain)" ]]; then
+  git -C "$core_dir" add -A
+  git -C "$core_dir" commit --amend --no-edit
+fi
+
 "$repo_root/scripts/assemble-extensions.sh"
+verify_extensions_preserved
 "$repo_root/scripts/verify-core-compatibility.sh"
 
 (
@@ -139,6 +210,15 @@ fi
   GOCACHE="$tmp_root/go-cache" go test ./pkg/billingexpr
   GOCACHE="$tmp_root/go-cache" go test ./service -run 'TestBuildTieredTokenParams'
 )
+
+# assemble-extensions.sh intentionally refreshes a small set of tracked core
+# seams (for example web/index.html). Commit those generated seam updates
+# before any push; otherwise --sync could push the merge commit while silently
+# leaving the platform integration only in the local working tree.
+if [[ -n "$(git -C "$core_dir" status --porcelain)" ]]; then
+  git -C "$core_dir" add -A
+  git -C "$core_dir" commit -m "chore: preserve platform extension seams after upstream sync"
+fi
 
 if [[ "$mode" == "--sync" ]]; then
   git -C "$core_dir" push origin main
