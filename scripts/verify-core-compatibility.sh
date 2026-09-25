@@ -74,6 +74,8 @@ for key in \
   unified-multimodal-input-audio-output \
   shared-text-image-input-audio-output-modes \
   shared-text-image-audio-output-modes \
+  shared-text-image-video-audio-output-simple \
+  shared-text-image-audio-output-simple \
   omni-output-modes \
   omni-shared-media-input-output-modes \
   live-translation-multimodal \

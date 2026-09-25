@@ -115,7 +115,7 @@ export function supportsPlatformVisualBillingDocumentEditor(
     document.shared?.prices.map((price) => price.variable) || []
   )
   const tiers = collectOmniTiers(document.root)
-  return (
+  const supportsOmniEditor = (
     ['p', 'ai', 'img', 'vid'].every((variable) =>
       sharedVariables.has(variable as VisualPrice['variable'])
     ) &&
@@ -123,6 +123,7 @@ export function supportsPlatformVisualBillingDocumentEditor(
     tiers.has('multimodal') &&
     tiers.has('audio')
   )
+  return supportsOmniEditor || supportsSharedTextImageAudioOutputEditor(document)
 }
 
 export function supportsSharedTextImageAudioOutputEditor(

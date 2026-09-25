@@ -63,6 +63,16 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: '(p * 1 + img * 1 + ai * 1) + (ao > 0 ? tier("text+audio output (audio only, shared text/image input)", c * 0 + ao * 1) : tier("multimodal text output (shared text/image input)", c * 1))',
       },
       {
+        key: 'shared-text-image-video-audio-output-simple',
+        label: 'Simple shared text/image/video input + audio input + output pricing',
+        expr: '(p * 1 + img * 1 + vid * 1 + ai * 1) + (ao > 0 ? tier("text+audio output (audio only, shared text/image/video input)", c * 0 + ao * 1) : tier("multimodal text output (shared text/image/video input)", c * 1))',
+      },
+      {
+        key: 'shared-text-image-audio-output-simple',
+        label: 'Simple shared text/image input + audio input + output pricing',
+        expr: '(p * 1 + img * 1 + ai * 1) + (ao > 0 ? tier("text+audio output (audio only, shared text/image input)", c * 0 + ao * 1) : tier("multimodal text output (shared text/image input)", c * 1))',
+      },
+      {
         key: 'omni-output-modes',
         label: 'Qwen3 Omni three output prices',
         expr: '(p * 1.8 + ai * 15.8 + img * 3.3 + vid * 3.3) + (ao > 0 ? tier("text+audio output (audio only)", c * 0 + ao * 62.6) : ((img > 0 || ai > 0 || vid > 0) ? tier("multimodal text output", c * 12.7) : tier("pure text output", c * 6.9)))',

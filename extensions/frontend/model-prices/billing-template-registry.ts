@@ -247,6 +247,44 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       '使用独立模板 key 和 shared text/image input 标签；旧的 shared text/image/video 模板保持不变，截图中的价格不能固化为业务限制。',
   },
   {
+    key: 'shared-text-image-video-audio-output-simple',
+    name: 'Simple shared text/image/video input + audio input + output pricing',
+    group: 'multimodal',
+    purpose:
+      '面向管理员的简化表单：只填写文本/图片/视频共享输入、音频输入、文本输出和文本+音频输出价格。',
+    conditionFields: ['ao > 0'],
+    priceFields: ['p+img+vid', 'ai', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '直接显示四个价格输入框，不要求管理员编辑表达式或条件菜单。',
+      managementDisplay: '单行四列，输入价格在前，输出价格在后。',
+      publicDisplay: '单行四列，显示文本/图片/视频输入、音频输入、文本输出和文本+音频输出。',
+    },
+    runtime:
+      '保存时共享输入价格写入 p、img、vid；ai、c、ao 按请求实际 usage 参与结算。',
+    compatibility:
+      '这是管理员友好别名模板，不覆盖旧模板；使用相同表达式语义，旧数据和上游同步保持兼容。',
+  },
+  {
+    key: 'shared-text-image-audio-output-simple',
+    name: 'Simple shared text/image input + audio input + output pricing',
+    group: 'multimodal',
+    purpose:
+      '面向管理员的简化表单：只填写文本/图片共享输入、音频输入、文本输出和文本+音频输出价格。',
+    conditionFields: ['ao > 0'],
+    priceFields: ['p+img', 'ai', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '直接显示四个价格输入框，不要求管理员编辑表达式或条件菜单。',
+      managementDisplay: '单行四列，输入价格在前，输出价格在后。',
+      publicDisplay: '单行四列，显示文本/图片输入、音频输入、文本输出和文本+音频输出。',
+    },
+    runtime:
+      '保存时共享输入价格写入 p、img；ai、c、ao 按请求实际 usage 参与结算。',
+    compatibility:
+      '这是管理员友好别名模板，不覆盖旧模板；使用相同表达式语义，旧数据和上游同步保持兼容。',
+  },
+  {
     key: 'omni-output-modes',
     name: 'Qwen3 Omni three output prices',
     group: 'multimodal',
