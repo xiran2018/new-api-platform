@@ -132,11 +132,25 @@ function vendorComparison(spec?: PriceSpec): PriceComparison {
   };
 }
 
+function priceBlockExpressionSource(block: PriceBlock): string | undefined {
+  for (const source of [block.baseExpression, block.note]) {
+    const candidate = source?.trim();
+    if (!candidate) continue;
+    const expression = splitBillingExprAndRequestRules(candidate).billingExpr;
+    if (compileBillingExpression(expression).status === "ready") return candidate;
+  }
+  return undefined;
+}
+
 function priceSpecExpressionSource(spec?: PriceSpec): string {
-  return (spec?.blocks || [])
-    .map((block) => block.baseExpression || block.note || "")
-    .filter(Boolean)
-    .join("\n");
+  // A price specification describes one active billing mode. Use the first
+  // valid expression block instead of concatenating complete expressions or
+  // treating source URLs/notes as executable billing expressions.
+  for (const block of spec?.blocks || []) {
+    const source = priceBlockExpressionSource(block);
+    if (source) return source;
+  }
+  return "";
 }
 
 type VendorComparisonCandidate = {
@@ -219,11 +233,16 @@ function resolveVendorComparisonCandidate(
   scope?: string,
   scopeId?: string,
 ) {
+  const normalizedScope = normalizedComparisonScope(scope);
   if (scopeId) {
     const structural = candidates.filter((candidate) => candidate.scopeId === scopeId);
-    if (structural.length) return uniqueCandidateValue(structural);
+    const matchingStructuralScope = normalizedScope
+      ? structural.filter((candidate) => candidate.scope === normalizedScope)
+      : structural;
+    if (matchingStructuralScope.length) {
+      return uniqueCandidateValue(matchingStructuralScope);
+    }
   }
-  const normalizedScope = normalizedComparisonScope(scope);
   if (normalizedScope) {
     const exact = candidates.filter((candidate) => candidate.scope === normalizedScope);
     if (exact.length) return uniqueCandidateValue(exact);
@@ -267,7 +286,7 @@ export function vendorComparisonValue(
   } as Record<string, keyof PriceComparison>)[key];
 
   for (const block of spec?.blocks || []) {
-    const expressionSource = block.baseExpression || block.note || "";
+    const expressionSource = priceBlockExpressionSource(block);
     if (expressionSource) {
       // Parse blocks independently. Concatenating multiple complete expressions
       // produces invalid syntax and previously hid otherwise valid vendor prices.
@@ -357,6 +376,23 @@ export function vendorEditorData(modelKey: string, spec?: PriceSpec): ModelRatio
       price.audioInput && price.audioOutput != null
         ? String(price.audioOutput / price.audioInput)
         : undefined,
+  };
+}
+
+/**
+ * Build the comparison baseline from the exact draft loaded by vendor sync.
+ * This keeps addon labels aligned with the editor even when the stored vendor
+ * value came from a legacy token/request block or a note-only expression.
+ */
+export function vendorComparisonSpec(
+  modelKey: string,
+  spec?: PriceSpec,
+): PriceSpec | undefined {
+  const vendor = vendorEditorData(modelKey, spec);
+  if (!vendor) return spec;
+  return {
+    ...runtimeDisplaySpec(vendor, undefined, vendor, matchingUsageRuleSet(spec)),
+    pricingCurrency: spec?.pricingCurrency,
   };
 }
 
@@ -611,8 +647,12 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     Boolean(matchingUsageRuleSet(currentPriceSpec)),
   );
   const currentPriceSpecSignature = JSON.stringify(currentPriceSpec ?? null);
+  const vendorPriceSpecSignature = JSON.stringify(vendorPriceSpec ?? null);
+  const [comparisonPriceSpec, setComparisonPriceSpec] = useState<PriceSpec | undefined>(
+    vendorPriceSpec,
+  );
   const comparisonValue = (key: string, scope?: string, scopeId?: string) => {
-    return vendorComparisonValue(vendorPriceSpec, key, scope, scopeId);
+    return vendorComparisonValue(comparisonPriceSpec, key, scope, scopeId);
   };
   const renderPriceAddon = ({ key, scope, scopeId, value }: { key: string; scope?: string; scopeId?: string; value: string }) => {
     const vendorPrice = comparisonValue(key, scope, scopeId);
@@ -641,6 +681,9 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       </div>
     );
   };
+  useEffect(() => {
+    setComparisonPriceSpec(vendorPriceSpec);
+  }, [modelKey, vendorPriceSpecSignature]);
   useEffect(() => {
     setEntry(null);
     setEditorOverride(null);
@@ -757,6 +800,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
       toast.error(t("No vendor price is available for the selected pricing mode"));
       return;
     }
+    setComparisonPriceSpec(vendorComparisonSpec(modelKey, vendorPriceSpec));
     if (vendorRuleSet?.rules?.length) {
       setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
       setUsageRuleSet(vendorRuleSet);
@@ -830,7 +874,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
             content: (
                 <UsageRuleBuilder
                   value={usageRuleSet}
-                  comparisonValue={matchingUsageRuleSet(vendorPriceSpec)}
+                  comparisonValue={matchingUsageRuleSet(comparisonPriceSpec)}
                   priceMultiplier={1 - discount / 100}
                   usageSchema={entry.usage_schema}
                   exchangeRate={exchangeRate}

@@ -11,6 +11,9 @@ See `docs/extension-architecture.md` for the stable integration seams and upgrad
 全部表达式模板和高级媒体计费规则的名称、字段、布局、展示与真实结算合同见
 [`docs/billing-template-registry.md`](docs/billing-template-registry.md)。新增或修改任何计费模板时，
 必须同时更新机器注册表、该文档和回归测试，否则兼容检查会失败。
+“一键同步原厂价格”后输入框旁仍提示“原厂价格未设置”的历史根因、稳定匹配合同和回归检查见
+[`docs/vendor-price-sync-regression.md`](docs/vendor-price-sync-regression.md)。修改价格编辑器、比较
+插件或同步逻辑前必须同时阅读并保留其中的测试。
 
 For a complete Docker deployment with the application, portal gateway,
 PostgreSQL and Redis, see [docs/docker-production-deployment.md](docs/docker-production-deployment.md).

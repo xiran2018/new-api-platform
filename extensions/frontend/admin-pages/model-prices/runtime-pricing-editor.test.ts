@@ -4,6 +4,7 @@ import {
   activeUsageRuleSetForDraft,
   applyPricingDiscount,
   runtimeDisplaySpec,
+  vendorComparisonSpec,
   vendorComparisonValue,
   vendorEditorData,
 } from "./runtime-pricing-editor";
@@ -274,6 +275,45 @@ describe("vendorEditorData", () => {
 });
 
 describe("vendorComparisonValue", () => {
+  it("treats a source URL note as metadata and falls back to structured prices", () => {
+    const spec: PriceSpec = {
+      mode: "token",
+      blocks: [{
+        note: "https://models.dev/api.json",
+        input: 0.89,
+        output: 4.81,
+        cache: 0.5,
+      }],
+    };
+
+    expect(vendorComparisonValue(spec, "p")).toBe(0.89);
+    expect(vendorComparisonValue(spec, "c")).toBe(4.81);
+    expect(vendorComparisonValue(spec, "cr")).toBe(0.5);
+  });
+
+  it("continues to read a valid billing expression stored in note", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [{ note: 'tier("base", p * 1.25 + c * 5)' }],
+    };
+
+    expect(vendorComparisonValue(spec, "p", "base", "1")).toBe(1.25);
+    expect(vendorComparisonValue(spec, "c", "base", "1")).toBe(5);
+  });
+
+  it("does not concatenate independent expression blocks", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [
+        { baseExpression: 'tier("input", p * 1.25)' },
+        { baseExpression: 'tier("output", c * 5)' },
+      ],
+    };
+
+    expect(vendorComparisonValue(spec, "p", "input")).toBe(1.25);
+    expect(vendorComparisonValue(spec, "c", "output")).toBe(5);
+  });
+
   it("maps normalized display prices to expression editor variables", () => {
     const spec: PriceSpec = {
       mode: "token",
@@ -364,6 +404,18 @@ describe("vendorComparisonValue", () => {
     expect(vendorComparisonValue(spec, "c", "same tier", "2")).toBe(12.7);
   });
 
+  it("does not let a stale visual rule path override the matching tier name", () => {
+    const spec: PriceSpec = {
+      mode: "expression",
+      blocks: [{
+        baseExpression:
+          'len <= 128000 ? tier("short", c * 9.6) : tier("long", c * 12.7)',
+      }],
+    };
+
+    expect(vendorComparisonValue(spec, "c", "long", "1")).toBe(12.7);
+  });
+
   it("resolves a comparison price for every visual expression preset", () => {
     for (const group of PLATFORM_BILLING_PRESET_GROUPS) {
       for (const preset of group.presets) {
@@ -413,6 +465,38 @@ describe("vendorComparisonValue", () => {
         }
       }
     }
+  });
+});
+
+describe("vendorComparisonSpec", () => {
+  it("normalizes a note-only expression into the same comparison baseline loaded by sync", () => {
+    const source: PriceSpec = {
+      mode: "expression",
+      pricingCurrency: "USD",
+      blocks: [{ note: 'tier("base", p * 1.25 + c * 5)' }],
+    };
+    const normalized = vendorComparisonSpec("note-expression", source);
+
+    expect(normalized?.pricingCurrency).toBe("USD");
+    expect(vendorComparisonValue(normalized, "p", "base", "1")).toBe(1.25);
+    expect(vendorComparisonValue(normalized, "c", "base", "1")).toBe(5);
+  });
+
+  it("normalizes legacy token prices into a baseline that expression addons can compare", () => {
+    const source: PriceSpec = {
+      mode: "token",
+      blocks: [{
+        note: "https://models.dev/api.json",
+        input: 0.89,
+        output: 4.81,
+        cache: 0.5,
+      }],
+    };
+    const normalized = vendorComparisonSpec("legacy-token", source);
+
+    expect(vendorComparisonValue(normalized, "p")).toBe(0.89);
+    expect(vendorComparisonValue(normalized, "c")).toBe(4.81);
+    expect(vendorComparisonValue(normalized, "cr")).toBe(0.5);
   });
 });
 

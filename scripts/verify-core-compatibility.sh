@@ -7,9 +7,11 @@ sheet="$repo_root/core/new-api/web/src/features/system-settings/models/model-pri
 price_inputs="$repo_root/core/new-api/web/src/features/system-settings/models/model-pricing-inputs.tsx"
 tier_price_fields="$repo_root/core/new-api/web/src/features/system-settings/models/tier-price-fields.tsx"
 visual_billing_editor="$repo_root/core/new-api/web/src/features/system-settings/models/visual-billing-document-editor.tsx"
+visual_billing_test="$repo_root/core/new-api/web/src/features/system-settings/models/__tests__/visual-billing-editor.test.tsx"
 pricing_amount_input="$repo_root/core/new-api/web/src/features/model-pricing/pricing-amount-input.tsx"
 pricing_format="$repo_root/core/new-api/web/src/features/system-settings/models/pricing-format.ts"
 addon_context="$repo_root/extensions/frontend/model-prices/pricing-field-addon.tsx"
+platform_visual_billing_editor="$repo_root/extensions/frontend/model-prices/visual-billing-document-editor.tsx"
 adapter="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.tsx"
 usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.tsx"
 runtime_pricing_test="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.test.ts"
@@ -19,6 +21,9 @@ renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.t
 capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
 template_registry="$repo_root/extensions/frontend/model-prices/billing-template-registry.ts"
 template_registry_doc="$repo_root/docs/billing-template-registry.md"
+vendor_price_regression_doc="$repo_root/docs/vendor-price-sync-regression.md"
+sync_upstream_script="$repo_root/scripts/sync-upstream.sh"
+compatibility_workflow="$repo_root/.github/workflows/verify-upstream-compatibility.yml"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
 model_pricing_api="$repo_root/core/new-api/web/src/features/model-pricing/api.ts"
@@ -45,6 +50,15 @@ require_text() {
   if ! grep -Fq "$text" "$file"; then
     echo "Compatibility check failed: $message" >&2
     echo "Expected '$text' in ${file#"$repo_root/"}." >&2
+    exit 1
+  fi
+}
+
+reject_text() {
+  local file="$1" text="$2" message="$3"
+  if grep -Fq "$text" "$file"; then
+    echo "Compatibility check failed: $message" >&2
+    echo "Unexpected '$text' in ${file#"$repo_root/"}." >&2
     exit 1
   fi
 }
@@ -86,7 +100,11 @@ require_text "$adapter" "resolveVendorComparisonCandidate" \
   "vendor price comparison no longer scans and safely resolves all price blocks"
 require_text "$addon_context" "scopeId?: string" \
   "the stable vendor-price field identity was lost from the platform addon seam"
-require_text "$tier_price_fields" "scopeId={props.scopeId}" \
+require_text "$addon_context" "fieldKey: string" \
+  "the pricing addon may be using React's reserved key prop again"
+require_text "$addon_context" "render?.({ key: fieldKey" \
+  "the pricing addon no longer forwards the real billing variable to the comparison renderer"
+require_text "$tier_price_fields" "addonScopeId={props.scopeId}" \
   "the upstream visual pricing fields no longer pass the stable comparison identity"
 require_text "$visual_billing_editor" "scopeId={props.number}" \
   "visual pricing tiers no longer expose their stable structural path"
@@ -102,10 +120,37 @@ require_text "$runtime_pricing_test" "does not guess after a tier is renamed whe
   "the ambiguous vendor-price safety regression test was lost"
 require_text "$runtime_pricing_test" "uses the stable visual rule path when tier names are duplicated" \
   "the duplicate-tier-name vendor-price regression test was lost"
+require_text "$runtime_pricing_test" "does not let a stale visual rule path override the matching tier name" \
+  "the stale-visual-path vendor-price safety regression test was lost"
+require_text "$runtime_pricing_test" "resolves the vendor price beside every field loaded by vendor sync" \
+  "the sync-to-field vendor-price regression test was lost"
+require_text "$runtime_pricing_test" "treats a source URL note as metadata and falls back to structured prices" \
+  "source URLs may be treated as billing expressions and hide synchronized vendor prices again"
+require_text "$runtime_pricing_test" "normalizes legacy token prices into a baseline" \
+  "the synchronized legacy-price comparison baseline regression test was lost"
 require_text "$usage_rule_test" "matches the vendor tier by semantics after rules are reordered" \
   "the reordered advanced-rule vendor-price regression test was lost"
 require_text "$template_registry_doc" "原厂价格比较的稳定性合同" \
   "the vendor-price comparison maintenance contract was lost"
+require_text "$vendor_price_regression_doc" "原厂价格同步与比较回归记录" \
+  "the detailed vendor-price synchronization regression record was lost"
+require_text "$vendor_price_regression_doc" "结构路径和档位名称必须共同校验" \
+  "the stable-path vendor-price safety rule was lost"
+require_text "$vendor_price_regression_doc" "一键同步载入的每一个价格字段都能找到原厂价格" \
+  "the sync-to-field vendor-price acceptance rule was lost"
+require_text "$vendor_price_regression_doc" "React 保留属性" \
+  "the reserved React key vendor-price regression is no longer documented"
+for verification_entry in \
+  "src/platform/model-prices/price-renderer.test.tsx" \
+  "src/platform/admin-pages/model-prices/runtime-pricing-editor.test.ts" \
+  "src/platform/admin-pages/model-prices/usage-rule-builder.test.ts" \
+  "src/features/system-settings/models/__tests__/visual-billing-editor.test.tsx"
+do
+  require_text "$sync_upstream_script" "$verification_entry" \
+    "upstream synchronization no longer runs the complete pricing regression suite"
+  require_text "$compatibility_workflow" "$verification_entry" \
+    "GitHub compatibility verification no longer runs the complete pricing regression suite"
+done
 
 # The input-length-thinking-tiers preset was intentionally removed from the
 # picker.  Keep the historical expression format compatible instead: prices
@@ -143,6 +188,24 @@ require_text "$sheet" "PricingFieldAddonProvider" "the generic pricing-field pro
 require_text "$addon_context" "createContext" "the isolated pricing-field extension context is missing"
 require_text "$price_inputs" "<PricingFieldAddon" "legacy price fields no longer mount the generic extension slot"
 require_text "$tier_price_fields" "<PricingFieldAddon" "visual expression fields no longer mount the generic extension slot"
+require_text "$visual_billing_editor" "collectVisualTierScopeIds" \
+  "specialized shared-input thinking templates lost stable vendor-price paths"
+require_text "$visual_billing_editor" "<PricingFieldAddon" \
+  "specialized shared-input thinking templates bypass the vendor-price addon"
+require_text "$platform_visual_billing_editor" "<PricingFieldAddon" \
+  "the specialized Omni template bypasses the vendor-price addon"
+require_text "$platform_visual_billing_editor" "addonScopeId" \
+  "the specialized Omni template lost stable vendor-price paths"
+require_text "$visual_billing_test" "passes all Qwen3 Omni specialized price fields" \
+  "the specialized-template vendor-price addon regression test was lost"
+reject_text "$price_inputs" "key={props.addonKey}" \
+  "a pricing addon call uses React's reserved key prop"
+reject_text "$tier_price_fields" "key={addonKey}" \
+  "a pricing addon call uses React's reserved key prop"
+reject_text "$platform_visual_billing_editor" "key={addonKey}" \
+  "the specialized Omni pricing addon uses React's reserved key prop"
+reject_text "$visual_billing_editor" "<PricingFieldAddon key=" \
+  "a specialized visual pricing addon uses React's reserved key prop"
 require_text "$tier_price_fields" "fractionDigits={variable.key === 'aud_s' ? 6 : undefined}" \
   "audio-duration price inputs no longer request six-decimal precision"
 require_text "$pricing_amount_input" "fractionDigits?: number" \

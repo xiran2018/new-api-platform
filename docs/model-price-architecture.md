@@ -27,6 +27,10 @@
 
 ## Upstream 同步注意事项
 
+原厂价格同步后的逐字段比较属于独立稳定合同，详见
+[`vendor-price-sync-regression.md`](vendor-price-sync-regression.md)。该功能不仅要求同步接口成功，
+还要求每个实际价格输入框能在保存和重新打开后继续找到正确原厂价格。
+
 升级 core 后重点验证以下导入契约：
 
 1. `ModelPricingEditorPanel` 和 `ModelPricingEditorPanelHandle` 是否仍从 `model-pricing-sheet.tsx` 导出。
@@ -40,6 +44,11 @@
 - `ModelPricingEditorPanel.expressionComparison`：向表达式编辑器传入厂商表达式。
 - `TieredPricingEditor.comparisonExpr` / `priceMultiplier`：逐档显示厂商价格、折后价格和差值，并比较成本预估。
 - `TieredPricingEditor.cnyExchangeRate`：仅在厂商原价编辑器中逐档显示 USD 对应的人民币参考值；底层表达式仍保存 USD。
+
+逐字段的原厂价格/差价通过 `PricingFieldAddonProvider` 统一注入。普通 Token/按次字段、通用表达式
+字段和平台专用模板必须共用该接缝；专用编辑器不得自行复制差价算法。组件使用 `fieldKey` 接收
+计费变量，避免 React 保留属性 `key` 被吞掉；同步完成后，比较基线由实际载入编辑器的草稿重新
+规范化生成，而不是继续直接依赖可能含旧格式或来源 URL `note` 的数据库对象。
 
 对应文件为 `model-pricing-inputs.tsx`、`model-pricing-sheet.tsx` 和
 `tiered-pricing-editor.tsx`。同步 upstream 发生冲突时，应将这些参数重新接入新版组件，

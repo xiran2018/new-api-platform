@@ -46,7 +46,10 @@ jobs:
           bun run typecheck
           bunx vitest run \
             src/features/pricing/lib/__tests__/billing-expression.test.ts \
-            src/platform/admin-pages/model-prices/usage-rule-builder.test.ts
+            src/platform/model-prices/price-renderer.test.tsx \
+            src/platform/admin-pages/model-prices/runtime-pricing-editor.test.ts \
+            src/platform/admin-pages/model-prices/usage-rule-builder.test.ts \
+            src/features/system-settings/models/__tests__/visual-billing-editor.test.tsx
 
       - name: Verify backend billing settlement
         working-directory: core/new-api

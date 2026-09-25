@@ -9,6 +9,7 @@ import type {
   VisualPrice,
   VisualPricingNode,
 } from '@/features/pricing/lib/billing-expression/visual'
+import { PricingFieldAddon } from '@/platform/model-prices/pricing-field-addon'
 
 export type PlatformVisualBillingDocumentEditorProps = {
   document: VisualBillingDocument
@@ -18,6 +19,10 @@ export type PlatformVisualBillingDocumentEditorProps = {
 }
 
 type OmniOutputKind = 'pure' | 'multimodal' | 'audio'
+type OmniTierMatch = {
+  tier: Extract<VisualPricingNode, { kind: 'tier' }>
+  scopeId: string
+}
 
 const SHARED_MEDIA_MARKER = 'shared image/video input'
 
@@ -32,15 +37,26 @@ function omniOutputKind(label: string): OmniOutputKind | null {
 
 function collectOmniTiers(
   node: VisualPricingNode,
-  result = new Map<OmniOutputKind, Extract<VisualPricingNode, { kind: 'tier' }>>()
+  result = new Map<OmniOutputKind, OmniTierMatch>(),
+  prefix = ''
 ) {
-  if (node.kind === 'branch') {
-    collectOmniTiers(node.yes, result)
-    collectOmniTiers(node.no, result)
-    return result
+  const rules: VisualPricingNode[] = []
+  let current = node
+  while (current.kind === 'branch') {
+    rules.push(current)
+    current = current.no
   }
-  const kind = omniOutputKind(node.label)
-  if (kind) result.set(kind, node)
+  rules.push(current)
+  rules.forEach((rule, index) => {
+    const scopeId = `${prefix}${index + 1}`
+    const tier = rule.kind === 'tier' ? rule : rule.yes
+    if (tier.kind === 'branch') {
+      collectOmniTiers(tier, result, `${scopeId}.`)
+      return
+    }
+    const kind = omniOutputKind(tier.label)
+    if (kind) result.set(kind, { tier, scopeId })
+  })
   return result
 }
 
@@ -110,12 +126,18 @@ function PriceCell({
   currency,
   onChange,
   hint,
+  addonKey,
+  addonScope,
+  addonScopeId,
 }: {
   label: string
   value: string
   currency: PricingCurrency
   onChange: (value: string) => void
   hint?: string
+  addonKey: VisualPrice['variable']
+  addonScope?: string
+  addonScopeId?: string
 }) {
   return (
     <td className='min-w-36 border-r p-2 align-top last:border-r-0'>
@@ -128,6 +150,12 @@ function PriceCell({
         className='h-8 w-full'
       />
       {hint && <p className='mt-1 text-xs text-muted-foreground'>{hint}</p>}
+      <PricingFieldAddon
+        fieldKey={addonKey}
+        scope={addonScope}
+        scopeId={addonScopeId}
+        value={value}
+      />
     </td>
   )
 }
@@ -201,12 +229,16 @@ export function PlatformVisualBillingDocumentEditor(
                 value={priceValue(shared.prices, 'p')}
                 currency={props.currency}
                 onChange={(value) => updateShared(['p'], value)}
+                addonKey='p'
+                addonScopeId='shared'
               />
               <PriceCell
                 label={t('Audio input')}
                 value={priceValue(shared.prices, 'ai')}
                 currency={props.currency}
                 onChange={(value) => updateShared(['ai'], value)}
+                addonKey='ai'
+                addonScopeId='shared'
               />
               <PriceCell
                 label={t('Image / video input')}
@@ -214,24 +246,35 @@ export function PlatformVisualBillingDocumentEditor(
                 currency={props.currency}
                 onChange={(value) => updateShared(['img', 'vid'], value)}
                 hint={t('One price is applied to both image and video input tokens.')}
+                addonKey='img'
+                addonScopeId='shared'
               />
               <PriceCell
                 label={t('Pure text output')}
-                value={priceValue(tiers.get('pure')?.prices, 'c')}
+                value={priceValue(tiers.get('pure')?.tier.prices, 'c')}
                 currency={props.currency}
                 onChange={(value) => updateOutput('pure', 'c', value)}
+                addonKey='c'
+                addonScope={tiers.get('pure')?.tier.label}
+                addonScopeId={tiers.get('pure')?.scopeId}
               />
               <PriceCell
                 label={t('Multimodal text output')}
-                value={priceValue(tiers.get('multimodal')?.prices, 'c')}
+                value={priceValue(tiers.get('multimodal')?.tier.prices, 'c')}
                 currency={props.currency}
                 onChange={(value) => updateOutput('multimodal', 'c', value)}
+                addonKey='c'
+                addonScope={tiers.get('multimodal')?.tier.label}
+                addonScopeId={tiers.get('multimodal')?.scopeId}
               />
               <PriceCell
                 label={t('Text + audio output')}
-                value={priceValue(tiers.get('audio')?.prices, 'ao')}
+                value={priceValue(tiers.get('audio')?.tier.prices, 'ao')}
                 currency={props.currency}
                 onChange={(value) => updateOutput('audio', 'ao', value)}
+                addonKey='ao'
+                addonScope={tiers.get('audio')?.tier.label}
+                addonScopeId={tiers.get('audio')?.scopeId}
               />
             </tr>
           </tbody>

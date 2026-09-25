@@ -12,6 +12,11 @@ export type PricingFieldAddonRenderer = (
   field: PricingFieldAddonInput,
 ) => ReactNode;
 
+type PricingFieldAddonProps = Omit<PricingFieldAddonInput, "key"> & {
+  /** Do not use React's reserved `key` prop: React does not pass it through. */
+  fieldKey: string;
+};
+
 const PricingFieldAddonContext = createContext<
   PricingFieldAddonRenderer | undefined
 >(undefined);
@@ -27,7 +32,7 @@ export function PricingFieldAddonProvider(props: {
   );
 }
 
-export function PricingFieldAddon(props: PricingFieldAddonInput) {
+export function PricingFieldAddon({ fieldKey, ...props }: PricingFieldAddonProps) {
   const render = useContext(PricingFieldAddonContext);
-  return render?.(props) ?? null;
+  return render?.({ key: fieldKey, ...props }) ?? null;
 }
