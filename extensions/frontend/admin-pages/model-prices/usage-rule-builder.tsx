@@ -41,6 +41,20 @@ const requestFields = [
   "output_spec",
 ];
 
+// Keep all historical advanced-media templates available even when a task
+// provider advertises only a subset of usage fields.
+const knownUsageMeters = [
+  "input_images",
+  "output_images",
+  "image_count",
+  "seconds",
+  "characters",
+  "tts_input_characters",
+  "tts_output_characters",
+  "count",
+  "request",
+];
+
 const fieldLabels: Record<string, string> = {
   resolution: "Output resolution",
   resolution_tier: "Output resolution tier",
@@ -410,13 +424,18 @@ export function UsageRuleBuilder({
     setTemplateKey(detectTemplateKey(value, defaultTemplate));
   }, [value, execution, defaultTemplate]);
   const fields = useMemo(
-    () => execution === "task" ? Object.keys(usageSchema || {}) : requestFields,
+    () => execution === "task"
+      ? [...new Set([...requestFields, ...Object.keys(usageSchema || {})])]
+      : requestFields,
     [usageSchema],
   );
   const meters = useMemo(
-    () => ["request", ...fields.filter((field) => execution === "request"
-      ? ["input_images", "output_images", "image_count", "count", "characters", "tts_input_characters", "tts_output_characters", "seconds"].includes(field)
-      : usageSchema?.[field]?.type === "number")],
+    () => [...new Set([
+      ...knownUsageMeters,
+      ...fields.filter((field) => execution === "request"
+        ? knownUsageMeters.includes(field)
+        : usageSchema?.[field]?.type === "number"),
+    ])],
     [execution, fields, usageSchema],
   );
   const commitRules = (nextRules: UsagePriceRule[]) => {
@@ -456,18 +475,18 @@ export function UsageRuleBuilder({
             setTemplateKey(nextTemplate);
             commitRules(createUsageRuleTemplate(nextTemplate, execution).rules);
           }}>
-            {(execution === "request" || fields.includes("resolution_tier") || (fields.includes("resolution") && fields.includes("output_images"))) && <option value="image">{t("Output image resolution (1K/2K)")}</option>}
-            {(execution === "request" || fields.includes("output_images") || fields.includes("image_count")) && <option value="outputImageCount">{t("Generated output images per image")}</option>}
-            {(execution === "request" || fields.includes("prompt_extend")) && <option value="boolean">{t("Boolean request option")}</option>}
-            {(execution === "request" || fields.includes("output_images") || fields.includes("count")) && <option value="volume">{t("Generated image quantity tiers")}</option>}
-            {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds"))) && <option value="video">{t("Output video resolution and duration")}</option>}
-            {(execution === "request" || (fields.includes("resolution") && fields.includes("seconds") && fields.includes("audio"))) && <option value="videoAudio">{t("Video resolution, duration and audio switch")}</option>}
-            {(execution === "request" || (fields.includes("mode") && fields.includes("seconds"))) && <option value="videoMode">{t("Video output mode and duration")}</option>}
-            {(execution === "request" || (fields.includes("input_images") && fields.includes("resolution") && fields.includes("seconds"))) && <option value="imageVideo">{t("Input image and output video")}</option>}
-            {(execution === "request" || fields.includes("seconds")) && <option value="audioSeconds">{t("Generated audio/media task duration pricing")}</option>}
-            {(execution === "request" || fields.includes("tts_input_characters")) && <option value="ttsCharacters">{t("Text-to-speech per 10K characters")}</option>}
-            {(execution === "request" || fields.includes("count")) && <option value="voiceCount">{t("Voice enrollment count")}</option>}
-            {(execution === "request" || (fields.includes("task_type") && fields.includes("output_spec"))) && <option value="taskMatrix">{t("Task type and output specification matrix")}</option>}
+            <option value="image">{t("Output image resolution (1K/2K)")}</option>
+            <option value="outputImageCount">{t("Generated output images per image")}</option>
+            <option value="boolean">{t("Boolean request option")}</option>
+            <option value="volume">{t("Generated image quantity tiers")}</option>
+            <option value="video">{t("Output video resolution and duration")}</option>
+            <option value="videoAudio">{t("Video resolution, duration and audio switch")}</option>
+            <option value="videoMode">{t("Video output mode and duration")}</option>
+            <option value="imageVideo">{t("Input image and output video")}</option>
+            <option value="audioSeconds">{t("Generated audio/media task duration pricing")}</option>
+            <option value="ttsCharacters">{t("Text-to-speech per 10K characters")}</option>
+            <option value="voiceCount">{t("Voice enrollment count")}</option>
+            <option value="taskMatrix">{t("Task type and output specification matrix")}</option>
             <option value="blank">{t("Blank rule")}</option>
           </select>
         </label>
