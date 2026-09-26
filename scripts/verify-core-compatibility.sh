@@ -78,6 +78,7 @@ for key in \
   shared-text-image-video-audio-output-simple \
   shared-text-image-audio-output-simple \
   audio-image-input-text-audio-output-simple \
+  text-audio-input-text-audio-output-simple \
   omni-output-modes \
   omni-shared-media-input-output-modes \
   live-translation-multimodal \

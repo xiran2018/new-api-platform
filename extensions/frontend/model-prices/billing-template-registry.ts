@@ -204,6 +204,27 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       '这是原 audio-image-input-text-audio-output 模板的管理员友好别名，不覆盖旧数据和旧模板。',
   },
   {
+    key: 'text-audio-input-text-audio-output-simple',
+    name: 'Simple text/audio input + text/audio output pricing',
+    group: 'multimodal',
+    purpose:
+      '面向管理员的四字段表单：文本输入、音频输入、文本输出和音频输出分别按每百万 Token 计价。',
+    conditionFields: [],
+    priceFields: ['p', 'ai', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '直接显示文本输入、音频输入、文本输出、音频输出四个价格输入框。',
+      managementDisplay:
+        '单行四列，输入价格在前，输出价格在后；不显示表达式源码。',
+      publicDisplay:
+        '单行四列，输入价格在前，输出价格在后；只显示已设置的非零价格。',
+    },
+    runtime:
+      '按 p、ai、c、ao 对应的实际文本/音频输入输出 Token 数量分别乘以单价后求和。',
+    compatibility:
+      '使用现有 p、ai、c、ao 变量和结算映射；这是管理员友好别名，不覆盖旧模板和旧数据。',
+  },
+  {
     key: 'unified-multimodal-input-audio-output',
     name: 'Unified text/image/video input + separate audio pricing',
     group: 'multimodal',

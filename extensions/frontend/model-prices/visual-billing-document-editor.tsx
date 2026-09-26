@@ -32,11 +32,16 @@ type AudioImageInputOutputTierMatch = {
   tier: Extract<VisualPricingNode, { kind: 'tier' }>
   scopeId: string
 }
+type TextAudioInputOutputTierMatch = {
+  tier: Extract<VisualPricingNode, { kind: 'tier' }>
+  scopeId: string
+}
 
 const SHARED_MEDIA_MARKER = 'shared image/video input'
 const SHARED_TEXT_IMAGE_VIDEO_MARKER = 'shared text/image/video input'
 const SHARED_TEXT_IMAGE_MARKER = 'shared text/image input'
 const AUDIO_IMAGE_INPUT_OUTPUT_MARKER = 'audio/image input + text/audio output'
+const TEXT_AUDIO_INPUT_OUTPUT_MARKER = 'text/audio input + text/audio output'
 
 function omniOutputKind(label: string): OmniOutputKind | null {
   const normalized = label.toLowerCase()
@@ -113,6 +118,21 @@ function collectSharedTextImageAudioOutputTiers(
   return result
 }
 
+function findTextAudioInputOutputTier(
+  node: VisualPricingNode,
+  prefix = ''
+): TextAudioInputOutputTierMatch | null {
+  if (node.kind === 'tier') {
+    return node.label.toLowerCase().startsWith(TEXT_AUDIO_INPUT_OUTPUT_MARKER)
+      ? { tier: node, scopeId: prefix || '1' }
+      : null
+  }
+  return (
+    findTextAudioInputOutputTier(node.yes, `${prefix}1.`) ||
+    findTextAudioInputOutputTier(node.no, `${prefix}2.`)
+  )
+}
+
 function findAudioImageInputOutputTier(
   node: VisualPricingNode,
   prefix = ''
@@ -146,7 +166,19 @@ export function supportsPlatformVisualBillingDocumentEditor(
   return (
     supportsOmniEditor ||
     supportsSharedTextImageAudioOutputEditor(document) ||
-    supportsAudioImageInputOutputEditor(document)
+    supportsAudioImageInputOutputEditor(document) ||
+    supportsTextAudioInputOutputEditor(document)
+  )
+}
+
+export function supportsTextAudioInputOutputEditor(
+  document: VisualBillingDocument
+) {
+  const match = findTextAudioInputOutputTier(document.root)
+  if (!match || document.shared) return false
+  const variables = new Set(match.tier.prices.map((price) => price.variable))
+  return ['p', 'ai', 'c', 'ao'].every((variable) =>
+    variables.has(variable as VisualPrice['variable'])
   )
 }
 
@@ -411,6 +443,23 @@ function SharedTextImageAudioOutputEditor(
   )
 }
 
+function updateTextAudioInputOutputTier(
+  node: VisualPricingNode,
+  variable: VisualPrice['variable'],
+  value: string
+): VisualPricingNode {
+  if (node.kind === 'branch') {
+    return {
+      ...node,
+      yes: updateTextAudioInputOutputTier(node.yes, variable, value),
+      no: updateTextAudioInputOutputTier(node.no, variable, value),
+    }
+  }
+  return node.label.toLowerCase().startsWith(TEXT_AUDIO_INPUT_OUTPUT_MARKER)
+    ? { ...node, prices: updatePrices(node.prices, [variable], value) }
+    : node
+}
+
 function updateAudioImageInputOutputTier(
   node: VisualPricingNode,
   variable: VisualPrice['variable'],
@@ -426,6 +475,74 @@ function updateAudioImageInputOutputTier(
   return node.label.toLowerCase().startsWith(AUDIO_IMAGE_INPUT_OUTPUT_MARKER)
     ? { ...node, prices: updatePrices(node.prices, [variable], value) }
     : node
+}
+
+function TextAudioInputOutputEditor(
+  props: PlatformVisualBillingDocumentEditorProps
+) {
+  const { t } = useTranslation()
+  const match = findTextAudioInputOutputTier(props.document.root)
+  if (!match) return null
+
+  const update = (variable: VisualPrice['variable'], value: string) =>
+    props.onChange({
+      ...props.document,
+      root: updateTextAudioInputOutputTier(props.document.root, variable, value),
+    })
+
+  return (
+    <section className='space-y-3 rounded-xl border bg-muted/20 p-3'>
+      <div>
+        <p className='text-sm font-medium'>
+          {t('Simple text/audio input + text/audio output pricing')}
+        </p>
+        <p className='mt-1 text-xs text-muted-foreground'>
+          {t('Fill four prices directly: text input, audio input, text output, and audio output.')}
+        </p>
+      </div>
+      <div className='overflow-x-auto rounded-md border bg-background'>
+        <table className='min-w-[760px] table-fixed text-sm'>
+          <thead className='bg-muted/60 text-xs text-muted-foreground'>
+            <tr>
+              <th colSpan={2} className='border-b border-r p-2 text-center font-medium'>
+                {t('Input unit price')}
+              </th>
+              <th colSpan={2} className='border-b p-2 text-center font-medium'>
+                {t('Output unit price')}
+              </th>
+            </tr>
+            <tr>
+              <th className='border-r p-2 text-left font-medium'>{t('Text input')}</th>
+              <th className='border-r p-2 text-left font-medium'>{t('Audio input')}</th>
+              <th className='border-r p-2 text-left font-medium'>{t('Text output')}</th>
+              <th className='p-2 text-left font-medium'>{t('Audio output')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className='border-t'>
+              {([
+                ['p', 'Text input'],
+                ['ai', 'Audio input'],
+                ['c', 'Text output'],
+                ['ao', 'Audio output'],
+              ] as const).map(([variable, label]) => (
+                <PriceCell
+                  key={variable}
+                  label={t(label)}
+                  value={priceValue(match.tier.prices, variable)}
+                  currency={props.currency}
+                  onChange={(value) => update(variable, value)}
+                  addonKey={variable}
+                  addonScope={match.tier.label}
+                  addonScopeId={match.scopeId}
+                />
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
 }
 
 function AudioImageInputOutputEditor(
@@ -499,6 +616,9 @@ function AudioImageInputOutputEditor(
 export function PlatformVisualBillingDocumentEditor(
   props: PlatformVisualBillingDocumentEditorProps
 ) {
+  if (supportsTextAudioInputOutputEditor(props.document)) {
+    return <TextAudioInputOutputEditor {...props} />
+  }
   if (supportsAudioImageInputOutputEditor(props.document)) {
     return <AudioImageInputOutputEditor {...props} />
   }

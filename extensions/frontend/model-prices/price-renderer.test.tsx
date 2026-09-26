@@ -356,6 +356,50 @@ describe('expression price display', () => {
     }
   )
 
+  it('renders text/audio input and text/audio output pricing in one input-first row', () => {
+    const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
+      (group) => group.presets,
+    ).find((item) => item.key === 'text-audio-input-text-audio-output-simple')
+    expect(preset).toBeDefined()
+
+    const blocks = expressionPriceBlocks(preset?.expr || '')
+    expect(blocks).toEqual([
+      expect.objectContaining({
+        label: 'text/audio input + text/audio output',
+        input: 1,
+        audioInput: 1,
+        output: 1,
+        audioOutput: 1,
+      }),
+    ])
+    expect(
+      evaluateBillingExpression(preset!.expr, {
+        tokens: { p: 100, ai: 100, c: 100, ao: 100 },
+      }),
+    ).toMatchObject({
+      status: 'success',
+      cost: 400,
+      matchedTier: 'text/audio input + text/audio output',
+    })
+
+    render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: preset?.expr }] }}
+      />,
+    )
+
+    expect(document.querySelectorAll('table')).toHaveLength(1)
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(1)
+    expect(screen.getByText('Text input price')).toBeInTheDocument()
+    expect(screen.getByText('Audio input price')).toBeInTheDocument()
+    expect(screen.getByText('Text output price')).toBeInTheDocument()
+    expect(screen.getByText('Audio output price')).toBeInTheDocument()
+    expect(screen.getByText('Input unit price')).toBeInTheDocument()
+    expect(screen.getByText('Output unit price')).toBeInTheDocument()
+  })
+
   it('renders audio/image input and text/audio output pricing in one input-first row', () => {
     const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
       (group) => group.presets,
