@@ -38,6 +38,7 @@ import type {
 } from "../../model-prices/types";
 import {
   matchingUsageRuleSet,
+  scaleUsageRuleSetPrices,
   usageRuleSetExpression,
 } from "../../model-prices/usage-rule-expression";
 import {
@@ -748,22 +749,31 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
         return;
       }
     }
-    const draft = advancedPricingActive && usageRuleSet
+    const taskModel = Boolean(entry.usage_schema && Object.keys(entry.usage_schema).length);
+    const effectiveRuleSet = usageRuleSet
+      ? { ...usageRuleSet, execution: taskModel ? "task" as const : usageRuleSet.execution }
+      : undefined;
+    const draft = advancedPricingActive && effectiveRuleSet
       ? {
           name: modelKey,
           billingMode: "tiered_expr" as const,
-          billingExpr: usageRuleSetExpression(usageRuleSet),
+          billingExpr: usageRuleSetExpression(effectiveRuleSet),
           requestRuleExpr: "",
         }
       : await ref.current?.commitDraft();
     if (!draft) return;
     draft.name = modelKey;
+    const billedRuleSet = advancedPricingActive && effectiveRuleSet
+      ? scaleUsageRuleSetPrices(effectiveRuleSet, 1 - discount / 100)
+      : undefined;
+    const billedDraft = billedRuleSet
+      ? { ...draft, billingExpr: usageRuleSetExpression(billedRuleSet) }
+      : applyPricingDiscount(draft, discount);
     const activeRuleSet = activeUsageRuleSetForDraft(
       advancedPricingActive,
-      usageRuleSet,
-      draft,
+      billedRuleSet,
+      billedDraft,
     );
-    const billedDraft = applyPricingDiscount(draft, discount);
     setSaving(true);
     try {
       await saveModelPricing([

@@ -207,7 +207,10 @@ export function syncExampleTierNames(rules: UsagePriceRule[], oldValue: UsageRul
 
 export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSet["execution"]): UsageRuleSet {
   const wrap = (rules: UsagePriceRule[]): UsageRuleSet => ({ version: 1, execution, rules });
-  const generatedImageMeter = execution === "request" ? "image_count" : "output_images";
+  // Task plugins expose the completed output count as image_count; using the
+  // same canonical meter across request and task rules keeps Alibaba and other
+  // providers compatible while request expressions still use native image_count.
+  const generatedImageMeter = "image_count";
   if (key === "image") {
     return wrap([
       rule("1K", [{ field: "resolution_tier", operator: "eq", value: "1K" }], [

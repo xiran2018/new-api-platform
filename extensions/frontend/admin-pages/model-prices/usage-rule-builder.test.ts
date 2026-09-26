@@ -248,7 +248,7 @@ describe('screenshot-derived billing templates', () => {
     })
   })
 
-  it('uses native image_count for requests and output_images usage for tasks', () => {
+  it('uses native image_count for requests and task usage facts', () => {
     const requestExpression = usageRuleSetExpression(
       createUsageRuleTemplate('volume', 'request')
     )
@@ -258,8 +258,21 @@ describe('screenshot-derived billing templates', () => {
 
     expect(requestExpression).toContain('image_count')
     expect(requestExpression).not.toContain('u("output_images")')
-    expect(taskExpression).toContain('u("output_images")')
-    expect(taskExpression).not.toContain('image_count')
+    expect(taskExpression).toContain('u("image_count")')
+    expect(taskExpression).not.toContain('fixed(')
+    expect(
+      evaluateBillingExpression(taskExpression, {
+        usage: { image_count: 3 },
+      }),
+    ).toMatchObject({ status: 'success', cost: 1.5 })
+  })
+
+  it('keeps task image-count pricing compatible with plugin usage facts', () => {
+    const rules = createUsageRuleTemplate('outputImageCount', 'task')
+    rules.rules[0].charges[0].price = 0.2
+    const expression = usageRuleSetExpression(rules)
+    expect(compileBillingExpression(expression)).toMatchObject({ status: 'ready' })
+    expect(expression).toBe('tier("按输出图片张数", u("image_count") * 0.2)')
   })
 
   it('charges TTS input by ten-thousand characters and keeps zero output free', () => {

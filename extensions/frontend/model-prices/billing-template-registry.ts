@@ -433,7 +433,7 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     runtime:
       '普通图片请求使用 core 原生 image_count：按请求 n 预扣，按实际返回图片张数结算。',
     compatibility:
-      'request 模式必须生成 fixed(unitPrice) * image_count；异步任务若只有 output_images usage，继续使用任务 usage 结算，不得混淆。',
+      'request 模式保留 core 原生 fixed(unitPrice) * image_count；task 模式必须生成 u("image_count") * unitPrice，不能在任务表达式中使用 fixed()。',
   },
   {
     key: 'boolean',
@@ -467,9 +467,9 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
       publicDisplay: '按数量范围逐行展示。',
     },
     runtime:
-      '普通图片请求按 image_count 命中首个档位并结算；异步任务使用 output_images usage。',
+      '普通图片请求按 image_count 命中首个档位并结算；异步任务读取插件提供的 u("image_count")。',
     compatibility:
-      '阈值、档位数和名称可修改，最后一档必须是无条件兜底；旧 output_images 规则仍须继续解析。',
+      '阈值、档位数和名称可修改，最后一档必须是无条件兜底；旧 output_images 规则打开时不删除数据，保存到任务模型时迁移为 image_count。',
   },
   {
     key: 'video',
