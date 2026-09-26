@@ -11,6 +11,7 @@ import {
   createUsageRuleTemplate,
   findComparisonUsageCharge,
   syncExampleTierNames,
+  unsupportedTaskUsageKeys,
   usageRuleSetExpression,
   usageFieldLabel,
   validateUsageRuleSet,
@@ -113,6 +114,22 @@ describe('vendor usage-rule comparison', () => {
     expect(
       findComparisonUsageCharge(vendor, 'request', actualRule, outputCharge)
     ).toBeUndefined()
+  })
+})
+
+describe('task usage-schema compatibility', () => {
+  it('rejects a resolution template when the task plugin only declares image_count', () => {
+    const rules = createUsageRuleTemplate('image', 'task')
+    expect(unsupportedTaskUsageKeys(rules, {
+      image_count: { type: 'number', unit: 'count' },
+    })).toEqual(['input_images', 'output_images', 'resolution_tier'])
+  })
+
+  it('allows image-count templates for the Alibaba task schema', () => {
+    const rules = createUsageRuleTemplate('outputImageCount', 'task')
+    expect(unsupportedTaskUsageKeys(rules, {
+      image_count: { type: 'number', unit: 'count' },
+    })).toEqual([])
   })
 })
 

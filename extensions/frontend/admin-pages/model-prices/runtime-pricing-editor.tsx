@@ -47,6 +47,7 @@ import {
 } from "../../model-prices/price-precision";
 import {
   createUsageRuleTemplate,
+  unsupportedTaskUsageKeys,
   UsageRuleBuilder,
   validateUsageRuleSet,
 } from "./usage-rule-builder";
@@ -753,6 +754,13 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     const effectiveRuleSet = usageRuleSet
       ? { ...usageRuleSet, execution: taskModel ? "task" as const : usageRuleSet.execution }
       : undefined;
+    const unsupportedKeys = unsupportedTaskUsageKeys(effectiveRuleSet, entry.usage_schema);
+    if (unsupportedKeys.length > 0) {
+      toast.error(t("The current task plugin does not declare these usage fields: {{fields}}", {
+        fields: unsupportedKeys.join(", "),
+      }));
+      return;
+    }
     const draft = advancedPricingActive && effectiveRuleSet
       ? {
           name: modelKey,

@@ -321,6 +321,24 @@ export function validateUsageRuleSet(ruleSet?: UsageRuleSet) {
   return "";
 }
 
+/**
+ * Task expressions may only reference usage keys declared by the selected
+ * task plugin. Keep this check in the extension layer so a template can be
+ * shown for every model without allowing an undeclared key to reach the
+ * backend (for example resolution_tier on Alibaba qwen-image tasks).
+ */
+export function unsupportedTaskUsageKeys(
+  ruleSet: UsageRuleSet | undefined,
+  usageSchema?: BillingUsageSchema,
+) {
+  if (!ruleSet || ruleSet.execution !== "task" || !usageSchema) return [];
+  const keys = new Set([
+    ...ruleSet.rules.flatMap((item) => item.conditions.map((condition) => condition.field)),
+    ...ruleSet.rules.flatMap((item) => item.charges.map((charge) => charge.meter)),
+  ]);
+  return [...keys].filter((key) => !usageSchema[key]).sort();
+}
+
 function parseInputValue(value: string): string | number | boolean {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -438,6 +456,12 @@ export function UsageRuleBuilder({
     ])],
     [execution, fields, usageSchema],
   );
+  const templateSupported = (key: TemplateKey) => execution !== "task"
+    || unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema).length === 0;
+  const unsupportedKeys = unsupportedTaskUsageKeys(
+    { version: 1, execution, rules },
+    usageSchema,
+  );
   const commitRules = (nextRules: UsagePriceRule[]) => {
     setRules(nextRules);
     const next = {
@@ -475,23 +499,28 @@ export function UsageRuleBuilder({
             setTemplateKey(nextTemplate);
             commitRules(createUsageRuleTemplate(nextTemplate, execution).rules);
           }}>
-            <option value="image">{t("Output image resolution (1K/2K)")}</option>
-            <option value="outputImageCount">{t("Generated output images per image")}</option>
-            <option value="boolean">{t("Boolean request option")}</option>
-            <option value="volume">{t("Generated image quantity tiers")}</option>
-            <option value="video">{t("Output video resolution and duration")}</option>
-            <option value="videoAudio">{t("Video resolution, duration and audio switch")}</option>
-            <option value="videoMode">{t("Video output mode and duration")}</option>
-            <option value="imageVideo">{t("Input image and output video")}</option>
-            <option value="audioSeconds">{t("Generated audio/media task duration pricing")}</option>
-            <option value="ttsCharacters">{t("Text-to-speech per 10K characters")}</option>
-            <option value="voiceCount">{t("Voice enrollment count")}</option>
-            <option value="taskMatrix">{t("Task type and output specification matrix")}</option>
+            <option value="image" disabled={!templateSupported("image")}>{t("Output image resolution (1K/2K)")}</option>
+            <option value="outputImageCount" disabled={!templateSupported("outputImageCount")}>{t("Generated output images per image")}</option>
+            <option value="boolean" disabled={!templateSupported("boolean")}>{t("Boolean request option")}</option>
+            <option value="volume" disabled={!templateSupported("volume")}>{t("Generated image quantity tiers")}</option>
+            <option value="video" disabled={!templateSupported("video")}>{t("Output video resolution and duration")}</option>
+            <option value="videoAudio" disabled={!templateSupported("videoAudio")}>{t("Video resolution, duration and audio switch")}</option>
+            <option value="videoMode" disabled={!templateSupported("videoMode")}>{t("Video output mode and duration")}</option>
+            <option value="imageVideo" disabled={!templateSupported("imageVideo")}>{t("Input image and output video")}</option>
+            <option value="audioSeconds" disabled={!templateSupported("audioSeconds")}>{t("Generated audio/media task duration pricing")}</option>
+            <option value="ttsCharacters" disabled={!templateSupported("ttsCharacters")}>{t("Text-to-speech per 10K characters")}</option>
+            <option value="voiceCount" disabled={!templateSupported("voiceCount")}>{t("Voice enrollment count")}</option>
+            <option value="taskMatrix" disabled={!templateSupported("taskMatrix")}>{t("Task type and output specification matrix")}</option>
             <option value="blank">{t("Blank rule")}</option>
           </select>
         </label>
         <span className="text-xs text-muted-foreground">{execution === "task" ? t("Task usage settlement") : t("Synchronous request settlement")}</span>
       </div>
+      {unsupportedKeys.length > 0 && (
+        <p className="text-xs text-amber-600">
+          {t("The current task plugin does not declare these usage fields: {{fields}}. Choose a compatible template or update the plugin usage schema before saving.", { fields: unsupportedKeys.join(", ") })}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">{t(templateHelp[templateKey])}</p>
       <div className="space-y-3">
         {rules.map((item, ruleIndex) => (
