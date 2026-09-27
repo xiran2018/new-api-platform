@@ -449,6 +449,9 @@ function UsageRuleSetRenderer({
   const operator = { eq: "=", ne: "!=", lt: "<", lte: "≤", gt: ">", gte: "≥" } as const;
   const factor = 1 - discount / 100;
   const audioDurationRuleSet = isAudioDurationUsageRuleSet(ruleSet);
+  // A single usage rule does not need the extra "tiered pricing" heading.
+  // Keep the rule and its charges visible; only hide the redundant mode label.
+  const showPricingMode = ruleSet.rules.length > 1;
   const showRuleDetails = ruleSet.rules.length > 1 || ruleSet.rules.some((rule) => rule.conditions.length > 0);
   const baseUnitPrice = ruleSet.rules
     .flatMap((rule) => rule.charges)
@@ -510,7 +513,7 @@ function UsageRuleSetRenderer({
   return (
     <div className="space-y-2">
       <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-        <span>{t("Pricing mode")}: {t("Usage rule pricing")}</span>
+        {showPricingMode && <span>{t("Pricing mode")}: {t("Usage rule pricing")}</span>}
         {discount > 0 && <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">{t("Discount")} {discount}%</span>}
         {showMarkup && discount < 0 && <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">{t("Markup")} {Math.abs(discount)}%</span>}
       </div>
@@ -607,6 +610,9 @@ export function PriceRenderer({
       : "";
   const expressionUsesTime =
     /\b(?:hour|minute|weekday|month|day)\s*\(/.test(expression);
+  const tierCount = publicPriceBlockGroups(blocks).length;
+  const tieredMode = displayedSpec?.mode === "tiered" || (displayedSpec?.mode === "expression" && !expressionUsesTime);
+  const showTieredPricingMode = !(tieredMode && tierCount <= 1);
   const modeLabel = t(
     ({
       token: "Token pricing",
@@ -645,7 +651,7 @@ export function PriceRenderer({
     return (
       <div className="min-w-0 space-y-2">
         <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-          <span>{t("Pricing mode")}: {modeLabel}</span>
+          {showTieredPricingMode && <span>{t("Pricing mode")}: {modeLabel}</span>}
           {(blocks[0]?.discount ?? 0) > 0 && (
             <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
               {t("Discount")} {blocks[0].discount}%
@@ -1203,7 +1209,7 @@ export function PriceRenderer({
   return (
     <div className="space-y-2">
       <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-        <span>{t("Pricing mode")}: {modeLabel}</span>
+        {showTieredPricingMode && <span>{t("Pricing mode")}: {modeLabel}</span>}
         {(blocks[0]?.discount ?? 0) > 0 && (
           <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
             {t("Discount")} {blocks[0].discount}%

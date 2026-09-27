@@ -220,6 +220,23 @@ describe('expression price display', () => {
     expect(screen.queryByText(/param\(/)).not.toBeInTheDocument()
   })
 
+  it('hides the tiered pricing mode label for a single visible tier', () => {
+    render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{
+          mode: 'expression',
+          blocks: [{ label: '0-128K', input: 1, output: 2 }],
+        }}
+      />
+    )
+
+    expect(screen.queryByText(/Pricing mode/)).not.toBeInTheDocument()
+    expect(screen.getByText('Input price')).toBeInTheDocument()
+    expect(screen.getByText('Output price')).toBeInTheDocument()
+  })
+
   it('groups same input-length tiers and splits thinking output into columns', () => {
     const blocks = expressionPriceBlocks(
       'len <= 128000 ? (param("enable_thinking") == true ? tier("0-128K thinking", p * 0.8 + c * 4.8) : tier("0-128K non-thinking", p * 0.8 + c * 4)) : (param("enable_thinking") == true ? tier("128K-256K thinking", p * 2 + c * 12) : tier("128K-256K non-thinking", p * 2 + c * 8))'
