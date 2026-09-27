@@ -543,10 +543,12 @@ export function runtimeDisplaySpec(
   discount?: number,
   baseData?: ModelRatioData,
   usageRuleSet?: UsageRuleSet,
+  pricingCurrency?: PriceSpec["pricingCurrency"],
 ): PriceSpec {
   if (data.billingMode === "tiered_expr")
     return {
       mode: "expression",
+      pricingCurrency,
       blocks: [
         {
           label: "Expression",
@@ -568,6 +570,7 @@ export function runtimeDisplaySpec(
   if (data.price)
     return {
       mode: "request",
+      pricingCurrency,
       blocks: [{ price: Number(data.price), unit: "request", discount }],
     };
   const base = Number(data.ratio || 0) * 2;
@@ -576,6 +579,7 @@ export function runtimeDisplaySpec(
   const audioInput = scaled(data.audioRatio);
   return {
     mode: "token",
+    pricingCurrency,
     blocks: [
         {
           input: base,
@@ -622,11 +626,13 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   modelKey: string;
   vendorPriceSpec?: PriceSpec;
   currentPriceSpec?: PriceSpec;
+  onPricingCurrencyChange?: (currency: PriceSpec["pricingCurrency"]) => void;
   onSaved: (spec: PriceSpec) => Promise<void> | void;
 }>(function RuntimePricingEditor({
   modelKey,
   vendorPriceSpec,
   currentPriceSpec,
+  onPricingCurrencyChange,
   onSaved,
 }, forwardedRef) {
   const { t } = useTranslation();
@@ -798,6 +804,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
         discount || undefined,
         draft,
         activeRuleSet,
+        pricingCurrency,
       ));
       setUsageRuleSet(activeRuleSet);
       setAdvancedPricingActive(Boolean(activeRuleSet));
@@ -820,13 +827,17 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     }
     setComparisonPriceSpec(vendorComparisonSpec(modelKey, vendorPriceSpec));
     if (vendorRuleSet?.rules?.length) {
-      setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
+      const nextPricingCurrency = vendorPriceSpec?.pricingCurrency || pricingCurrency;
+      setPricingCurrency(nextPricingCurrency);
+      onPricingCurrencyChange?.(nextPricingCurrency);
       setUsageRuleSet(vendorRuleSet);
       setAdvancedPricingActive(true);
       toast.success(t("Vendor pricing template and prices synchronized"));
       return;
     }
-    setPricingCurrency(vendorPriceSpec?.pricingCurrency || pricingCurrency);
+    const nextPricingCurrency = vendorPriceSpec?.pricingCurrency || pricingCurrency;
+    setPricingCurrency(nextPricingCurrency);
+    onPricingCurrencyChange?.(nextPricingCurrency);
     setUsageRuleSet(vendorRuleSet);
     setAdvancedPricingActive(Boolean(vendorRuleSet));
     setEditorOverride(vendor);
@@ -866,6 +877,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
         <ModelPricingEditorPanel
           className="!overflow-visible [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static"
           ref={ref}
+          showPricingCurrencySelector={false}
           editData={
             editorOverride || (hasConfiguredPrice(entry)
               ? editorData(

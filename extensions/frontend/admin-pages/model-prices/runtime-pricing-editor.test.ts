@@ -76,6 +76,19 @@ describe("pricing mode metadata", () => {
   const advancedExpression =
     'tier("Default image", fixed(0.5)) * image_count';
 
+  it("keeps the shared pricing currency in the saved runtime display spec", () => {
+    const draft = {
+      name: "currency-model",
+      billingMode: "tiered_expr" as const,
+      billingExpr: 'tier("base", p * 1 + c * 2)',
+    };
+
+    expect(
+      runtimeDisplaySpec(draft, undefined, draft, undefined, "site")
+        .pricingCurrency,
+    ).toBe("site");
+  });
+
   it("keeps advanced rules only while the advanced pricing tab is active", () => {
     const draft = {
       name: "image-model",

@@ -292,12 +292,6 @@ function SpecEditor({
           <a key={url} href={url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-primary underline">{url}</a>
         ))}
       </div>
-      <PricingCurrencySelector
-        siteCurrency={siteCurrency}
-        onValueChange={(pricingCurrency) =>
-          onChange({ ...value, pricingCurrency })
-        }
-      />
       <Tabs
         value={mode}
         onValueChange={(next) => {
@@ -499,6 +493,19 @@ function SpecEditor({
 export function ModelPriceManagementPage() {
   const { t } = useTranslation();
   const runtimePricingEditorRef = useRef<RuntimePricingEditorHandle>(null);
+  const currencyConfig = useSystemConfigStore(
+    (state) => state.config.currency,
+  );
+  const siteCurrency = useMemo(
+    () => getSitePricingCurrency(currencyConfig),
+    [currencyConfig],
+  );
+  const setPricingCurrency = usePricingPreferencesStore(
+    (state) => state.setCurrency,
+  );
+  const pricingCurrencyPreference = usePricingPreferencesStore(
+    (state) => state.currency,
+  );
   const [rows, setRows] = useState<ModelPrice[]>([]),
     [q, setQ] = useState(""),
     [filter, setFilter] = useState<"all" | "local" | "unset">("all"),
@@ -516,6 +523,25 @@ export function ModelPriceManagementPage() {
   useEffect(() => {
     editRef.current = edit;
   }, [edit]);
+  const openPriceEditor = (row: ModelPrice) => {
+    const pricingCurrency =
+      row.llmapiPriceSpec?.pricingCurrency ||
+      row.vendorPriceSpec?.pricingCurrency ||
+      pricingCurrencyPreference;
+    setPricingCurrency(pricingCurrency);
+    setTab("vendor");
+    setEdit({
+      ...row,
+      vendorPriceSpec: {
+        ...row.vendorPriceSpec,
+        pricingCurrency,
+      },
+      llmapiPriceSpec: {
+        ...row.llmapiPriceSpec,
+        pricingCurrency,
+      },
+    });
+  };
   useEffect(() => {
     localStorage.setItem(columnWidthStorageKey, JSON.stringify(columnWidths));
   }, [columnWidths]);
@@ -842,8 +868,7 @@ export function ModelPriceManagementPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => {
-                        setTab("vendor");
-                        setEdit(r);
+                        openPriceEditor(r);
                       }}
                     >
                       <Pencil className="size-4" />
@@ -1063,6 +1088,22 @@ export function ModelPriceManagementPage() {
                 )}
                 <div className="mt-1">{t("USD is the storage currency; displayed amounts follow the system exchange rate. The timezone is used only for active time-window pricing.")}</div>
               </div>
+              <PricingCurrencySelector
+                siteCurrency={siteCurrency}
+                onValueChange={(pricingCurrency) =>
+                  setEdit((current) => current ? {
+                    ...current,
+                    vendorPriceSpec: {
+                      ...current.vendorPriceSpec,
+                      pricingCurrency,
+                    },
+                    llmapiPriceSpec: {
+                      ...current.llmapiPriceSpec,
+                      pricingCurrency,
+                    },
+                  } : current)
+                }
+              />
               <div className="flex gap-2">
                 <Button
                   variant={tab === "vendor" ? "default" : "outline"}
@@ -1090,6 +1131,19 @@ export function ModelPriceManagementPage() {
                   modelKey={edit.modelKey}
                   vendorPriceSpec={edit.vendorPriceSpec}
                   currentPriceSpec={edit.llmapiPriceSpec}
+                  onPricingCurrencyChange={(pricingCurrency) =>
+                    setEdit((current) => current ? {
+                      ...current,
+                      vendorPriceSpec: {
+                        ...current.vendorPriceSpec,
+                        pricingCurrency,
+                      },
+                      llmapiPriceSpec: {
+                        ...current.llmapiPriceSpec,
+                        pricingCurrency,
+                      },
+                    } : current)
+                  }
                   onSaved={async (spec) => {
                     const base = editRef.current || edit;
                     if (!base) return;
