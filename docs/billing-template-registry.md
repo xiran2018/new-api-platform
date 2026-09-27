@@ -116,7 +116,7 @@
 
 | 稳定 key / 名称 | 默认条件字段 | 默认收费字段和单位 | 默认布局与用途 | 真实结算和兼容要求 |
 | --- | --- | --- | --- | --- |
-| `image`<br>Output image resolution (1K/2K) | `resolution_tier` | `input_images`、`output_images` / 张 | 分辨率档位；同时支持参考图输入和生成图输出 | 数字 + DPI/K/P 下拉；1K/2K 只是模板示例 |
+| `image`<br>Output image resolution (1K/2K) | `resolution_tier` | `input_images`、`output_images` / 张 | 默认提供 1K、2K 和可编辑兜底档；每档同时设置输入参考图和输出图片单价 | Alibaba Qwen-Image-3.0 将 `output_image_type`/请求尺寸映射为 `resolution_tier`，将 `input_image_count`/`image_count` 映射为 `input_images`/`output_images`；数字 + DPI/K/P 仅是编辑器输入方式，档位名称和数量可修改，不能把 1K/2K 写死为唯一档位 |
 | `outputImageCount`<br>Generated output images per image | 无 | 普通图片接口使用 `image_count` / 张；异步任务可使用 `output_images` | 单档位统一设置每张生成图片价格 | 普通图片接口按请求 `n` 预扣、按实际返回图片张数结算；不得退化为按请求次数计费 |
 | `boolean`<br>Boolean request option | `prompt_extend` | `request` / 次 | 开启条件档 + 关闭兜底档 | 布尔值必须使用启用/禁用下拉，可换成其他 schema 布尔字段 |
 | `volume`<br>Generated image quantity tiers | 普通图片接口 `image_count`；异步任务 `output_images` | 对应图片数量 / 张 | 多个数量区间阶梯价 | 阈值和档位数可编辑；普通图片接口必须按原生 `image_count` 真实结算，旧 `output_images` 数据继续兼容 |

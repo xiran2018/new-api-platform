@@ -405,16 +405,16 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     conditionFields: ['resolution_tier'],
     chargeMeters: ['input_images', 'output_images'],
     units: ['张'],
-    defaultTiers: '1K 条件档 + 其他图片分辨率兜底档；档位和值都可增删修改。',
+    defaultTiers: '1K、2K 条件档 + 其他图片分辨率兜底档；档位名称、条件、数量和值都可增删修改。',
     layout: {
       editor: '纵向档位卡片；每档包含名称、匹配条件和收费项。',
       managementDisplay: '按档位展示条件及输入/输出图片单价。',
       publicDisplay: '按档位表格展示，不暴露内部条件表达式。',
     },
     runtime:
-      '按顺序匹配 resolution_tier，使用实际 input_images/output_images 数量结算。',
+      '按顺序匹配 resolution_tier，使用实际 input_images/output_images 数量结算；Alibaba Qwen-Image-3.0 会将 output_image_type/input_image_count/image_count 同步映射为这些通用字段。',
     compatibility:
-      '分辨率由数字输入和 DPI/K/P 单位下拉组成，不得固定为只有 1K/2K。',
+      '分辨率由数字输入和 DPI/K/P 单位下拉组成，不得固定为只有 1K/2K；Qwen-Image-3.0 的 1K/2K 档位由请求尺寸和完成 usage 标准化得到。',
   },
   {
     key: 'outputImageCount',

@@ -247,6 +247,29 @@ describe('screenshot-derived billing templates', () => {
     }
   })
 
+  it('charges Qwen image tiers by resolution, input image count and output image count', () => {
+    const rules = createUsageRuleTemplate('image', 'task')
+    rules.rules[0].charges[0].price = 0.02
+    rules.rules[0].charges[1].price = 0.25
+    rules.rules[1].charges[0].price = 0.02
+    rules.rules[1].charges[1].price = 0.5
+    rules.rules[2].charges[0].price = 0.02
+    rules.rules[2].charges[1].price = 0.5
+
+    const expression = usageRuleSetExpression(rules)
+    expect(compileBillingExpression(expression)).toMatchObject({ status: 'ready' })
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: { resolution_tier: '1K', input_images: 1, output_images: 1 },
+      }),
+    ).toMatchObject({ status: 'success', cost: 0.27, matchedTier: '1K' })
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: { resolution_tier: '2K', input_images: 2, output_images: 1 },
+      }),
+    ).toMatchObject({ status: 'success', cost: 0.54, matchedTier: '2K' })
+  })
+
   it('charges standard image generation by the actual output image count', () => {
     const rules = createUsageRuleTemplate('outputImageCount', 'request')
     rules.rules[0].charges[0].price = 0.5

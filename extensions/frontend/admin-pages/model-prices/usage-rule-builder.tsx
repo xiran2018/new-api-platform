@@ -230,6 +230,9 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       rule("1K", [{ field: "resolution_tier", operator: "eq", value: "1K" }], [
         charge("input_images", "张"), charge("output_images", "张"),
       ]),
+      rule("2K", [{ field: "resolution_tier", operator: "eq", value: "2K" }], [
+        charge("input_images", "张"), charge("output_images", "张"),
+      ]),
       rule("其他图片分辨率", [], [charge("input_images", "张"), charge("output_images", "张")]),
     ]);
   }
