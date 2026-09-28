@@ -170,7 +170,17 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
     purpose:
       '面向实时多模态模型，分别设置文本、图片、音频输入、缓存读取、文本/图片/音频输出价格。',
     conditionFields: [],
-    priceFields: ['p', 'cr', 'img', 'img_cr', 'ai', 'c', 'img_o', 'ao'],
+    priceFields: [
+      'p',
+      'cr',
+      'c',
+      'img',
+      'img_cr',
+      'img_o',
+      'ai',
+      'ai_cr',
+      'ao',
+    ],
     unit: '每百万对应模态 Token',
     layout: {
       editor:
@@ -181,7 +191,7 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
         '按输入/输出分组显示非零价格，不显示表达式源码、变量名或内部条件。',
     },
     runtime:
-      '使用 p、cr、img、img_cr、ai、c、img_o、ao 的实际 Token usage 分别乘价后求和；表达式引用 img_cr 时，图片缓存 Token 会从普通图片输入中拆出，避免重复计费。',
+      '使用 p/cr/c、img/img_cr/img_o、ai/ai_cr/ao 对文本、图片、音频三种模态的输入、Cached input、输出分别计价；缓存模态明细存在时会从普通输入和聚合缓存中拆出，避免重复计费，缺少明细时对应模态缓存为 0。',
     compatibility:
       '适用于已提供模态和缓存 usage 明细的普通多模态/实时兼容接口；Realtime WebSocket 当前仅保证已有文本、音频和缓存字段，图片或会话时长必须由上游 usage 提供后才会计费。',
   },

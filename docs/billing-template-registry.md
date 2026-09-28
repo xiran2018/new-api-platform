@@ -84,10 +84,12 @@
 
 ### 多模态模板
 
+管理端入口：`模型价格管理 → 编辑模型 → 厂商原价/实际价格 → 计费表达式 → 平台多模态`。`平台多模态` 必须默认可见，不能再次隐藏到“更多模板…”中；其中 Realtime 模板提供文本、图片、音频三行完整的 Input / Cached input / Output 价格语义。
+
 | 稳定 key / 名称 | 功能和字段 | 编辑布局 | 管理端与客户端显示 | 真实结算和兼容要求 |
 | --- | --- | --- | --- | --- |
 | `text-image-audio-split`<br>Text/image/audio split pricing | `p/c/img/img_o/ai/ao` 分别计价 | 通用 Token 价格字段网格 | 竖向显示所有非零模态价格 | 所有模态 usage 分别乘价求和；前后端及 Go 映射必须保留 |
-| `realtime-modality-cache-pricing`<br>Realtime text/image/audio + cached input pricing | `p/cr/img/img_cr/ai/c/img_o/ao` 分别计价 | 八字段管理员友好价格表 | 输入和输出分组显示非零价格 | 已提供对应 usage 明细时分别结算；Realtime WebSocket 当前不凭空生成会话秒数或图片 usage |
+| `realtime-modality-cache-pricing`<br>Realtime text/image/audio + cached input pricing | 文本 `p/cr/c`、图片 `img/img_cr/img_o`、音频 `ai/ai_cr/ao` 分别计价 | 九字段管理员友好价格表；三个模态均可填写 Input / Cached input / Output | 按文本、图片、音频分别显示非零价格 | 仅在上游提供 `cached_tokens_details` 模态明细时拆分图片和音频缓存；拆分后会从普通输入与聚合缓存中扣除，避免重复计费；旧八字段表达式继续兼容 |
 | `image-modality-cache-pricing`<br>Image model text/image/cache input + image output pricing | `p/cr/img/img_cr/img_o` 分别计价 | 五字段管理员友好价格表 | 输入价格在前、图片输出在后 | 按实际图像模型 usage 结算，不覆盖旧模板 |
 | `audio-image-input-text-audio-output`<br>Audio/image input + text/audio output pricing | 音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 可视化四字段编辑器；截图中的价格仅为示例，可自由修改 | 管理端和客户端均为单行横向表格，顺序为输入音频、输入图片、输出文本、输出音频 | 使用现有 `ai/img/c/ao` 变量真实结算；不需要新增 Go usage 变量；不显示原始表达式 |
 | `audio-image-input-text-audio-output-simple`<br>Simple audio/image input + text/audio output pricing | 管理员只填写音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 直接显示四个价格输入框，不打开表达式条件菜单 | 管理端和客户端均为单行四列表格，输入在前、输出在后 | 与旧模板使用相同 `ai/img/c/ao` 真实结算语义，仅提供管理员友好的编辑入口 |

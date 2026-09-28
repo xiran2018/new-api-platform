@@ -45,8 +45,10 @@ const blockHasVisiblePrice = (block: PriceBlock, requestMode: boolean) =>
         block.createCache,
         block.createCache1h,
         block.image,
+        block.imageCache,
         block.imageOutput,
         block.audioInput,
+        block.audioCache,
         block.audioOutput,
         block.audioDuration,
         block.videoInput,
@@ -62,8 +64,10 @@ export type PublicPriceRowField =
   | "createCache"
   | "createCache1h"
   | "image"
+  | "imageCache"
   | "imageOutput"
   | "audioInput"
+  | "audioCache"
   | "audioOutput"
   | "audioDuration"
   | "videoInput"
@@ -93,8 +97,10 @@ const PRICE_ROW_FIELDS: ReadonlyArray<{
   { field: "createCache", label: "Cache write price" },
   { field: "createCache1h", label: "Cache write (1h) price" },
   { field: "image", label: "Image input price" },
+  { field: "imageCache", label: "Image cache input price" },
   { field: "imageOutput", label: "Image output price" },
   { field: "audioInput", label: "Audio input price" },
+  { field: "audioCache", label: "Audio cache input price" },
   { field: "audioOutput", label: "Audio output price" },
   { field: "audioDuration", label: "Audio duration price" },
   { field: "videoInput", label: "Video input price" },
@@ -321,8 +327,10 @@ function visualNodeToPriceBlocks(
       case "cc": block.createCache = amount; break;
       case "cc1h": block.createCache1h = amount; break;
       case "img": block.image = amount; break;
+      case "img_cr": block.imageCache = amount; break;
       case "img_o": block.imageOutput = amount; break;
       case "ai": block.audioInput = amount; break;
+      case "ai_cr": block.audioCache = amount; break;
       case "ao": block.audioOutput = amount; break;
       case "aud_s": block.audioDuration = amount; break;
       case "vid": block.videoInput = amount; break;
@@ -367,8 +375,10 @@ function withDerivedPrices(spec?: PriceSpec): PriceSpec | undefined {
         createCache: tier.cache_create_unit_cost == null ? null : tier.cache_create_unit_cost * multiplier,
         createCache1h: tier.cache_create_1h_unit_cost == null ? null : Number(tier.cache_create_1h_unit_cost) * multiplier,
         image: tier.image_unit_cost == null ? null : tier.image_unit_cost * multiplier,
+        imageCache: tier.image_cache_unit_cost == null ? null : Number(tier.image_cache_unit_cost) * multiplier,
         imageOutput: tier.image_output_unit_cost == null ? null : tier.image_output_unit_cost * multiplier,
         audioInput: tier.audio_input_unit_cost == null ? null : tier.audio_input_unit_cost * multiplier,
+        audioCache: tier.audio_cache_unit_cost == null ? null : Number(tier.audio_cache_unit_cost) * multiplier,
         audioOutput: tier.audio_output_unit_cost == null ? null : tier.audio_output_unit_cost * multiplier,
         audioDuration: tier.audio_duration_unit_cost == null ? null : Number(tier.audio_duration_unit_cost) * multiplier,
         videoInput: tier.video_input_unit_cost == null ? null : Number(tier.video_input_unit_cost) * multiplier,
@@ -1255,7 +1265,7 @@ export function PriceRenderer({
                 </span>
               )}
             </div>
-            {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.createCache1h != null || b.image != null || b.imageOutput != null || b.audioInput != null || b.audioOutput != null || b.audioDuration != null || b.videoInput != null || b.videoOutput != null || b.multimodalOutput != null)) || (showRequestPrice && b.price != null)) && (
+            {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.createCache1h != null || b.image != null || b.imageCache != null || b.imageOutput != null || b.audioInput != null || b.audioCache != null || b.audioOutput != null || b.audioDuration != null || b.videoInput != null || b.videoOutput != null || b.multimodalOutput != null)) || (showRequestPrice && b.price != null)) && (
               <div className="space-y-1.5 text-sm">
                 {showTokenPrices && hasNonZeroPrice(b.input) && (
                   <div>
@@ -1283,8 +1293,10 @@ export function PriceRenderer({
                   ["createCache", "Cache write price"],
                   ["createCache1h", "Cache write (1h) price"],
                   ["image", "Image input price"],
+                  ["imageCache", "Image cache input price"],
                   ["imageOutput", "Image output price"],
                   ["audioInput", "Audio input price"],
+                  ["audioCache", "Audio cache input price"],
                   ["audioOutput", "Audio output price"],
                   ["audioDuration", "Audio duration price"],
                   ["videoInput", "Video input price"],

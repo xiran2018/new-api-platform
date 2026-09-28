@@ -246,8 +246,20 @@ require_text "$repo_root/core/new-api/pkg/billingexpr/types.go" "AS    float64" 
 require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"vid"' "backend video-input pricing compile binding was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"vid_o"' "backend video-output pricing compile binding was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"aud_s"' "backend audio-duration pricing compile binding was lost"
+require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"ai_cr"' "backend audio cached-input pricing compile binding was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/run.go" '"vid_o"' "backend video-output pricing binding was lost"
+require_text "$repo_root/core/new-api/pkg/billingexpr/run.go" '"ai_cr"' "backend audio cached-input pricing runtime binding was lost"
 require_text "$repo_root/core/new-api/service/tiered_settle.go" 'usedVars["aud_s"]' "audio-duration settlement mapping was lost"
+require_text "$repo_root/core/new-api/service/tiered_settle.go" 'usedVars["ai_cr"]' "audio cached-input settlement mapping was lost"
+require_text "$presets" 'ai_cr * 0.5' "the Realtime audio cached-input template field was lost"
+require_text "$template_registry" "'ai_cr'" "the Realtime audio cached-input template contract was lost"
+require_text "$template_registry_doc" '`ai/ai_cr/ao`' "the Realtime three-modality cache contract is no longer documented"
+require_text "$repo_root/core/new-api/web/src/features/system-settings/models/tiered-pricing-editor.tsx" "'Platform multimodal'," \
+  "the Platform multimodal preset group is no longer visible by default"
+require_text "$repo_root/extensions/frontend/i18n/model-price-translations.ts" '"Platform multimodal": "平台多模态"' \
+  "the visible Chinese entry for the Platform multimodal preset group was lost"
+require_text "$renderer_test" "renders cached input prices for text image and audio Realtime modalities" \
+  "the Realtime three-modality cached-input display regression test was lost"
 require_text "$tiered_billing_backend" '"live_session_seconds": {Type: "number", Unit: "second"}' \
   "the GPT-Live server-observed usage schema was lost"
 require_text "$tiered_billing_backend" 'billingexpr.UsedUsageKeys(exprStr)["live_session_seconds"]' \

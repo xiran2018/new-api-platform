@@ -45,7 +45,7 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
       {
         key: 'realtime-modality-cache-pricing',
         label: 'Realtime text/image/audio + cached input pricing',
-        expr: 'tier("realtime modalities", p * 1 + cr * 0.5 + img * 1 + img_cr * 0.5 + ai * 1 + c * 1 + img_o * 1 + ao * 1)',
+        expr: 'tier("realtime modalities", p * 1 + cr * 0.5 + c * 1 + img * 1 + img_cr * 0.5 + img_o * 1 + ai * 1 + ai_cr * 0.5 + ao * 1)',
       },
       {
         key: 'image-modality-cache-pricing',

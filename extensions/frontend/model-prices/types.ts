@@ -31,8 +31,10 @@ export type PriceBlock = {
   createCache?: number | null;
   createCache1h?: number | null;
   image?: number | null;
+  imageCache?: number | null;
   imageOutput?: number | null;
   audioInput?: number | null;
+  audioCache?: number | null;
   audioOutput?: number | null;
   audioDuration?: number | null;
   videoInput?: number | null;

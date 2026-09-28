@@ -414,6 +414,7 @@ const BILLING_PRICE_VARIABLES = new Set([
   "img_cr",
   "img_o",
   "ai",
+  "ai_cr",
   "ao",
   "vid",
   "vid_o",

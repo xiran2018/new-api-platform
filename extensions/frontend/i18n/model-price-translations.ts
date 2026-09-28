@@ -52,6 +52,11 @@ const resources: Record<string, Record<string, string>> = {
     "Qwen input range and thinking output prices": "Qwen 输入区间与思考/非思考输出计价",
     "Shared input + thinking output prices": "共享输入价 + 思考/非思考输出价",
     "Two input ranges + thinking output prices": "两段输入长度 + 思考/非思考输出计价",
+    "Platform multimodal": "平台多模态",
+    "Realtime text/image/audio + cached input pricing":
+      "Realtime 文本/图片/音频及缓存输入计价",
+    "Image model text/image/cache input + image output pricing":
+      "图像模型文本/图片/缓存输入及图片输出计价",
     "Edit tier name": "编辑档位名称",
     "Text/image/audio split pricing": "文本、图片、音频分别计价",
     "Unified text/image/video input + separate audio pricing":
@@ -173,6 +178,9 @@ const resources: Record<string, Record<string, string>> = {
     "Cache write price": "缓存写入价格",
     "Image input price": "图像输入价格",
     "Audio input price": "音频输入价格",
+    "Audio cache input price": "音频缓存输入价格",
+    "Audio cache input tokens": "音频缓存输入 Token",
+    "Audio Cache": "音频缓存",
     "Audio output price": "音频输出价格",
     "Base currency": "计价基础币种",
     "Pricing timezone": "分时计价时区",

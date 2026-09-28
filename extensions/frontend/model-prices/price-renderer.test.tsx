@@ -155,8 +155,10 @@ describe('expression price display', () => {
                   'createCache',
                   'createCache1h',
                   'image',
+                  'imageCache',
                   'imageOutput',
                   'audioInput',
+                  'audioCache',
                   'audioOutput',
                   'audioDuration',
                   'videoInput',
@@ -415,6 +417,39 @@ describe('expression price display', () => {
     expect(screen.getByText('Audio output price')).toBeInTheDocument()
     expect(screen.getByText('Input unit price')).toBeInTheDocument()
     expect(screen.getByText('Output unit price')).toBeInTheDocument()
+  })
+
+  it('renders cached input prices for text image and audio Realtime modalities', () => {
+    const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
+      (group) => group.presets,
+    ).find((item) => item.key === 'realtime-modality-cache-pricing')
+    expect(preset).toBeDefined()
+
+    const blocks = expressionPriceBlocks(preset?.expr || '')
+    expect(blocks).toEqual([
+      expect.objectContaining({
+        input: 1,
+        cache: 0.5,
+        output: 1,
+        image: 1,
+        imageCache: 0.5,
+        imageOutput: 1,
+        audioInput: 1,
+        audioCache: 0.5,
+        audioOutput: 1,
+      }),
+    ])
+
+    render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: preset?.expr }] }}
+      />,
+    )
+    expect(screen.getByText('Cache read price')).toBeInTheDocument()
+    expect(screen.getByText('Image cache input price')).toBeInTheDocument()
+    expect(screen.getByText('Audio cache input price')).toBeInTheDocument()
   })
 
   it('renders audio/image input and text/audio output pricing in one input-first row', () => {
