@@ -697,13 +697,21 @@ export function PriceRenderer({
               /^text\/audio input \+ text\/audio output/i.test(block.label || ""),
             ),
           );
+          const audioTokenOutputBlocks = new Set(
+            blocks.filter((block) =>
+              /^audio input \+ (audio|text) output token pricing/i.test(
+                block.label || "",
+              ),
+            ),
+          );
           const groups = publicPriceBlockGroups(
             blocks.filter(
               (block) =>
                 !omniBlocks.has(block) &&
                 !sharedTextImageAudioBlocks.has(block) &&
                 !audioImageBlocks.has(block) &&
-                !textAudioBlocks.has(block),
+                !textAudioBlocks.has(block) &&
+                !audioTokenOutputBlocks.has(block),
             ),
           );
           const comparedOmniBlocks = new Set(
@@ -724,13 +732,21 @@ export function PriceRenderer({
               /^text\/audio input \+ text\/audio output/i.test(block.label || ""),
             ),
           );
+          const comparedAudioTokenOutputBlocks = new Set(
+            (displayedCompareSpec?.blocks || []).filter((block) =>
+              /^audio input \+ (audio|text) output token pricing/i.test(
+                block.label || "",
+              ),
+            ),
+          );
           const compareGroups = publicPriceBlockGroups(
             (displayedCompareSpec?.blocks || []).filter(
               (block) =>
                 !comparedOmniBlocks.has(block) &&
                 !comparedSharedTextImageAudioBlocks.has(block) &&
                 !comparedAudioImageBlocks.has(block) &&
-                !comparedTextAudioBlocks.has(block),
+                !comparedTextAudioBlocks.has(block) &&
+                !comparedAudioTokenOutputBlocks.has(block),
             ),
           );
           const compareGroupFor = (group: PublicPriceBlockGroup) =>
@@ -773,6 +789,29 @@ export function PriceRenderer({
           const comparedAudioImageBlock = displayedCompareSpec?.blocks?.find((block) =>
             /^audio\/image input \+ text\/audio output/i.test(block.label || ""),
           );
+          const audioTokenOutputTables = [
+            {
+              key: "audio-output",
+              matcher: /^audio input \+ audio output token pricing/i,
+              outputField: "audioOutput" as const,
+              outputLabel: "Audio output price",
+            },
+            {
+              key: "text-output",
+              matcher: /^audio input \+ text output token pricing/i,
+              outputField: "output" as const,
+              outputLabel: "Text output price",
+            },
+          ].flatMap((definition) => {
+            const block = blocks.find((candidate) =>
+              definition.matcher.test(candidate.label || ""),
+            );
+            if (!block) return [];
+            const comparedBlock = displayedCompareSpec?.blocks?.find((candidate) =>
+              definition.matcher.test(candidate.label || ""),
+            );
+            return [{ ...definition, block, comparedBlock }];
+          });
           const audioImageFields = [
             { field: "audioInput" as const, label: "Audio input price", kind: "input" as const },
             { field: "image" as const, label: "Image input price", kind: "input" as const },
@@ -781,6 +820,54 @@ export function PriceRenderer({
           ].filter(({ field }) => hasNonZeroPrice(audioImageBlock?.[field]));
           return (
             <>
+              {audioTokenOutputTables.map((table) => {
+                const unit = table.block.unit || "1M tokens";
+                return (
+                  <div
+                    className="overflow-x-auto rounded-md border bg-muted/25"
+                    key={table.key}
+                  >
+                    <table className="min-w-[420px] w-full table-fixed text-left text-xs">
+                      <thead className="bg-muted/60 text-muted-foreground">
+                        <tr>
+                          <th className="border-b border-r p-2 text-center font-medium">
+                            {t("Input unit price")}
+                          </th>
+                          <th className="border-b p-2 text-center font-medium">
+                            {t("Output unit price")}
+                          </th>
+                        </tr>
+                        <tr>
+                          <th className="border-r p-2 font-medium">
+                            {t("Audio input price")}
+                          </th>
+                          <th className="p-2 font-medium">
+                            {t(table.outputLabel)}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t align-top">
+                          <td className="break-words border-r p-2.5">
+                            {renderPrice(
+                              priceValue(table.block, "audioInput"),
+                              unit,
+                              priceValue(table.comparedBlock, "audioInput"),
+                            )}
+                          </td>
+                          <td className="break-words p-2.5">
+                            {renderPrice(
+                              priceValue(table.block, table.outputField),
+                              unit,
+                              priceValue(table.comparedBlock, table.outputField),
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
               {sharedTextImageAudioPrices && (() => {
                 const unit =
                   sharedTextImageAudioPrices.multimodal.unit ||

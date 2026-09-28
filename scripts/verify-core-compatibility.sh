@@ -32,6 +32,7 @@ tiered_billing_backend="$repo_root/core/new-api/setting/billing_setting/tiered_b
 realtime_price_helper="$repo_root/core/new-api/relay/helper/price.go"
 realtime_quota_service="$repo_root/core/new-api/service/quota.go"
 realtime_pricing_controller_test="$repo_root/core/new-api/controller/model_pricing_config_test.go"
+tiered_settle_test="$repo_root/core/new-api/service/tiered_settle_test.go"
 
 usage() {
   cat <<EOF
@@ -86,6 +87,8 @@ for key in \
   omni-output-modes \
   omni-shared-media-input-output-modes \
   live-translation-multimodal \
+  audio-input-audio-output-token-pricing \
+  audio-input-text-output-token-pricing \
   audio-transcription-per-second
 do
   require_text "$presets" "key: '$key'" "a platform expression preset was lost during upstream synchronization"
@@ -260,6 +263,24 @@ require_text "$repo_root/extensions/frontend/i18n/model-price-translations.ts" '
   "the visible Chinese entry for the Platform multimodal preset group was lost"
 require_text "$renderer_test" "renders cached input prices for text image and audio Realtime modalities" \
   "the Realtime three-modality cached-input display regression test was lost"
+require_text "$presets" 'ai * 3.5 + ao * 21' \
+  "the audio-input/audio-output per-1M-token expression template was lost"
+require_text "$presets" 'ai * 3.5 + c * 21' \
+  "the audio-input/text-output per-1M-token expression template was lost"
+require_text "$template_registry" "key: 'audio-input-audio-output-token-pricing'" \
+  "the audio-input/audio-output template contract was lost"
+require_text "$template_registry" "key: 'audio-input-text-output-token-pricing'" \
+  "the audio-input/text-output template contract was lost"
+require_text "$platform_visual_billing_editor" 'AUDIO_INPUT_AUDIO_OUTPUT_TOKEN_MARKER' \
+  "the administrator-friendly audio-input/audio-output editor was lost"
+require_text "$platform_visual_billing_editor" 'AUDIO_INPUT_TEXT_OUTPUT_TOKEN_MARKER' \
+  "the administrator-friendly audio-input/text-output editor was lost"
+require_text "$renderer_test" 'renders $key as one administrator-friendly input/output row' \
+  "the audio token price display regression test was lost"
+require_text "$tiered_settle_test" 'TestBuildTieredTokenParams_AudioInputAudioOutputTokenPricing' \
+  "the real audio-input/audio-output settlement regression test was lost"
+require_text "$tiered_settle_test" 'TestBuildTieredTokenParams_AudioInputTextOutputTokenPricing' \
+  "the real audio-input/text-output settlement regression test was lost"
 require_text "$tiered_billing_backend" '"live_session_seconds": {Type: "number", Unit: "second"}' \
   "the GPT-Live server-observed usage schema was lost"
 require_text "$tiered_billing_backend" 'billingexpr.UsedUsageKeys(exprStr)["live_session_seconds"]' \

@@ -102,6 +102,8 @@
 | `omni-output-modes`<br>Qwen3 Omni three output prices | 文本 `p`、音频 `ai`、图片 `img`、视频 `vid` 分别输入；纯文本 `c`、多模态文本 `c`、文本+音频 `ao` 三种输出 | 保留原模板，图片和视频输入可以分别编辑 | 单行六列分组表；旧图片/视频价格不同时在同一单元格分两行 | 先结算输入，再按 `ao` 和是否有多模态输入选择输出分支；旧 key 和标签不得删除 |
 | `omni-shared-media-input-output-modes`<br>Qwen3 Omni shared image/video input + three output prices | 文本、音频、图片/视频共享输入；三种输出 | 专用六列表格；图片/视频只填一次，自动同时写入 `img`、`vid` | 与原 Omni 模板相同的单行六列表格 | 必须保持 img/vid 双写、shared marker 识别及真实计费；不能覆盖原模板 |
 | `live-translation-multimodal`<br>Live translation multimodal token pricing | `p/c/img/ai/ao` | 通用 Token 字段网格 | 只显示非零模态价格 | 各模态 usage 分别结算；零价字段允许存在但不展示 |
+| `audio-input-audio-output-token-pricing`<br>Audio input + audio output token pricing | 音频输入 `ai`、音频输出 `ao` | 管理员友好双字段表格，只填写两个每 1M Token 价格 | 输入、输出同一行显示 | Gemini 输入 `AUDIO` 模态映射到 `ai`，输出 `AUDIO` 模态映射到 `ao`；按真实 Token 结算，不使用分钟或连接时长 |
+| `audio-input-text-output-token-pricing`<br>Audio input + text output token pricing | 音频输入 `ai`、文本输出 `c` | 管理员友好双字段表格，只填写两个每 1M Token 价格 | 输入、输出同一行显示 | Gemini 输入 `AUDIO` 模态映射到 `ai`，输出文本及 thinking token 计入 `c`；按真实 Token 结算，不使用音频秒数 |
 | `audio-transcription-per-second`<br>Audio transcription per second | `aud_s` | 音频时长价格字段，单位紧邻输入框 | 显示按秒价格，不显示内部变量名 | 前端变量、Go 编译绑定、运行时绑定和结算 usage 映射都必须保留 |
 
 ## 高级媒体计费规则注册表

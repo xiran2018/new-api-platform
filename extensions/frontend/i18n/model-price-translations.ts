@@ -81,6 +81,14 @@ const resources: Record<string, Record<string, string>> = {
     "Shared input pricing": "共享输入价格",
     "These input prices are applied once before the selected output price branch.": "这些输入价格只计算一次，然后叠加所选的输出价格分支。",
     "Live translation multimodal token pricing": "实时多模态翻译计价",
+    "Audio input + audio output token pricing":
+      "音频输入 + 音频输出 Token 计价",
+    "Audio input + text output token pricing":
+      "音频输入 + 文本输出 Token 计价",
+    "Fill two prices directly: audio input and audio output per 1M tokens.":
+      "直接填写两个价格：每 1M Token 的音频输入价格和音频输出价格。",
+    "Fill two prices directly: audio input and text output per 1M tokens.":
+      "直接填写两个价格：每 1M Token 的音频输入价格和文本输出价格。",
     "Separate multimodal input and output pricing": "多模态输入与输出分类计价",
     "Text output by input modality": "按输入模态区分文本输出",
     "Pure text output price": "纯文本输出价格",

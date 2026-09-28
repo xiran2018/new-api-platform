@@ -419,6 +419,66 @@ describe('expression price display', () => {
     expect(screen.getByText('Output unit price')).toBeInTheDocument()
   })
 
+  it.each([
+    {
+      key: 'audio-input-audio-output-token-pricing',
+      outputField: 'audioOutput' as const,
+      outputLabel: 'Audio output price',
+      tokens: { ai: 100, ao: 40 },
+      expectedCost: 100 * 3.5 + 40 * 21,
+      matchedTier: 'audio input + audio output token pricing',
+    },
+    {
+      key: 'audio-input-text-output-token-pricing',
+      outputField: 'output' as const,
+      outputLabel: 'Text output price',
+      tokens: { ai: 100, c: 40 },
+      expectedCost: 100 * 3.5 + 40 * 21,
+      matchedTier: 'audio input + text output token pricing',
+    },
+  ])(
+    'renders $key as one administrator-friendly input/output row',
+    ({ key, outputField, outputLabel, tokens, expectedCost, matchedTier }) => {
+      const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
+        (group) => group.presets,
+      ).find((item) => item.key === key)
+      expect(preset).toBeDefined()
+
+      const blocks = expressionPriceBlocks(preset?.expr || '')
+      expect(blocks).toEqual([
+        expect.objectContaining({
+          label: matchedTier,
+          audioInput: 3.5,
+          [outputField]: 21,
+          unit: '1M tokens',
+        }),
+      ])
+      expect(
+        evaluateBillingExpression(preset!.expr, { tokens }),
+      ).toMatchObject({
+        status: 'success',
+        cost: expectedCost,
+        matchedTier,
+      })
+
+      const { container } = render(
+        <PriceRenderer
+          tableLayout
+          timezone='Asia/Shanghai'
+          spec={{ mode: 'expression', blocks: [{ baseExpression: preset?.expr }] }}
+        />,
+      )
+
+      expect(container.querySelectorAll('table')).toHaveLength(1)
+      expect(container.querySelectorAll('tbody tr')).toHaveLength(1)
+      expect(screen.getByText('Audio input price')).toBeInTheDocument()
+      expect(screen.getByText(outputLabel)).toBeInTheDocument()
+      expect(screen.getByText('Input unit price')).toBeInTheDocument()
+      expect(screen.getByText('Output unit price')).toBeInTheDocument()
+      expect(screen.queryByText('Image input price')).not.toBeInTheDocument()
+    },
+  )
+
   it('renders cached input prices for text image and audio Realtime modalities', () => {
     const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
       (group) => group.presets,

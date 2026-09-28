@@ -108,6 +108,16 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'tier("live_translation", p * 0 + c * 10 + img * 4 + ai * 10 + ao * 40)',
       },
       {
+        key: 'audio-input-audio-output-token-pricing',
+        label: 'Audio input + audio output token pricing',
+        expr: 'tier("audio input + audio output token pricing", ai * 3.5 + ao * 21)',
+      },
+      {
+        key: 'audio-input-text-output-token-pricing',
+        label: 'Audio input + text output token pricing',
+        expr: 'tier("audio input + text output token pricing", ai * 3.5 + c * 21)',
+      },
+      {
         key: 'audio-transcription-per-second',
         label: 'Uploaded audio transcription per second',
         expr: 'tier("audio_transcription", p * 0 + c * 0 + aud_s * 220)',

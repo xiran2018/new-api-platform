@@ -36,12 +36,21 @@ type TextAudioInputOutputTierMatch = {
   tier: Extract<VisualPricingNode, { kind: 'tier' }>
   scopeId: string
 }
+type AudioTokenOutputKind = 'audio' | 'text'
+type AudioTokenOutputTierMatch = {
+  tier: Extract<VisualPricingNode, { kind: 'tier' }>
+  scopeId: string
+}
 
 const SHARED_MEDIA_MARKER = 'shared image/video input'
 const SHARED_TEXT_IMAGE_VIDEO_MARKER = 'shared text/image/video input'
 const SHARED_TEXT_IMAGE_MARKER = 'shared text/image input'
 const AUDIO_IMAGE_INPUT_OUTPUT_MARKER = 'audio/image input + text/audio output'
 const TEXT_AUDIO_INPUT_OUTPUT_MARKER = 'text/audio input + text/audio output'
+const AUDIO_INPUT_AUDIO_OUTPUT_TOKEN_MARKER =
+  'audio input + audio output token pricing'
+const AUDIO_INPUT_TEXT_OUTPUT_TOKEN_MARKER =
+  'audio input + text output token pricing'
 
 function omniOutputKind(label: string): OmniOutputKind | null {
   const normalized = label.toLowerCase()
@@ -148,6 +157,28 @@ function findAudioImageInputOutputTier(
   )
 }
 
+function audioTokenOutputMarker(kind: AudioTokenOutputKind) {
+  return kind === 'audio'
+    ? AUDIO_INPUT_AUDIO_OUTPUT_TOKEN_MARKER
+    : AUDIO_INPUT_TEXT_OUTPUT_TOKEN_MARKER
+}
+
+function findAudioTokenOutputTier(
+  node: VisualPricingNode,
+  kind: AudioTokenOutputKind,
+  prefix = ''
+): AudioTokenOutputTierMatch | null {
+  if (node.kind === 'tier') {
+    return node.label.toLowerCase().startsWith(audioTokenOutputMarker(kind))
+      ? { tier: node, scopeId: prefix || '1' }
+      : null
+  }
+  return (
+    findAudioTokenOutputTier(node.yes, kind, `${prefix}1.`) ||
+    findAudioTokenOutputTier(node.no, kind, `${prefix}2.`)
+  )
+}
+
 export function supportsPlatformVisualBillingDocumentEditor(
   document: VisualBillingDocument
 ) {
@@ -165,10 +196,23 @@ export function supportsPlatformVisualBillingDocumentEditor(
   )
   return (
     supportsOmniEditor ||
+    supportsAudioTokenOutputEditor(document, 'audio') ||
+    supportsAudioTokenOutputEditor(document, 'text') ||
     supportsSharedTextImageAudioOutputEditor(document) ||
     supportsAudioImageInputOutputEditor(document) ||
     supportsTextAudioInputOutputEditor(document)
   )
+}
+
+export function supportsAudioTokenOutputEditor(
+  document: VisualBillingDocument,
+  kind: AudioTokenOutputKind
+) {
+  const match = findAudioTokenOutputTier(document.root, kind)
+  if (!match || document.shared) return false
+  const variables = new Set(match.tier.prices.map((price) => price.variable))
+  const outputVariable = kind === 'audio' ? 'ao' : 'c'
+  return variables.has('ai') && variables.has(outputVariable)
 }
 
 export function supportsTextAudioInputOutputEditor(
@@ -477,6 +521,111 @@ function updateAudioImageInputOutputTier(
     : node
 }
 
+function updateAudioTokenOutputTier(
+  node: VisualPricingNode,
+  kind: AudioTokenOutputKind,
+  variable: VisualPrice['variable'],
+  value: string
+): VisualPricingNode {
+  if (node.kind === 'branch') {
+    return {
+      ...node,
+      yes: updateAudioTokenOutputTier(node.yes, kind, variable, value),
+      no: updateAudioTokenOutputTier(node.no, kind, variable, value),
+    }
+  }
+  return node.label.toLowerCase().startsWith(audioTokenOutputMarker(kind))
+    ? { ...node, prices: updatePrices(node.prices, [variable], value) }
+    : node
+}
+
+function AudioTokenOutputEditor({
+  kind,
+  ...props
+}: PlatformVisualBillingDocumentEditorProps & {
+  kind: AudioTokenOutputKind
+}) {
+  const { t } = useTranslation()
+  const match = findAudioTokenOutputTier(props.document.root, kind)
+  if (!match) return null
+  const outputVariable = kind === 'audio' ? 'ao' : 'c'
+  const outputLabel = kind === 'audio' ? 'Audio output' : 'Text output'
+
+  const update = (variable: VisualPrice['variable'], value: string) =>
+    props.onChange({
+      ...props.document,
+      root: updateAudioTokenOutputTier(
+        props.document.root,
+        kind,
+        variable,
+        value
+      ),
+    })
+
+  return (
+    <section className='space-y-3 rounded-xl border bg-muted/20 p-3'>
+      <div>
+        <p className='text-sm font-medium'>
+          {t(
+            kind === 'audio'
+              ? 'Audio input + audio output token pricing'
+              : 'Audio input + text output token pricing'
+          )}
+        </p>
+        <p className='mt-1 text-xs text-muted-foreground'>
+          {t(
+            kind === 'audio'
+              ? 'Fill two prices directly: audio input and audio output per 1M tokens.'
+              : 'Fill two prices directly: audio input and text output per 1M tokens.'
+          )}
+        </p>
+      </div>
+      <div className='overflow-x-auto rounded-md border bg-background'>
+        <table className='min-w-[420px] table-fixed text-sm'>
+          <thead className='bg-muted/60 text-xs text-muted-foreground'>
+            <tr>
+              <th className='border-b border-r p-2 text-center font-medium'>
+                {t('Input unit price')}
+              </th>
+              <th className='border-b p-2 text-center font-medium'>
+                {t('Output unit price')}
+              </th>
+            </tr>
+            <tr>
+              <th className='border-r p-2 text-left font-medium'>
+                {t('Audio input')}
+              </th>
+              <th className='p-2 text-left font-medium'>{t(outputLabel)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className='border-t'>
+              <PriceCell
+                label={t('Audio input')}
+                value={priceValue(match.tier.prices, 'ai')}
+                currency={props.currency}
+                onChange={(value) => update('ai', value)}
+                addonKey='ai'
+                addonScope={match.tier.label}
+                addonScopeId={match.scopeId}
+              />
+              <PriceCell
+                label={t(outputLabel)}
+                value={priceValue(match.tier.prices, outputVariable)}
+                currency={props.currency}
+                onChange={(value) => update(outputVariable, value)}
+                addonKey={outputVariable}
+                addonScope={match.tier.label}
+                addonScopeId={match.scopeId}
+              />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 function TextAudioInputOutputEditor(
   props: PlatformVisualBillingDocumentEditorProps
 ) {
@@ -616,6 +765,12 @@ function AudioImageInputOutputEditor(
 export function PlatformVisualBillingDocumentEditor(
   props: PlatformVisualBillingDocumentEditorProps
 ) {
+  if (supportsAudioTokenOutputEditor(props.document, 'audio')) {
+    return <AudioTokenOutputEditor {...props} kind='audio' />
+  }
+  if (supportsAudioTokenOutputEditor(props.document, 'text')) {
+    return <AudioTokenOutputEditor {...props} kind='text' />
+  }
   if (supportsTextAudioInputOutputEditor(props.document)) {
     return <TextAudioInputOutputEditor {...props} />
   }
