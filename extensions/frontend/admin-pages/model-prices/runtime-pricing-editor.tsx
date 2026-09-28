@@ -949,16 +949,28 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     const current = await ref.current?.commitDraft();
     if (!current) return;
     const vendorRuleSet = matchingUsageRuleSet(vendorPriceSpec);
-    const vendor = vendorEditorDataForCurrentDraft(
-      modelKey,
-      vendorPriceSpec,
-      current,
-    );
+    // An upstream expression is authoritative when it exists. Preserve its
+    // template and structured branches instead of remapping it through the
+    // legacy ratio/request representation.
+    const upstreamTemplate = vendorEditorData(modelKey, vendorPriceSpec);
+    const vendor = upstreamTemplate?.billingMode === "tiered_expr"
+      ? upstreamTemplate
+      : vendorEditorDataForCurrentDraft(modelKey, vendorPriceSpec, current);
     if (!vendor) {
       toast.error(t("No vendor price is available for the selected pricing mode"));
       return;
     }
     setComparisonPriceSpec(vendorComparisonSpec(modelKey, vendorPriceSpec));
+    if (vendor.billingMode === "tiered_expr" && vendor.billingExpr) {
+      setEditorOverride(vendor);
+      setUsageRuleSet(undefined);
+      setAdvancedPricingActive(false);
+      const nextPricingCurrency = vendorPriceSpec?.pricingCurrency || pricingCurrency;
+      setPricingCurrency(nextPricingCurrency);
+      onPricingCurrencyChange?.(nextPricingCurrency);
+      toast.success(t("Vendor pricing template and prices synchronized"));
+      return;
+    }
     if (vendorRuleSet?.rules?.length) {
       const nextPricingCurrency = vendorPriceSpec?.pricingCurrency || pricingCurrency;
       setPricingCurrency(nextPricingCurrency);

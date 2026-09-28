@@ -704,6 +704,15 @@ export function PriceRenderer({
               ),
             ),
           );
+          const geminiEasyUnifiedBlock = blocks.find((block) =>
+            /gemini flash lite easy unified input\/output/i.test(block.label || ""),
+          );
+          const geminiEasyAudioBlock = blocks.find((block) =>
+            /gemini flash lite easy audio split/i.test(block.label || ""),
+          );
+          const geminiEasyBlocks = new Set(
+            [geminiEasyUnifiedBlock, geminiEasyAudioBlock].filter(Boolean),
+          );
           const groups = publicPriceBlockGroups(
             blocks.filter(
               (block) =>
@@ -711,7 +720,8 @@ export function PriceRenderer({
                 !sharedTextImageAudioBlocks.has(block) &&
                 !audioImageBlocks.has(block) &&
                 !textAudioBlocks.has(block) &&
-                !audioTokenOutputBlocks.has(block),
+                !audioTokenOutputBlocks.has(block) &&
+                !geminiEasyBlocks.has(block),
             ),
           );
           const comparedOmniBlocks = new Set(
@@ -1158,6 +1168,31 @@ export function PriceRenderer({
                     </table>
                   </div>
                 );
+              })()}
+              {(geminiEasyUnifiedBlock || geminiEasyAudioBlock) && (() => {
+                const unit = (geminiEasyUnifiedBlock || geminiEasyAudioBlock)?.unit || "";
+                const comparedUnified = displayedCompareSpec?.blocks?.find((block) => /gemini flash lite easy unified input\/output/i.test(block.label || ""));
+                const comparedAudio = displayedCompareSpec?.blocks?.find((block) => /gemini flash lite easy audio split/i.test(block.label || ""));
+                const cell = (block: PriceBlock | undefined, field: PublicPriceRowField, compared?: PriceBlock) =>
+                  renderPrice(block ? priceValue(block, field) : undefined, unit, compared ? priceValue(compared, field) : undefined);
+                return <div className="overflow-x-auto rounded-md border bg-muted/25">
+                  <table className="min-w-[760px] table-fixed text-left text-xs">
+                    <thead className="bg-muted/60 text-muted-foreground"><tr>
+                      <th colSpan={geminiEasyAudioBlock ? 5 : 3} className="p-2 text-center font-medium">{t("Gemini Flash Lite easy pricing")}</th>
+                    </tr><tr>
+                      <th className="border-r p-2 font-medium">{t("Unified input")}</th>
+                      {geminiEasyAudioBlock && <><th className="border-r p-2 font-medium">{t("Audio input")}</th><th className="border-r p-2 font-medium">{t("Cache read price")}</th><th className="border-r p-2 font-medium">{t("Cache write price")}</th></>}
+                      {!geminiEasyAudioBlock && <th className="border-r p-2 font-medium">{t("Cache read price")}</th>}
+                      <th className="p-2 font-medium">{t("Output price")}</th>
+                    </tr></thead>
+                    <tbody><tr className="border-t align-top">
+                      <td className="border-r p-2.5">{cell(geminiEasyAudioBlock || geminiEasyUnifiedBlock, "input", comparedAudio || comparedUnified)}</td>
+                      {geminiEasyAudioBlock && <><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "audioInput", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "cache", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "createCache", comparedAudio)}</td></>}
+                      {!geminiEasyAudioBlock && <td className="border-r p-2.5">{cell(geminiEasyUnifiedBlock, "cache", comparedUnified)}</td>}
+                      <td className="p-2.5">{cell(geminiEasyAudioBlock || geminiEasyUnifiedBlock, "output", comparedAudio || comparedUnified)}</td>
+                    </tr></tbody>
+                  </table>
+                </div>;
               })()}
               {pairedGroups.length > 0 && (
                 <div className="overflow-x-auto rounded-md border bg-muted/25">
