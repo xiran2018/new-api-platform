@@ -41,6 +41,11 @@ type AudioTokenOutputTierMatch = {
   tier: Extract<VisualPricingNode, { kind: 'tier' }>
   scopeId: string
 }
+type GeminiCachePricingKind = 'unified' | 'audio-split'
+type GeminiCachePricingTierMatch = {
+  tier: Extract<VisualPricingNode, { kind: 'tier' }>
+  scopeId: string
+}
 
 const SHARED_MEDIA_MARKER = 'shared image/video input'
 const SHARED_TEXT_IMAGE_VIDEO_MARKER = 'shared text/image/video input'
@@ -51,6 +56,9 @@ const AUDIO_INPUT_AUDIO_OUTPUT_TOKEN_MARKER =
   'audio input + audio output token pricing'
 const AUDIO_INPUT_TEXT_OUTPUT_TOKEN_MARKER =
   'audio input + text output token pricing'
+const GEMINI_UNIFIED_CACHE_MARKER =
+  'gemini flash lite easy unified input/output'
+const GEMINI_AUDIO_CACHE_MARKER = 'gemini flash lite easy audio split'
 
 function omniOutputKind(label: string): OmniOutputKind | null {
   const normalized = label.toLowerCase()
@@ -179,6 +187,48 @@ function findAudioTokenOutputTier(
   )
 }
 
+function findGeminiCachePricingTier(
+  node: VisualPricingNode,
+  kind: GeminiCachePricingKind,
+  prefix = ''
+): GeminiCachePricingTierMatch | null {
+  const marker =
+    kind === 'unified'
+      ? GEMINI_UNIFIED_CACHE_MARKER
+      : GEMINI_AUDIO_CACHE_MARKER
+  if (node.kind === 'tier') {
+    return node.label.toLowerCase().startsWith(marker)
+      ? { tier: node, scopeId: prefix || '1' }
+      : null
+  }
+  return (
+    findGeminiCachePricingTier(node.yes, kind, `${prefix}1.`) ||
+    findGeminiCachePricingTier(node.no, kind, `${prefix}2.`)
+  )
+}
+
+function updateGeminiCachePricingTier(
+  node: VisualPricingNode,
+  kind: GeminiCachePricingKind,
+  variables: VisualPrice['variable'][],
+  value: string
+): VisualPricingNode {
+  if (node.kind === 'branch') {
+    return {
+      ...node,
+      yes: updateGeminiCachePricingTier(node.yes, kind, variables, value),
+      no: updateGeminiCachePricingTier(node.no, kind, variables, value),
+    }
+  }
+  const marker =
+    kind === 'unified'
+      ? GEMINI_UNIFIED_CACHE_MARKER
+      : GEMINI_AUDIO_CACHE_MARKER
+  return node.label.toLowerCase().startsWith(marker)
+    ? { ...node, prices: updatePrices(node.prices, variables, value) }
+    : node
+}
+
 export function supportsPlatformVisualBillingDocumentEditor(
   document: VisualBillingDocument
 ) {
@@ -196,11 +246,29 @@ export function supportsPlatformVisualBillingDocumentEditor(
   )
   return (
     supportsOmniEditor ||
+    supportsGeminiCachePricingEditor(document, 'unified') ||
+    supportsGeminiCachePricingEditor(document, 'audio-split') ||
     supportsAudioTokenOutputEditor(document, 'audio') ||
     supportsAudioTokenOutputEditor(document, 'text') ||
     supportsSharedTextImageAudioOutputEditor(document) ||
     supportsAudioImageInputOutputEditor(document) ||
     supportsTextAudioInputOutputEditor(document)
+  )
+}
+
+export function supportsGeminiCachePricingEditor(
+  document: VisualBillingDocument,
+  kind: GeminiCachePricingKind
+) {
+  const match = findGeminiCachePricingTier(document.root, kind)
+  if (!match || document.shared) return false
+  const variables = new Set(match.tier.prices.map((price) => price.variable))
+  const required =
+    kind === 'unified'
+      ? ['p', 'img', 'vid', 'ai', 'cr', 'c']
+      : ['p', 'img', 'vid', 'ai', 'cr', 'ai_cr', 'c']
+  return required.every((variable) =>
+    variables.has(variable as VisualPrice['variable'])
   )
 }
 
@@ -626,6 +694,110 @@ function AudioTokenOutputEditor({
   )
 }
 
+function GeminiCachePricingEditor({
+  kind,
+  ...props
+}: PlatformVisualBillingDocumentEditorProps & {
+  kind: GeminiCachePricingKind
+}) {
+  const { t } = useTranslation()
+  const match = findGeminiCachePricingTier(props.document.root, kind)
+  if (!match) return null
+
+  const isUnified = kind === 'unified'
+  const update = (variables: VisualPrice['variable'][], value: string) =>
+    props.onChange({
+      ...props.document,
+      root: updateGeminiCachePricingTier(props.document.root, kind, variables, value),
+    })
+  const inputVariables: VisualPrice['variable'][] = isUnified
+    ? ['p', 'img', 'vid', 'ai']
+    : ['p', 'img', 'vid']
+  const inputLabel = isUnified
+    ? 'Text/image/video/audio input'
+    : 'Text/image/video input'
+  const inputHint = isUnified
+    ? 'One price is applied to text, image, video, and audio input tokens.'
+    : 'One price is applied to text, image, and video input tokens.'
+
+  const fields: Array<{
+    label: string
+    variable: VisualPrice['variable']
+    variables?: VisualPrice['variable'][]
+    hint?: string
+  }> = [
+    { label: inputLabel, variable: 'p', variables: inputVariables, hint: inputHint },
+  ]
+  if (!isUnified) {
+    fields.push({ label: 'Audio input', variable: 'ai' })
+  }
+  fields.push({ label: 'Cached input', variable: 'cr' })
+  if (!isUnified) {
+    fields.push({ label: 'Audio cached input', variable: 'ai_cr' })
+  }
+  fields.push({ label: 'Output', variable: 'c' })
+
+  return (
+    <section className='space-y-3 rounded-xl border bg-muted/20 p-3'>
+      <div>
+        <p className='text-sm font-medium'>
+          {t(
+            isUnified
+              ? 'Gemini Flash Lite unified multimodal + cached input pricing'
+              : 'Gemini Flash Lite shared text/image/video + separate audio/cache pricing'
+          )}
+        </p>
+        <p className='mt-1 text-xs text-muted-foreground'>
+          {t(
+            isUnified
+              ? 'Fill the shared input, cached input, and output prices directly.'
+              : 'Fill shared text/image/video input, audio input, cached input, audio cached input, and output prices directly.'
+          )}
+        </p>
+      </div>
+      <div className='overflow-x-auto rounded-md border bg-background'>
+        <table className='min-w-[760px] table-fixed text-sm'>
+          <thead className='bg-muted/60 text-xs text-muted-foreground'>
+            <tr>
+              <th colSpan={isUnified ? 1 : 2} className='border-b border-r p-2 text-center font-medium'>
+                {t('Input unit price')}
+              </th>
+              <th colSpan={isUnified ? 1 : 2} className='border-b border-r p-2 text-center font-medium'>
+                {t('Cached input price')}
+              </th>
+              <th className='border-b p-2 text-center font-medium'>{t('Output unit price')}</th>
+            </tr>
+            <tr>
+              {fields.map((field) => (
+                <th key={field.variable} className='border-r p-2 text-left font-medium last:border-r-0'>
+                  {t(field.label)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className='border-t'>
+              {fields.map((field) => (
+                <PriceCell
+                  key={field.variable}
+                  label={t(field.label)}
+                  value={priceValue(match.tier.prices, field.variable)}
+                  currency={props.currency}
+                  onChange={(value) => update(field.variables || [field.variable], value)}
+                  hint={field.hint ? t(field.hint) : undefined}
+                  addonKey={field.variable}
+                  addonScope={match.tier.label}
+                  addonScopeId={match.scopeId}
+                />
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 function TextAudioInputOutputEditor(
   props: PlatformVisualBillingDocumentEditorProps
 ) {
@@ -765,6 +937,12 @@ function AudioImageInputOutputEditor(
 export function PlatformVisualBillingDocumentEditor(
   props: PlatformVisualBillingDocumentEditorProps
 ) {
+  if (supportsGeminiCachePricingEditor(props.document, 'unified')) {
+    return <GeminiCachePricingEditor {...props} kind='unified' />
+  }
+  if (supportsGeminiCachePricingEditor(props.document, 'audio-split')) {
+    return <GeminiCachePricingEditor {...props} kind='audio-split' />
+  }
   if (supportsAudioTokenOutputEditor(props.document, 'audio')) {
     return <AudioTokenOutputEditor {...props} kind='audio' />
   }

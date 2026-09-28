@@ -1,6 +1,6 @@
 # 计费模板与高级媒体计费规则注册表
 
-最后核对日期：2026-09-24。
+最后核对日期：2026-09-28。
 
 本文件是计费功能的人工可读兼容合同。机器可读的完整合同位于
 `extensions/frontend/model-prices/billing-template-registry.ts`。模板的代码结构、组件名称和
@@ -92,6 +92,8 @@
 | `realtime-modality-cache-pricing`<br>Realtime text/image/audio + cached input pricing | 文本 `p/cr/c`、图片 `img/img_cr/img_o`、音频 `ai/ai_cr/ao` 分别计价 | 九字段管理员友好价格表；三个模态均可填写 Input / Cached input / Output | 按文本、图片、音频分别显示非零价格 | 仅在上游提供 `cached_tokens_details` 模态明细时拆分图片和音频缓存；拆分后会从普通输入与聚合缓存中扣除，避免重复计费；旧八字段表达式继续兼容 |
 | `gemini-flash-lite-unified-cache-pricing`<br>Gemini Flash Lite unified multimodal + cached input pricing | 文本/图片/视频/音频输入 `p/img/vid/ai` 共用同一默认单价，缓存读取 `cr`、输出 `c` 单独计价 | 六字段管理员友好价格表：统一多模态输入、Cached input、输出 | 按统一多模态输入、缓存读取、输出逐项显示非零价格；隐藏表达式源码 | 真实使用 `p/img/vid/ai/cr/c` Token 结算；默认值可修改；截图中的缓存存储“每小时”价格当前没有独立存储时长 usage，不能用 `cc1h` 冒充 |
 | `gemini-flash-lite-audio-cache-pricing`<br>Gemini Flash Lite shared text/image/video + separate audio/cache pricing | 文本/图片/视频输入 `p/img/vid`、音频输入 `ai`、聚合缓存读取 `cr`、音频缓存读取 `ai_cr`、输出 `c` 分别计价 | 七字段管理员友好价格表：共享输入、音频输入、两类 Cached input、输出 | 按共享文本/图片/视频、音频、缓存读取、输出分组显示非零价格；隐藏内部变量 | 真实使用 `p/img/vid/ai/cr/ai_cr/c` Token 结算；默认值可修改；截图中的缓存存储“每小时”价格需等待 core 提供独立存储时长 usage 后再支持 |
+| `gemini-flash-lite-unified-cache-pricing-simple`<br>Gemini Flash Lite easy setup: unified input + cached input + output | 统一输入、Cached input、输出三项价格；统一输入自动写入 `p/img/vid/ai` | 三项直接填写表格，不要求手写表达式 | 统一多模态输入、缓存读取、输出各显示一项 | 新增管理员友好模板，不覆盖原 Gemini 模板；真实按 `p/img/vid/ai/cr/c` 结算 |
+| `gemini-flash-lite-audio-cache-pricing-simple`<br>Gemini Flash Lite easy setup: shared input + separate audio/cache | 共享文本/图片/视频输入、音频输入、两类 Cached input、输出五项价格 | 五项直接填写表格，共享输入只填写一次 | 共享输入、音频输入、缓存读取、输出分组显示 | 新增管理员友好模板，不覆盖原 Gemini 模板；真实按 `p/img/vid/ai/cr/ai_cr/c` 结算 |
 | `image-modality-cache-pricing`<br>Image model text/image/cache input + image output pricing | `p/cr/img/img_cr/img_o` 分别计价 | 五字段管理员友好价格表 | 输入价格在前、图片输出在后 | 按实际图像模型 usage 结算，不覆盖旧模板 |
 | `audio-image-input-text-audio-output`<br>Audio/image input + text/audio output pricing | 音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 可视化四字段编辑器；截图中的价格仅为示例，可自由修改 | 管理端和客户端均为单行横向表格，顺序为输入音频、输入图片、输出文本、输出音频 | 使用现有 `ai/img/c/ao` 变量真实结算；不需要新增 Go usage 变量；不显示原始表达式 |
 | `audio-image-input-text-audio-output-simple`<br>Simple audio/image input + text/audio output pricing | 管理员只填写音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 直接显示四个价格输入框，不打开表达式条件菜单 | 管理端和客户端均为单行四列表格，输入在前、输出在后 | 与旧模板使用相同 `ai/img/c/ao` 真实结算语义，仅提供管理员友好的编辑入口 |

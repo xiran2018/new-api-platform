@@ -58,6 +58,16 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'tier("Gemini Flash Lite audio split", p * 0.25 + img * 0.25 + vid * 0.25 + ai * 0.50 + cr * 0.025 + ai_cr * 0.05 + c * 1.50)',
       },
       {
+        key: 'gemini-flash-lite-unified-cache-pricing-simple',
+        label: 'Gemini Flash Lite easy setup: unified input + cached input + output',
+        expr: 'tier("Gemini Flash Lite easy unified input/output", p * 0.30 + img * 0.30 + vid * 0.30 + ai * 0.30 + cr * 0.03 + c * 2.50)',
+      },
+      {
+        key: 'gemini-flash-lite-audio-cache-pricing-simple',
+        label: 'Gemini Flash Lite easy setup: shared input + separate audio/cache',
+        expr: 'tier("Gemini Flash Lite easy audio split", p * 0.25 + img * 0.25 + vid * 0.25 + ai * 0.50 + cr * 0.025 + ai_cr * 0.05 + c * 1.50)',
+      },
+      {
         key: 'image-modality-cache-pricing',
         label: 'Image model text/image/cache input + image output pricing',
         expr: 'tier("image modalities", p * 1 + cr * 0.5 + img * 1 + img_cr * 0.5 + img_o * 1)',

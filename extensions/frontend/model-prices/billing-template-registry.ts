@@ -240,6 +240,46 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       '默认值对应 Gemini Flash Lite 文本/图片/视频与音频分离价格，但数值和字段均可编辑；截图中的缓存存储“每小时”价格需等待 core 提供独立存储时长 usage 后再启用。',
   },
   {
+    key: 'gemini-flash-lite-unified-cache-pricing-simple',
+    name: 'Gemini Flash Lite easy setup: unified input + cached input + output',
+    group: 'multimodal',
+    purpose:
+      '管理员友好版本：只填写统一多模态输入、Cached input 和输出三个价格，系统自动将输入价格应用到文本、图片、视频和音频。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'vid', 'ai', 'cr', 'c'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '三项直接填写表格：统一文本/图片/视频/音频输入、Cached input、输出；不要求手写表达式。',
+      managementDisplay: '输入、Cached input、输出各显示一项，不显示重复模态字段。',
+      publicDisplay: '显示统一多模态输入、缓存读取和输出价格，不显示表达式源码。',
+    },
+    runtime:
+      '保存时把统一输入价写入 p、img、vid、ai；cr 和 c 按真实 Token usage 结算。',
+    compatibility:
+      '这是新增的管理员友好模板，不覆盖原 Gemini 模板；模板 key 和 easy marker 必须保留，旧表达式继续由通用编辑器兼容。',
+  },
+  {
+    key: 'gemini-flash-lite-audio-cache-pricing-simple',
+    name: 'Gemini Flash Lite easy setup: shared input + separate audio/cache',
+    group: 'multimodal',
+    purpose:
+      '管理员友好版本：只填写文本/图片/视频共享输入、音频输入、Cached input、音频 Cached input 和输出价格。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'vid', 'ai', 'cr', 'ai_cr', 'c'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '五项直接填写表格：共享文本/图片/视频输入、音频输入、两类 Cached input、输出；不要求手写表达式。',
+      managementDisplay: '共享输入只显示一次，音频和缓存字段分组显示，不显示表达式源码。',
+      publicDisplay: '显示共享输入、音频输入、缓存读取和输出价格，不显示内部变量名。',
+    },
+    runtime:
+      '保存时把共享输入价写入 p、img、vid；ai、cr、ai_cr、c 按真实 Token usage 结算。',
+    compatibility:
+      '这是新增的管理员友好模板，不覆盖原 Gemini 模板；模板 key 和 easy marker 必须保留，截图中的缓存存储小时费仍需独立 usage 才能支持。',
+  },
+  {
     key: 'image-modality-cache-pricing',
     name: 'Image model text/image/cache input + image output pricing',
     group: 'multimodal',
