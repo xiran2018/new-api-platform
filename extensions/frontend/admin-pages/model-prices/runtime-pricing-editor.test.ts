@@ -13,6 +13,7 @@ import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
 
 import { PLATFORM_BILLING_PRESET_GROUPS } from "@/platform/model-prices/expression-presets";
 import { compileBillingExpression } from "@/features/pricing/lib/billing-expression/parser";
+import { pricingFromDraft } from "@/features/model-pricing/pricing";
 import {
   parseVisualBillingDocument,
   type VisualPricingNode,
@@ -88,6 +89,33 @@ describe("pricing mode metadata", () => {
       runtimeDisplaySpec(draft, undefined, draft, undefined, "site")
         .pricingCurrency,
     ).toBe("site");
+  });
+
+  it.each([
+    [
+      "audio input and audio output",
+      `tier("audio input + audio output token pricing", ai * 3.5 + ao * 21)`,
+    ],
+    [
+      "audio input and text output",
+      `tier("audio input + text output token pricing", ai * 3.5 + c * 21)`,
+    ],
+  ])("persists the %s template as active runtime expression pricing", (_label, billingExpr) => {
+    const draft = {
+      name: "audio-model",
+      billingMode: "tiered_expr" as const,
+      billingExpr,
+      requestRuleExpr: "",
+    };
+
+    const pricing = pricingFromDraft(draft);
+    const display = runtimeDisplaySpec(draft, undefined, draft);
+
+    expect(pricing["billing_setting.billing_mode"]).toBe("tiered_expr");
+    expect(pricing["billing_setting.billing_expr"]).toBe(billingExpr);
+    expect(display.mode).toBe("expression");
+    expect(display.blocks?.[0]?.baseExpression).toBe(billingExpr);
+    expect(compileBillingExpression(billingExpr).status).toBe("ready");
   });
 
   it("keeps advanced rules only while the advanced pricing tab is active", () => {
@@ -289,6 +317,38 @@ describe("vendorEditorData", () => {
 });
 
 describe("vendorEditorDataForCurrentDraft", () => {
+  it.each([
+    [
+      "audio input and audio output",
+      'tier("audio input + audio output token pricing", ai * 3.5 + ao * 21)',
+    ],
+    [
+      "audio input and text output",
+      'tier("audio input + text output token pricing", ai * 3.5 + c * 21)',
+    ],
+  ])("synchronizes a saved %s vendor expression without changing templates", (_label, billingExpr) => {
+    const result = vendorEditorDataForCurrentDraft(
+      "audio-model",
+      {
+        mode: "expression",
+        pricingCurrency: "USD",
+        blocks: [{
+          label: "Expression",
+          note: billingExpr,
+          baseExpression: billingExpr,
+        }],
+      },
+      {
+        name: "audio-model",
+        billingMode: "tiered_expr",
+        billingExpr,
+      },
+    );
+
+    expect(result?.billingMode).toBe("tiered_expr");
+    expect(result?.billingExpr).toBe(billingExpr);
+  });
+
   it("synchronizes structured audio-input/audio-output prices into the current expression template", () => {
     const result = vendorEditorDataForCurrentDraft(
       "gemini-live",

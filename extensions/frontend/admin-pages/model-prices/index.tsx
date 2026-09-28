@@ -38,7 +38,7 @@ import { getVendors } from "@/features/models/api";
 import { ModelsDialogs } from "@/features/models/components/models-dialogs";
 import { ModelsPrimaryButtons } from "@/features/models/components/models-primary-buttons";
 import { ModelsProvider, useModels } from "@/features/models/components/models-provider";
-import { combineBillingExpr, splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
+import { splitBillingExprAndRequestRules } from "@/features/pricing/lib/billing-expr";
 import type { BillingUsageSchema } from "@/features/pricing/types";
 import { TieredPricingEditor } from "@/features/system-settings/models/tiered-pricing-editor";
 import { api } from "@/lib/api";
@@ -47,6 +47,10 @@ import { usePricingPreferencesStore } from "@/stores/pricing-preferences-store";
 import { PriceRenderer } from "../../model-prices/price-renderer";
 import type { ModelPrice, PriceSpec } from "../../model-prices/types";
 import { ModelPriceSyncDialog } from "./sync-dialog";
+import {
+  createBillingExpressionDraft,
+  updateBillingExpressionDraft,
+} from "./expression-draft";
 import {
   RuntimePricingEditor,
   type RuntimePricingEditorHandle,
@@ -416,18 +420,34 @@ function SpecEditor({
             <div className="space-y-2 overflow-visible md:col-span-2 [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static">
               <div className="text-sm font-medium">{t("Pricing expression")}</div>
               {(() => {
-                const expression = splitBillingExprAndRequestRules(b.note || b.baseExpression || "");
+                const expressionDraft = createBillingExpressionDraft(
+                  b.note || b.baseExpression || "",
+                );
                 return (
                   <TieredPricingEditor
                     currency={pricingCurrency}
                     modelName={value.blocks?.[i]?.label}
-                    billingExpr={expression.billingExpr}
-                    requestRuleExpr={expression.requestRuleExpr}
+                    billingExpr={expressionDraft.billingExpr}
+                    requestRuleExpr={expressionDraft.requestRuleExpr}
                     onBillingExprChange={(next) =>
-                      setExpression(i, combineBillingExpr(next, expression.requestRuleExpr))
+                      setExpression(
+                        i,
+                        updateBillingExpressionDraft(
+                          expressionDraft,
+                          "billingExpr",
+                          next,
+                        ),
+                      )
                     }
                     onRequestRuleExprChange={(next) =>
-                      setExpression(i, combineBillingExpr(expression.billingExpr, next))
+                      setExpression(
+                        i,
+                        updateBillingExpressionDraft(
+                          expressionDraft,
+                          "requestRuleExpr",
+                          next,
+                        ),
+                      )
                     }
                   />
                 );
@@ -530,7 +550,7 @@ export function ModelPriceManagementPage() {
       pricingCurrencyPreference;
     setPricingCurrency(pricingCurrency);
     setTab("vendor");
-    setEdit({
+    const nextEdit = {
       ...row,
       vendorPriceSpec: {
         ...row.vendorPriceSpec,
@@ -540,7 +560,9 @@ export function ModelPriceManagementPage() {
         ...row.llmapiPriceSpec,
         pricingCurrency,
       },
-    });
+    };
+    editRef.current = nextEdit;
+    setEdit(nextEdit);
   };
   useEffect(() => {
     localStorage.setItem(columnWidthStorageKey, JSON.stringify(columnWidths));
@@ -620,8 +642,11 @@ export function ModelPriceManagementPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
   const save = async () => {
-    if (!edit) return;
-    const vendorRules = edit.vendorPriceSpec?.blocks?.[0]?.usageRuleSet;
+    const current = editRef.current || edit;
+    if (!current) return;
+    const vendorRules = current.vendorPriceSpec?.blocks
+      ?.map((block) => block.usageRuleSet)
+      .find(Boolean);
     if (vendorRules) {
       const validationError = validateUsageRuleSet(vendorRules);
       if (validationError) {
@@ -629,12 +654,28 @@ export function ModelPriceManagementPage() {
         return;
       }
     }
-    if (edit.id) {
-      await api.put(`/api/platform/admin/model-prices/${edit.id}`, edit);
-      setEdit({ ...edit });
+    if (current.vendorPriceSpec?.mode === "expression" && !vendorRules) {
+      const hasExpression = (current.vendorPriceSpec.blocks || []).some(
+        (block) => splitBillingExprAndRequestRules(
+          block.baseExpression || block.note || "",
+        ).billingExpr.trim().length > 0,
+      );
+      if (!hasExpression) {
+        toast.error(t("Pricing expression cannot be empty"));
+        return;
+      }
+    }
+    if (current.id) {
+      await api.put(`/api/platform/admin/model-prices/${current.id}`, current);
+      editRef.current = { ...current };
+      setEdit(editRef.current);
     } else {
-      const response = await api.post("/api/platform/admin/model-prices", edit);
-      setEdit({ ...edit, id: response.data?.data?.id || 0 });
+      const response = await api.post("/api/platform/admin/model-prices", current);
+      editRef.current = {
+        ...current,
+        id: response.data?.data?.id || 0,
+      };
+      setEdit(editRef.current);
     }
     toast.success(t("Save"));
     load();
@@ -1118,14 +1159,21 @@ export function ModelPriceManagementPage() {
                   {t("Actual price")}
                 </Button>
               </div>
-              {tab === "vendor" ? (
+              <div hidden={tab !== "vendor"}>
                 <SpecEditor
                   value={edit.vendorPriceSpec}
-                  onChange={(v) => setEdit((current) => current ? { ...current, vendorPriceSpec: v } : current)}
+                  onChange={(vendorPriceSpec) => {
+                    const current = editRef.current || edit;
+                    if (!current) return;
+                    const next = { ...current, vendorPriceSpec };
+                    editRef.current = next;
+                    setEdit(next);
+                  }}
                   source={edit.upstreamSource}
                   modelKey={edit.modelKey}
                 />
-              ) : (
+              </div>
+              <div hidden={tab !== "ours"}>
                 <RuntimePricingEditor
                   ref={runtimePricingEditorRef}
                   modelKey={edit.modelKey}
@@ -1153,18 +1201,24 @@ export function ModelPriceManagementPage() {
                         `/api/platform/admin/model-prices/${base.id}`,
                         next,
                       );
+                      editRef.current = next;
                       setEdit(next);
                     } else {
                       const response = await api.post(
                         "/api/platform/admin/model-prices",
                         next,
                       );
-                      setEdit({ ...next, id: response.data?.data?.id || 0 });
+                      const saved = {
+                        ...next,
+                        id: response.data?.data?.id || 0,
+                      };
+                      editRef.current = saved;
+                      setEdit(saved);
                     }
                     load();
                   }}
                 />
-              )}
+              </div>
               {edit.pendingVendorSpec && (
                 <div className="rounded-md border border-amber-500 p-4">
                   <div className="mb-3 font-medium">

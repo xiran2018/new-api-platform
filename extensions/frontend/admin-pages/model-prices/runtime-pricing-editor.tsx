@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -848,6 +848,18 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
         })
         .catch((error) => toast.error(error.message));
   }, [modelKey, currentPriceSpecSignature, t]);
+  const resolvedEditorData = useMemo(
+    () => editorOverride || (entry && hasConfiguredPrice(entry)
+      ? editorData(
+          entry,
+          currentPriceSpec?.blocks?.[0]?.discount ?? 0,
+          currentPriceSpec,
+        )
+      : entry
+        ? editorData(entry)
+        : null),
+    [editorOverride, entry, currentPriceSpec],
+  );
   const handleAdditionalPricingActiveChange = (active: boolean) => {
     if (!active) {
       setAdvancedPricingActive(false);
@@ -999,15 +1011,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
           className="!overflow-visible [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static"
           ref={ref}
           showPricingCurrencySelector={false}
-          editData={
-            editorOverride || (hasConfiguredPrice(entry)
-              ? editorData(
-                  entry,
-                  currentPriceSpec?.blocks?.[0]?.discount ?? 0,
-                  currentPriceSpec,
-                )
-              : editorData(entry))
-          }
+          editData={resolvedEditorData}
           scrollHeader={
             <Button
               type="button"
