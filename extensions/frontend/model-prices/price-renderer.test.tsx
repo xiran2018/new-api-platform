@@ -556,6 +556,35 @@ describe('expression price display', () => {
     expect(screen.getByText('Output unit price')).toBeInTheDocument()
   })
 
+  it('renders Gemini easy templates with modality-specific horizontal headers', () => {
+    render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{
+          mode: 'expression',
+          blocks: [
+            { label: 'Gemini Flash Lite easy unified input/output', input: 1, cache: 0.1, output: 2, unit: '1M tokens' },
+            { label: 'Gemini Flash Lite easy audio split', input: 1, audioInput: 2, cache: 0.1, audioCache: 0.2, output: 3, unit: '1M tokens' },
+          ],
+        }}
+      />,
+    )
+    expect(screen.getByText('Text/image/video input')).toBeInTheDocument()
+    expect(screen.getByText('Audio cached input')).toBeInTheDocument()
+    expect(screen.queryByText('Unified input')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cache write price')).not.toBeInTheDocument()
+    const unified = render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ label: 'Gemini Flash Lite easy unified input/output', input: 1, cache: 0.1, output: 2, unit: '1M tokens' }] }}
+      />,
+    )
+    expect(screen.getByText('Text/image/video/audio input')).toBeInTheDocument()
+    unified.unmount()
+  })
+
   it('keeps different legacy image and video prices in one Omni table cell', () => {
     render(
       <PriceRenderer

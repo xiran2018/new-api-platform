@@ -1180,14 +1180,14 @@ export function PriceRenderer({
                     <thead className="bg-muted/60 text-muted-foreground"><tr>
                       <th colSpan={geminiEasyAudioBlock ? 5 : 3} className="p-2 text-center font-medium">{t("Gemini Flash Lite easy pricing")}</th>
                     </tr><tr>
-                      <th className="border-r p-2 font-medium">{t("Unified input")}</th>
-                      {geminiEasyAudioBlock && <><th className="border-r p-2 font-medium">{t("Audio input")}</th><th className="border-r p-2 font-medium">{t("Cache read price")}</th><th className="border-r p-2 font-medium">{t("Cache write price")}</th></>}
+                      <th className="border-r p-2 font-medium">{t(geminiEasyAudioBlock ? "Text/image/video input" : "Text/image/video/audio input")}</th>
+                      {geminiEasyAudioBlock && <><th className="border-r p-2 font-medium">{t("Audio input")}</th><th className="border-r p-2 font-medium">{t("Cache read price")}</th><th className="border-r p-2 font-medium">{t("Audio cached input")}</th></>}
                       {!geminiEasyAudioBlock && <th className="border-r p-2 font-medium">{t("Cache read price")}</th>}
                       <th className="p-2 font-medium">{t("Output price")}</th>
                     </tr></thead>
                     <tbody><tr className="border-t align-top">
                       <td className="border-r p-2.5">{cell(geminiEasyAudioBlock || geminiEasyUnifiedBlock, "input", comparedAudio || comparedUnified)}</td>
-                      {geminiEasyAudioBlock && <><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "audioInput", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "cache", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "createCache", comparedAudio)}</td></>}
+                      {geminiEasyAudioBlock && <><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "audioInput", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "cache", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "audioCache", comparedAudio)}</td></>}
                       {!geminiEasyAudioBlock && <td className="border-r p-2.5">{cell(geminiEasyUnifiedBlock, "cache", comparedUnified)}</td>}
                       <td className="p-2.5">{cell(geminiEasyAudioBlock || geminiEasyUnifiedBlock, "output", comparedAudio || comparedUnified)}</td>
                     </tr></tbody>
