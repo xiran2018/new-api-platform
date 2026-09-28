@@ -28,6 +28,10 @@ compatibility_workflow="$repo_root/.github/workflows/verify-upstream-compatibili
 platform_backend="$repo_root/extensions/backend/model_prices.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
 model_pricing_api="$repo_root/core/new-api/web/src/features/model-pricing/api.ts"
+tiered_billing_backend="$repo_root/core/new-api/setting/billing_setting/tiered_billing.go"
+realtime_price_helper="$repo_root/core/new-api/relay/helper/price.go"
+realtime_quota_service="$repo_root/core/new-api/service/quota.go"
+realtime_pricing_controller_test="$repo_root/core/new-api/controller/model_pricing_config_test.go"
 
 usage() {
   cat <<EOF
@@ -184,6 +188,12 @@ for key in image boolean volume video videoAudio videoMode imageVideo audioSecon
 do
   require_text "$usage_rule_builder" "$key" "a screenshot-derived visual billing template was lost during upstream synchronization"
 done
+require_text "$usage_rule_builder" "liveSessionSeconds" \
+  "the GPT-Live session-duration pricing template was lost during upstream synchronization"
+require_text "$template_registry" "liveSessionSeconds" \
+  "the GPT-Live session-duration template registry entry was lost"
+require_text "$template_registry_doc" '`liveSessionSeconds`' \
+  "the GPT-Live session-duration billing contract is no longer documented"
 
 require_text "$editor" "PLATFORM_BILLING_PRESET_GROUPS" "the platform expression preset seam was lost during upstream synchronization"
 require_text "$sheet" "Per-token (deprecated)" "the upstream per-token lifecycle label changed"
@@ -238,6 +248,18 @@ require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"vid_o"' "bac
 require_text "$repo_root/core/new-api/pkg/billingexpr/compile.go" '"aud_s"' "backend audio-duration pricing compile binding was lost"
 require_text "$repo_root/core/new-api/pkg/billingexpr/run.go" '"vid_o"' "backend video-output pricing binding was lost"
 require_text "$repo_root/core/new-api/service/tiered_settle.go" 'usedVars["aud_s"]' "audio-duration settlement mapping was lost"
+require_text "$tiered_billing_backend" '"live_session_seconds": {Type: "number", Unit: "second"}' \
+  "the GPT-Live server-observed usage schema was lost"
+require_text "$tiered_billing_backend" 'billingexpr.UsedUsageKeys(exprStr)["live_session_seconds"]' \
+  "generic expression validation can reject GPT-Live session-duration pricing again"
+require_text "$realtime_price_helper" 'requestInput.Usage["live_session_seconds"] = 60.0' \
+  "GPT-Live session-duration balance reservation was lost"
+require_text "$realtime_quota_service" 'time.Since(relayInfo.StartTime).Seconds()' \
+  "GPT-Live final billing no longer measures the server-observed connection duration"
+require_text "$realtime_quota_service" 'map[string]any{"live_session_seconds": liveSessionSeconds}' \
+  "GPT-Live final settlement no longer receives the measured connection duration"
+require_text "$realtime_pricing_controller_test" 'TestUpdateModelPricingConfigAcceptsRealtimeSessionDuration' \
+  "the real GPT-Live model-pricing save regression test was lost"
 require_text "$adapter" "renderPriceAddon={renderPriceAddon}" "the platform vendor comparison UI is no longer connected to the generic slot"
 require_text "$model_table" "include_channel_models: true" "model management no longer includes channel models"
 require_text "$platform_backend" "model.GetModelConnections()" "platform price management no longer includes enabled channel abilities"
