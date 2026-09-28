@@ -196,6 +196,50 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       '适用于已提供模态和缓存 usage 明细的普通多模态/实时兼容接口；Realtime WebSocket 当前仅保证已有文本、音频和缓存字段，图片或会话时长必须由上游 usage 提供后才会计费。',
   },
   {
+    key: 'gemini-flash-lite-unified-cache-pricing',
+    name: 'Gemini Flash Lite unified multimodal + cached input pricing',
+    group: 'multimodal',
+    purpose:
+      'Gemini Flash Lite 统一按 Token 计价：文本、图片、视频、音频共享输入单价，缓存读取单价独立，输出 Token 单价独立。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'vid', 'ai', 'cr', 'c'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '管理员友好的六字段价格表：文本输入、图片输入、视频输入、音频输入、Cached input、输出。',
+      managementDisplay:
+        '按输入、Cached input、输出分组显示非零价格；不显示表达式源码或内部变量名。',
+      publicDisplay:
+        '按 Gemini 的统一多模态输入、缓存读取和输出价格展示，隐藏表达式源码。',
+    },
+    runtime:
+      '使用 p、img、vid、ai、cr、c 的实际 Token usage 分别乘价后求和；输入和输出价格以每百万 Token 为单位。',
+    compatibility:
+      '默认值对应 Gemini Flash Lite 统一输入/输出和缓存读取价格，但所有数值都可编辑；截图中的缓存存储“每小时”价格不在此模板中伪造为 Token 价格。',
+  },
+  {
+    key: 'gemini-flash-lite-audio-cache-pricing',
+    name: 'Gemini Flash Lite shared text/image/video + separate audio/cache pricing',
+    group: 'multimodal',
+    purpose:
+      'Gemini Flash Lite 将文本、图片、视频作为一组输入价格，音频输入和音频 Cached input 单独计价，输出 Token 独立计价。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'vid', 'ai', 'cr', 'ai_cr', 'c'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '管理员友好的七字段价格表：文本/图片/视频输入、音频输入、文本/图片/视频 Cached input、音频 Cached input、输出。',
+      managementDisplay:
+        '按共享输入、音频输入、Cached input、输出分组显示非零价格；不显示表达式源码。',
+      publicDisplay:
+        '按共享文本/图片/视频输入、音频输入、缓存读取和输出价格展示，隐藏内部变量名。',
+    },
+    runtime:
+      '使用 p、img、vid、ai、cr、ai_cr、c 的实际 Token usage 分别乘价后求和；文本/图片/视频缓存可使用聚合 cr，音频缓存使用 ai_cr。',
+    compatibility:
+      '默认值对应 Gemini Flash Lite 文本/图片/视频与音频分离价格，但数值和字段均可编辑；截图中的缓存存储“每小时”价格需等待 core 提供独立存储时长 usage 后再启用。',
+  },
+  {
     key: 'image-modality-cache-pricing',
     name: 'Image model text/image/cache input + image output pricing',
     group: 'multimodal',

@@ -28,6 +28,47 @@
 10. 后来增加的 Omni、共享输入 + 思考/非思考输出等专用编辑器直接使用价格输入框，绕过了
     公共 `PricingFieldAddon`，因此这些模板没有原厂价格与差价提示。
 
+## 2026-09-28：新增模板保存为空、同步失败回归
+
+### 用户现象
+
+新增以下模板后，管理员填写价格并点击保存，接口可能返回 HTTP 200，但数据库中的
+`vendorPriceSpec.blocks[].baseExpression` 和 `note` 变成空字符串。随后重新打开编辑框时模板选择丢失，
+“一键同步原厂价格”也无法找到可同步的价格：
+
+- `Audio input + audio output token pricing`
+- `Audio input + text output token pricing`
+
+### 根因
+
+`TieredPricingEditor.applyPreset()` 会在同一个事件中连续调用：
+
+1. `onBillingExprChange(preset.expr)`；
+2. `onRequestRuleExprChange(rules)`。
+
+如果这两个回调分别通过 React 渲染闭包中的旧 `expression.billingExpr` 和旧
+`expression.requestRuleExpr` 组合表达式，第二次回调读取的仍是选择模板前的旧值（通常为空），
+就会把第一次写入的完整模板覆盖为空。接口保存成功只代表请求成功，不代表表达式内容正确。
+
+### 不可回退的实现约束
+
+1. 任何同时编辑计费表达式和请求规则的模板，必须通过
+   `createBillingExpressionDraft()` / `updateBillingExpressionDraft()` 或等价的共享草稿机制；
+   禁止在两个回调中直接引用渲染闭包里的旧 `expression`。
+2. 连续更新必须始终基于同一份最新草稿重新执行 `combineBillingExpr()`，不能让第二个回调覆盖第一个回调。
+3. 保存前必须读取最新编辑快照，而不是仅依赖可能尚未完成更新的 React state。
+4. 表达式模式下，若不是高级媒体规则且所有 block 的计费表达式都为空，必须阻止保存并提示错误，
+   不能返回“保存成功”。
+5. 新模板至少要有“选择模板 → 连续更新两个字段 → 保存 → 重新打开 → 同步到实际价格”的回归测试。
+6. 新模板不能只测试页面显示；必须确认最终写入 `billing_setting.billing_mode` 和
+   `billing_setting.billing_expr` 的内容与模板表达式一致。
+
+### 自动防回归测试
+
+`expression-draft.test.ts` 覆盖了两个音频模板以及“已有请求规则、替换计费表达式”的场景。
+`runtime-pricing-editor.test.ts` 覆盖已保存的两个模板可以同步到实际计费表达式且表达式不变。
+新增模板时，应将模板加入参数化测试，避免只修复某一个模板而遗漏其他模板。
+
 ## 厂商下拉菜单保存回归
 
 模型价格管理中的“厂商”是管理员可编辑字段。保存后，管理员列表会再次执行模型与渠道元数据同步；同步只能为新记录推导厂商，不能覆盖数据库中已经保存的厂商。

@@ -9,6 +9,10 @@ export type BillingExpressionDraft = {
   requestRuleExpr: string;
 };
 
+// A preset can update billingExpr and requestRuleExpr back-to-back in the
+// same event. Keep one mutable draft for both callbacks; using a value from a
+// render closure would let the second callback overwrite the first update
+// with an empty or stale expression.
 export function createBillingExpressionDraft(
   source: string,
 ): BillingExpressionDraft {

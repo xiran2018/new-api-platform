@@ -48,6 +48,16 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'tier("realtime modalities", p * 1 + cr * 0.5 + c * 1 + img * 1 + img_cr * 0.5 + img_o * 1 + ai * 1 + ai_cr * 0.5 + ao * 1)',
       },
       {
+        key: 'gemini-flash-lite-unified-cache-pricing',
+        label: 'Gemini Flash Lite unified multimodal + cached input pricing',
+        expr: 'tier("Gemini Flash Lite input/output", p * 0.30 + img * 0.30 + vid * 0.30 + ai * 0.30 + cr * 0.03 + c * 2.50)',
+      },
+      {
+        key: 'gemini-flash-lite-audio-cache-pricing',
+        label: 'Gemini Flash Lite shared text/image/video + separate audio/cache pricing',
+        expr: 'tier("Gemini Flash Lite audio split", p * 0.25 + img * 0.25 + vid * 0.25 + ai * 0.50 + cr * 0.025 + ai_cr * 0.05 + c * 1.50)',
+      },
+      {
         key: 'image-modality-cache-pricing',
         label: 'Image model text/image/cache input + image output pricing',
         expr: 'tier("image modalities", p * 1 + cr * 0.5 + img * 1 + img_cr * 0.5 + img_o * 1)',
