@@ -87,6 +87,8 @@
 | 稳定 key / 名称 | 功能和字段 | 编辑布局 | 管理端与客户端显示 | 真实结算和兼容要求 |
 | --- | --- | --- | --- | --- |
 | `text-image-audio-split`<br>Text/image/audio split pricing | `p/c/img/img_o/ai/ao` 分别计价 | 通用 Token 价格字段网格 | 竖向显示所有非零模态价格 | 所有模态 usage 分别乘价求和；前后端及 Go 映射必须保留 |
+| `realtime-modality-cache-pricing`<br>Realtime text/image/audio + cached input pricing | `p/cr/img/img_cr/ai/c/img_o/ao` 分别计价 | 八字段管理员友好价格表 | 输入和输出分组显示非零价格 | 已提供对应 usage 明细时分别结算；Realtime WebSocket 当前不凭空生成会话秒数或图片 usage |
+| `image-modality-cache-pricing`<br>Image model text/image/cache input + image output pricing | `p/cr/img/img_cr/img_o` 分别计价 | 五字段管理员友好价格表 | 输入价格在前、图片输出在后 | 按实际图像模型 usage 结算，不覆盖旧模板 |
 | `audio-image-input-text-audio-output`<br>Audio/image input + text/audio output pricing | 音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 可视化四字段编辑器；截图中的价格仅为示例，可自由修改 | 管理端和客户端均为单行横向表格，顺序为输入音频、输入图片、输出文本、输出音频 | 使用现有 `ai/img/c/ao` 变量真实结算；不需要新增 Go usage 变量；不显示原始表达式 |
 | `audio-image-input-text-audio-output-simple`<br>Simple audio/image input + text/audio output pricing | 管理员只填写音频输入 `ai`、图片输入 `img`、文本输出 `c`、音频输出 `ao` | 直接显示四个价格输入框，不打开表达式条件菜单 | 管理端和客户端均为单行四列表格，输入在前、输出在后 | 与旧模板使用相同 `ai/img/c/ao` 真实结算语义，仅提供管理员友好的编辑入口 |
 | `text-audio-input-text-audio-output-simple`<br>Simple text/audio input + text/audio output pricing | 管理员只填写文本输入 `p`、音频输入 `ai`、文本输出 `c`、音频输出 `ao` | 直接显示四个价格输入框，不打开表达式条件菜单 | 管理端和客户端均为单行四列表格，输入在前、输出在后 | 使用现有 `p/ai/c/ao` 变量分别按实际 Token 数量结算；每百万 Token 单位；不覆盖旧模板 |
@@ -125,6 +127,7 @@
 | `videoMode`<br>Video output mode and duration | `mode` | `seconds` / 秒、分钟、小时 | 标准/专业等模式的时长价格 | `wan-std` 只是示例，允许新增任意模式 |
 | `imageVideo`<br>Input image and output video | `mode`、`resolution` | `input_images` / 张；`seconds` / 时长 | 输入图片与输出视频混合计价 | 界面和显示必须明确输入/输出方向 |
 | `audioSeconds`<br>Audio duration pricing | 无 | `seconds` / 秒、分钟、小时 | 音频、音乐、语音时长价 | 单位紧邻“音频时长计费”显示 |
+| `liveSessionSeconds`<br>GPT-Live session connection duration pricing | 无 | `live_session_seconds` / 秒、分钟、小时 | GPT-Live WebSocket 会话连接时长价 | 仅用于 OpenAI Realtime；服务端以 `time.Since(StartTime).Seconds()` 注入真实小数秒，不向上取整，不复用上传音频 `aud_s` 或媒体任务 `seconds`；连接前 60 秒只作余额预留，断开时按真实时长结算 |
 | `ttsCharacters`<br>Text-to-speech per 10K characters | 无 | `tts_input_characters`、`tts_output_characters` / 字符、千字符、万字符 | 同档录入 TTS 输入和输出字符价；默认档位明确为“按万字符计费” | 输出允许为 0 或非零；客户端不显示内部变量名；不得产生重复音频输入价格 |
 | `voiceCount`<br>Voice enrollment count | 无 | `count` / 音色、个 | 音色注册或声音复刻数量价 | 客户端使用业务名称“音色数量”，不显示 `count` |
 | `taskMatrix`<br>Task type and output specification matrix | `task_type`、`output_spec` | `request` / 次 | 任务类型 × 输出规格组合矩阵 | 优先使用 usage schema 枚举；默认 3D 组合只是示例 |

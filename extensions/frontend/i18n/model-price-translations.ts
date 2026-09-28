@@ -84,6 +84,10 @@ const resources: Record<string, Record<string, string>> = {
       "纯文本请求使用纯文本输出价格；请求包含图片、视频或音频输入时使用多模态文本输出价格；生成音频时不收取文本输出费用，仅按音频输出计费。",
     "Uploaded audio transcription per second": "上传音频转写按秒计费",
     "Generated audio/media task duration pricing": "生成音频/媒体任务时长计费",
+    "GPT-Live session connection duration pricing": "GPT-Live 会话连接时长计费",
+    "GPT-Live session connection duration": "GPT-Live 会话连接时长",
+    "Prices GPT-Live by the exact WebSocket connection duration. The final charge uses fractional seconds and is not rounded up to a whole minute.":
+      "按照 GPT-Live WebSocket 的实际连接时长逐秒计费；最终结算保留小数秒，不会向上取整到整分钟。",
     "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
       "适用于能够提供 seconds 时长的生成音频或媒体任务。上传音频的语音识别或转写，请改用“上传音频转写按秒计费”。",
     "Audio duration": "音频时长",
@@ -226,6 +230,8 @@ const resources: Record<string, Record<string, string>> = {
     Search: "搜尋",
     "Uploaded audio transcription per second": "上傳音訊轉錄按秒計費",
     "Generated audio/media task duration pricing": "生成音訊/媒體任務時長計費",
+    "GPT-Live session connection duration pricing": "GPT-Live 工作階段連線時長計費",
+    "GPT-Live session connection duration": "GPT-Live 工作階段連線時長",
     "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
       "適用於能提供 seconds 時長的生成音訊或媒體任務。上傳音訊的語音識別或轉錄，請改用「上傳音訊轉錄按秒計費」。",
   },
@@ -252,6 +258,10 @@ const resources: Record<string, Record<string, string>> = {
     "Thinking mode": "Thinking mode",
     "Uploaded audio transcription per second": "Uploaded audio transcription per second",
     "Generated audio/media task duration pricing": "Generated audio/media task duration pricing",
+    "GPT-Live session connection duration pricing": "GPT-Live session connection duration pricing",
+    "GPT-Live session connection duration": "GPT-Live session connection duration",
+    "Prices GPT-Live by the exact WebSocket connection duration. The final charge uses fractional seconds and is not rounded up to a whole minute.":
+      "Prices GPT-Live by the exact WebSocket connection duration. The final charge uses fractional seconds and is not rounded up to a whole minute.",
     "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.":
       "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.",
   },

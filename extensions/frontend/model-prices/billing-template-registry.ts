@@ -30,7 +30,7 @@ export type AdvancedMediaTemplateContract = {
   key: string
   name: string
   purpose: string
-  execution: 'request-or-task'
+  execution: 'request-only' | 'request-or-task'
   conditionFields: readonly string[]
   chargeMeters: readonly string[]
   units: readonly string[]
@@ -162,6 +162,50 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
     runtime: '按各模态实际 usage 数量分别乘以对应单价后求和。',
     compatibility:
       '图片输出 img_o、音频输入 ai、音频输出 ao 的前后端变量和结算映射必须保留。',
+  },
+  {
+    key: 'realtime-modality-cache-pricing',
+    name: 'Realtime text/image/audio + cached input pricing',
+    group: 'multimodal',
+    purpose:
+      '面向实时多模态模型，分别设置文本、图片、音频输入、缓存读取、文本/图片/音频输出价格。',
+    conditionFields: [],
+    priceFields: ['p', 'cr', 'img', 'img_cr', 'ai', 'c', 'img_o', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '管理员友好的八字段价格表：文本输入、缓存输入、图片输入、图片缓存、音频输入、文本输出、图片输出、音频输出。',
+      managementDisplay:
+        '输入价格和输出价格分组显示；零价字段隐藏，但保存的字段仍保持兼容。',
+      publicDisplay:
+        '按输入/输出分组显示非零价格，不显示表达式源码、变量名或内部条件。',
+    },
+    runtime:
+      '使用 p、cr、img、img_cr、ai、c、img_o、ao 的实际 Token usage 分别乘价后求和；表达式引用 img_cr 时，图片缓存 Token 会从普通图片输入中拆出，避免重复计费。',
+    compatibility:
+      '适用于已提供模态和缓存 usage 明细的普通多模态/实时兼容接口；Realtime WebSocket 当前仅保证已有文本、音频和缓存字段，图片或会话时长必须由上游 usage 提供后才会计费。',
+  },
+  {
+    key: 'image-modality-cache-pricing',
+    name: 'Image model text/image/cache input + image output pricing',
+    group: 'multimodal',
+    purpose:
+      '面向图像模型，分别设置文本输入、图片输入、文本/图片缓存输入和图片输出价格。',
+    conditionFields: [],
+    priceFields: ['p', 'cr', 'img', 'img_cr', 'img_o'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor:
+        '管理员友好五字段价格表：文本输入、缓存输入、图片输入、图片缓存、图片输出。',
+      managementDisplay:
+        '输入价格在前、图片输出价格在后；零价字段不显示。',
+      publicDisplay:
+        '按图像模型的输入/输出分组展示具体价格，不显示表达式源码。',
+    },
+    runtime:
+      '使用 p、cr、img、img_cr、img_o 的实际 usage 分别乘价后求和；没有图片缓存明细时按普通缓存字段结算。',
+    compatibility:
+      '不会覆盖已有 text-image-audio-split 模板；旧模型价格仍按原表达式执行，新模板只在管理员选择后生效。',
   },
   {
     key: 'audio-image-input-text-audio-output',
@@ -556,6 +600,25 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     },
     runtime: '按实际 seconds 和 divisor 结算。',
     compatibility: '必须确认请求或任务适配器会提供 seconds；上传音频 ASR/转写应改用 aud_s 模板。单位必须紧邻音频时长计费字段显示。',
+  },
+  {
+    key: 'liveSessionSeconds',
+    name: 'GPT-Live session connection duration pricing',
+    purpose: 'GPT-Live WebSocket 会话按照实际连接持续时间逐秒计费。',
+    execution: 'request-only',
+    conditionFields: [],
+    chargeMeters: ['live_session_seconds'],
+    units: ['秒', '分钟', '小时'],
+    defaultTiers: '一个无条件会话时长档；默认示例 0.05/分钟，可编辑。',
+    layout: {
+      editor: '单档收费项，管理员只需选择秒/分钟/小时并填写价格。',
+      managementDisplay: '显示 GPT-Live 会话连接时长单价，不暴露内部 meter。',
+      publicDisplay: '显示按秒/分钟/小时的会话连接价格。',
+    },
+    runtime:
+      '仅 OpenAI Realtime WebSocket 由服务端注入 live_session_seconds；断开时按 time.Since(StartTime).Seconds() 的小数秒精确结算。',
+    compatibility:
+      '不得复用 aud_s 或媒体任务 seconds；不得向上取整到整分钟；普通 HTTP 请求不能通过请求体伪造此用量。',
   },
   {
     key: 'ttsCharacters',

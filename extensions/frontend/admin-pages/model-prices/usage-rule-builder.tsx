@@ -19,8 +19,8 @@ import {
 
 export { usageRuleSetExpression } from "../../model-prices/usage-rule-expression";
 
-export type TemplateKey = "image" | "outputImageCount" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
-export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
+export type TemplateKey = "image" | "outputImageCount" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
+export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
 
 const requestFields = [
   "resolution",
@@ -33,6 +33,7 @@ const requestFields = [
   "output_images",
   "image_count",
   "seconds",
+  "live_session_seconds",
   "characters",
   "tts_input_characters",
   "tts_output_characters",
@@ -48,6 +49,7 @@ const knownUsageMeters = [
   "output_images",
   "image_count",
   "seconds",
+  "live_session_seconds",
   "characters",
   "tts_input_characters",
   "tts_output_characters",
@@ -66,6 +68,7 @@ const fieldLabels: Record<string, string> = {
   output_images: "Output image count",
   image_count: "Generated output image count",
   seconds: "Output video duration",
+  live_session_seconds: "GPT-Live session connection duration",
   characters: "Character count",
   tts_input_characters: "TTS input price",
   tts_output_characters: "TTS output price",
@@ -155,7 +158,7 @@ const charge = (meter = "request", unit = "次", price = 0): UsagePriceCharge =>
 function defaultUnit(meter: string, usageSchema?: BillingUsageSchema) {
   if (meter === "request") return "次";
   const unit = usageSchema?.[meter]?.unit;
-  if (unit === "second" || meter === "seconds") return "秒";
+  if (unit === "second" || meter === "seconds" || meter === "live_session_seconds") return "秒";
   if (unit === "token") return "百万 Token";
   if (unit === "credit") return "计费点";
   if (meter.includes("image")) return "张";
@@ -183,7 +186,7 @@ function unitDivisor(unit: string) {
 
 function unitOptions(meter: string, usageSchema?: BillingUsageSchema) {
   if (meter === "request") return ["次"];
-  if (meter === "seconds" || usageSchema?.[meter]?.unit === "second") return ["秒", "分钟", "小时"];
+  if (meter === "seconds" || meter === "live_session_seconds" || usageSchema?.[meter]?.unit === "second") return ["秒", "分钟", "小时"];
   if (["characters", "tts_input_characters", "tts_output_characters"].includes(meter)) return ["字符", "千字符", "万字符"];
   if (meter.includes("image")) return ["张"];
   if (usageSchema?.[meter]?.unit === "token") return ["百万 Token"];
@@ -273,6 +276,7 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
   if (key === "videoMode") return wrap([rule("Standard mode", [{ field: "mode", operator: "eq", value: "wan-std" }], [charge("seconds", "秒")]), rule("Professional mode", [], [charge("seconds", "秒")])]);
   if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("其他视频分辨率", [], [charge("seconds", "秒")])]);
   if (key === "audioSeconds") return wrap([rule("Audio duration", [], [charge("seconds", "秒")])]);
+  if (key === "liveSessionSeconds") return wrap([rule("GPT-Live session connection duration", [], [charge("live_session_seconds", "分钟", 0.05)])]);
   if (key === "ttsCharacters") {
     return wrap([
       rule("按万字符计费", [], [
@@ -300,6 +304,7 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   const meters = new Set(rules.flatMap((item) => item.charges.map((part) => part.meter)));
   if (meters.has("image_count") && !fields.has("image_count")) return "outputImageCount";
   if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
+  if (meters.has("live_session_seconds")) return "liveSessionSeconds";
   if (fields.has("task_type") || fields.has("output_spec")) return "taskMatrix";
   if (meters.has("count") && !fields.has("output_images")) return "voiceCount";
   if (meters.has("seconds") && !fields.has("resolution") && !fields.has("mode")) return "audioSeconds";
@@ -435,6 +440,7 @@ export function UsageRuleBuilder({
     videoMode: "Prices generated video by output mode and duration.",
     imageVideo: "Prices uploaded images and generated video separately.",
     audioSeconds: "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.",
+    liveSessionSeconds: "Prices GPT-Live by the exact WebSocket connection duration. The final charge uses fractional seconds and is not rounded up to a whole minute.",
     ttsCharacters: "Prices text-to-speech input per ten thousand Unicode characters; generated audio output is free.",
     voiceCount: "Prices voice enrollment by the number of voices.",
     taskMatrix: "Prices combinations of task type and output specification.",
@@ -460,7 +466,8 @@ export function UsageRuleBuilder({
     [execution, fields, usageSchema],
   );
   const templateSupported = (key: TemplateKey) => execution !== "task"
-    || unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema).length === 0;
+    || (key !== "liveSessionSeconds"
+      && unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema).length === 0);
   const unsupportedKeys = unsupportedTaskUsageKeys(
     { version: 1, execution, rules },
     usageSchema,
@@ -511,6 +518,7 @@ export function UsageRuleBuilder({
             <option value="videoMode" disabled={!templateSupported("videoMode")}>{t("Video output mode and duration")}</option>
             <option value="imageVideo" disabled={!templateSupported("imageVideo")}>{t("Input image and output video")}</option>
             <option value="audioSeconds" disabled={!templateSupported("audioSeconds")}>{t("Generated audio/media task duration pricing")}</option>
+            <option value="liveSessionSeconds" disabled={!templateSupported("liveSessionSeconds")}>{t("GPT-Live session connection duration pricing")}</option>
             <option value="ttsCharacters" disabled={!templateSupported("ttsCharacters")}>{t("Text-to-speech per 10K characters")}</option>
             <option value="voiceCount" disabled={!templateSupported("voiceCount")}>{t("Voice enrollment count")}</option>
             <option value="taskMatrix" disabled={!templateSupported("taskMatrix")}>{t("Task type and output specification matrix")}</option>
@@ -568,7 +576,7 @@ export function UsageRuleBuilder({
                 const actualPrice = part.price * priceMultiplier;
                 const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
                 const fractionDigits = priceFractionDigits(
-                  templateKey === "audioSeconds" && part.meter === "seconds",
+                  (templateKey === "audioSeconds" && part.meter === "seconds") || part.meter === "live_session_seconds",
                 );
                 return (
                 <div className="grid gap-2 sm:grid-cols-[minmax(130px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_36px]" key={chargeIndex}>

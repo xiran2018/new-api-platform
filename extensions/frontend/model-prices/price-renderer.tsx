@@ -462,6 +462,7 @@ function UsageRuleSetRenderer({
       image_count: "Generated image quantity",
       input_images: "Input image count",
       seconds: "Output video duration",
+      live_session_seconds: "GPT-Live session connection duration",
       characters: "Character count",
       tts_input_characters: "TTS input price",
       tts_output_characters: "TTS output price",
@@ -478,6 +479,7 @@ function UsageRuleSetRenderer({
       output_images: "Output image count",
       image_count: "Output image count",
       seconds: "Output video duration",
+      live_session_seconds: "GPT-Live session connection duration",
       characters: "Character count",
       tts_input_characters: "TTS input price",
       tts_output_characters: "TTS output price",
@@ -494,7 +496,8 @@ function UsageRuleSetRenderer({
               charge.price * factor,
               currency,
               priceFractionDigits(
-                audioDurationRuleSet && charge.meter === "seconds",
+                (audioDurationRuleSet && charge.meter === "seconds")
+                  || charge.meter === "live_session_seconds",
               ),
             )}</b>
             <span className="ml-1 text-muted-foreground">/ {charge.unit}</span>

@@ -43,6 +43,16 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'tier("multimodal", p * 1 + c * 4 + img * 1 + img_o * 8 + ai * 6 + ao * 24)',
       },
       {
+        key: 'realtime-modality-cache-pricing',
+        label: 'Realtime text/image/audio + cached input pricing',
+        expr: 'tier("realtime modalities", p * 1 + cr * 0.5 + img * 1 + img_cr * 0.5 + ai * 1 + c * 1 + img_o * 1 + ao * 1)',
+      },
+      {
+        key: 'image-modality-cache-pricing',
+        label: 'Image model text/image/cache input + image output pricing',
+        expr: 'tier("image modalities", p * 1 + cr * 0.5 + img * 1 + img_cr * 0.5 + img_o * 1)',
+      },
+      {
         key: 'audio-image-input-text-audio-output',
         label: 'Audio/image input + text/audio output pricing',
         expr: 'tier("audio/image input + text/audio output", ai * 1 + img * 1 + c * 1 + ao * 1)',

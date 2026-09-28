@@ -137,6 +137,9 @@ describe('screenshot-derived billing templates', () => {
   it('labels seconds as audio duration only in the audio-duration template', () => {
     expect(usageFieldLabel('seconds', 'audioSeconds')).toBe('Audio duration')
     expect(usageFieldLabel('seconds', 'video')).toBe('Output video duration')
+    expect(
+      usageFieldLabel('live_session_seconds', 'liveSessionSeconds')
+    ).toBe('GPT-Live session connection duration')
   })
   it('updates generated media tier names without rewriting custom labels or prices', () => {
     const original = createUsageRuleTemplate('volume', 'request').rules
@@ -234,6 +237,7 @@ describe('screenshot-derived billing templates', () => {
             input_images: 1,
             output_images: 1,
             seconds: 1,
+            live_session_seconds: 30,
             characters: 1,
             tts_input_characters: 1,
             tts_output_characters: 1,
@@ -313,6 +317,28 @@ describe('screenshot-derived billing templates', () => {
     const expression = usageRuleSetExpression(rules)
     expect(compileBillingExpression(expression)).toMatchObject({ status: 'ready' })
     expect(expression).toBe('tier("按输出图片张数", u("image_count") * 0.2)')
+  })
+
+  it('charges GPT-Live by exact connection seconds with a per-minute price', () => {
+    const rules = createUsageRuleTemplate('liveSessionSeconds', 'request')
+    expect(rules.rules[0].charges).toEqual([
+      {
+        meter: 'live_session_seconds',
+        unit: '分钟',
+        price: 0.05,
+      },
+    ])
+
+    const expression = usageRuleSetExpression(rules)
+    expect(expression).toContain('u("live_session_seconds")')
+    const result = evaluateBillingExpression(expression, {
+      usage: { live_session_seconds: 30 },
+    })
+    expect(result).toMatchObject({
+      status: 'success',
+      matchedTier: 'GPT-Live session connection duration',
+    })
+    expect(result.status === 'success' ? result.cost : 0).toBeCloseTo(25_000, 8)
   })
 
   it('charges TTS input by ten-thousand characters and keeps zero output free', () => {
