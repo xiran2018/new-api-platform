@@ -127,7 +127,7 @@
 | `videoMode`<br>Video output mode and duration | `mode` | `seconds` / 秒、分钟、小时 | 标准/专业等模式的时长价格 | `wan-std` 只是示例，允许新增任意模式 |
 | `imageVideo`<br>Input image and output video | `mode`、`resolution` | `input_images` / 张；`seconds` / 时长 | 输入图片与输出视频混合计价 | 界面和显示必须明确输入/输出方向 |
 | `audioSeconds`<br>Audio duration pricing | 无 | `seconds` / 秒、分钟、小时 | 音频、音乐、语音时长价 | 单位紧邻“音频时长计费”显示 |
-| `liveSessionSeconds`<br>GPT-Live session connection duration pricing | 无 | `live_session_seconds` / 秒、分钟、小时 | GPT-Live WebSocket 会话连接时长价 | 仅用于 OpenAI Realtime；服务端以 `time.Since(StartTime).Seconds()` 注入真实小数秒，不向上取整，不复用上传音频 `aud_s` 或媒体任务 `seconds`；连接前 60 秒只作余额预留，断开时按真实时长结算 |
+| `liveSessionSeconds`<br>GPT-Live session connection duration pricing | 无 | `live_session_seconds` / 秒、分钟、小时 | GPT-Live WebSocket 会话连接时长价 | 仅用于 OpenAI Realtime；该字段属于服务端同步请求 usage 白名单，不要求 task plugin usage schema；服务端以 `time.Since(StartTime).Seconds()` 注入真实小数秒，不向上取整，不复用上传音频 `aud_s` 或媒体任务 `seconds`；连接前 60 秒只作余额预留，断开时按真实时长结算 |
 | `ttsCharacters`<br>Text-to-speech per 10K characters | 无 | `tts_input_characters`、`tts_output_characters` / 字符、千字符、万字符 | 同档录入 TTS 输入和输出字符价；默认档位明确为“按万字符计费” | 输出允许为 0 或非零；客户端不显示内部变量名；不得产生重复音频输入价格 |
 | `voiceCount`<br>Voice enrollment count | 无 | `count` / 音色、个 | 音色注册或声音复刻数量价 | 客户端使用业务名称“音色数量”，不显示 `count` |
 | `taskMatrix`<br>Task type and output specification matrix | `task_type`、`output_spec` | `request` / 次 | 任务类型 × 输出规格组合矩阵 | 优先使用 usage schema 枚举；默认 3D 组合只是示例 |
