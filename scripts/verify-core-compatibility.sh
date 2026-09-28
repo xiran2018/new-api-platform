@@ -208,6 +208,12 @@ require_text "$adapter" "additionalPricingTab={{" "advanced media pricing is no 
 require_text "$adapter" "previewModelPricingConversion" "legacy platform prices are no longer migrated through the upstream conversion API"
 require_text "$adapter" "applyPricingDiscount" "platform discounts are no longer applied through the validated pricing helper"
 require_text "$adapter" "serializeVisualBillingDocument" "expression discounts may produce invalid fixed-price expressions"
+require_text "$adapter" "vendorEditorDataForCurrentDraft" \
+  "current visual templates can no longer synchronize structured vendor prices"
+require_text "$runtime_pricing_test" "synchronizes structured audio-input/audio-output prices into the current expression template" \
+  "the audio input/output vendor synchronization regression test was lost"
+require_text "$runtime_pricing_test" "synchronizes structured audio-input/text-output prices into the current expression template" \
+  "the audio input/text-output vendor synchronization regression test was lost"
 require_text "$sheet" "renderPriceAddon" "the generic pricing-field extension slot was lost from the upstream editor"
 require_text "$sheet" "PricingFieldAddonProvider" "the generic pricing-field provider was lost from the upstream editor"
 require_text "$addon_context" "createContext" "the isolated pricing-field extension context is missing"

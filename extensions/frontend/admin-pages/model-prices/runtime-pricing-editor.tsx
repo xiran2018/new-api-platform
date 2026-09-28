@@ -20,6 +20,7 @@ import type { ExpressionNode } from "@/features/pricing/lib/billing-expression/t
 import {
   parseVisualBillingDocument,
   serializeVisualBillingDocument,
+  type VisualPrice,
   type VisualPricingNode,
 } from "@/features/pricing/lib/billing-expression/visual";
 import type { ModelRatioData } from "@/features/system-settings/models/model-pricing-core";
@@ -379,6 +380,121 @@ export function vendorEditorData(modelKey: string, spec?: PriceSpec): ModelRatio
         ? String(price.audioOutput / price.audioInput)
         : undefined,
   };
+}
+
+/**
+ * Keep the pricing mode/template currently selected by the administrator and
+ * copy the matching structured vendor prices into that visual expression.
+ *
+ * This matters for modality-only prices (for example ai/ao or ai/c): they do
+ * not have a legacy `input` price, so vendorEditorData cannot represent them
+ * as the deprecated per-token form. Resolving each visual field also makes
+ * future expression presets work without adding another mode-specific branch.
+ */
+export function vendorEditorDataForCurrentDraft(
+  modelKey: string,
+  spec: PriceSpec | undefined,
+  current: ModelRatioData,
+): ModelRatioData | null {
+  if (current.billingMode === "tiered_expr" && current.billingExpr) {
+    const document = parseVisualBillingDocument(current.billingExpr);
+    if (document) {
+      let expected = 0;
+      let matched = 0;
+      const synchronizePrices = (
+        prices: VisualPrice[],
+        scope?: string,
+        scopeId?: string,
+      ) => prices.map((price) => {
+        expected += 1;
+        const value = vendorComparisonValue(
+          spec,
+          price.variable,
+          scope,
+          scopeId,
+        );
+        if (value == null) return price;
+        matched += 1;
+        return { ...price, value: String(value) };
+      });
+      const synchronizeNode = (
+        node: VisualPricingNode,
+        prefix = "",
+      ): VisualPricingNode => {
+        if (node.kind === "tier") {
+          expected += node.billingUnit === "request" ? 1 : 0;
+          const fixed = node.billingUnit === "request"
+            ? vendorComparisonValue(spec, "fixed", node.label, prefix || "1")
+            : undefined;
+          if (fixed != null) matched += 1;
+          return {
+            ...node,
+            fixedPrice: fixed == null ? node.fixedPrice : String(fixed),
+            sharedPrices: node.sharedPrices
+              ? synchronizePrices(node.sharedPrices, node.label, prefix || "1")
+              : node.sharedPrices,
+            prices: synchronizePrices(node.prices, node.label, prefix || "1"),
+          };
+        }
+
+        // Use the same stable rule paths as vendorComparisonValue's visual
+        // candidate collector: each right-associated branch is 1, 2, 3...
+        const synchronizeRule = (
+          rule: VisualPricingNode,
+          scopeId: string,
+        ) => rule.kind === "tier"
+          ? synchronizeNode(rule, scopeId)
+          : synchronizeNode(rule, `${scopeId}.`);
+        const rules: VisualPricingNode[] = [];
+        let cursor: VisualPricingNode = node;
+        while (cursor.kind === "branch") {
+          rules.push(cursor);
+          cursor = cursor.no;
+        }
+        rules.push(cursor);
+        let rebuilt = synchronizeRule(
+          rules[rules.length - 1],
+          `${prefix}${rules.length}`,
+        );
+        for (let index = rules.length - 2; index >= 0; index -= 1) {
+          const branch = rules[index];
+          if (branch.kind !== "branch") continue;
+          rebuilt = {
+            ...branch,
+            yes: synchronizeRule(branch.yes, `${prefix}${index + 1}`),
+            no: rebuilt,
+          };
+        }
+        return rebuilt;
+      };
+
+      const synchronized = {
+        ...document,
+        shared: document.shared
+          ? {
+              ...document.shared,
+              prices: synchronizePrices(document.shared.prices, undefined, "shared"),
+            }
+          : document.shared,
+        root: synchronizeNode(document.root),
+      };
+      // Do not report a successful synchronization while silently retaining
+      // draft values for fields that the vendor source does not provide.
+      if (expected > 0 && matched === expected) {
+        const serialized = serializeVisualBillingDocument(synchronized);
+        if (serialized.ok) {
+          return {
+            ...current,
+            name: modelKey,
+            billingMode: "tiered_expr",
+            billingExpr: serialized.source,
+          };
+        }
+      }
+    }
+  }
+
+  return vendorEditorData(modelKey, spec);
 }
 
 /**
@@ -821,7 +937,11 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
     const current = await ref.current?.commitDraft();
     if (!current) return;
     const vendorRuleSet = matchingUsageRuleSet(vendorPriceSpec);
-    const vendor = vendorEditorData(modelKey, vendorPriceSpec);
+    const vendor = vendorEditorDataForCurrentDraft(
+      modelKey,
+      vendorPriceSpec,
+      current,
+    );
     if (!vendor) {
       toast.error(t("No vendor price is available for the selected pricing mode"));
       return;

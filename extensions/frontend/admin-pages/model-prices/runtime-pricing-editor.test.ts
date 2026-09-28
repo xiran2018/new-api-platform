@@ -7,6 +7,7 @@ import {
   vendorComparisonSpec,
   vendorComparisonValue,
   vendorEditorData,
+  vendorEditorDataForCurrentDraft,
 } from "./runtime-pricing-editor";
 import type { PriceSpec, UsageRuleSet } from "../../model-prices/types";
 
@@ -287,6 +288,67 @@ describe("vendorEditorData", () => {
   });
 });
 
+describe("vendorEditorDataForCurrentDraft", () => {
+  it("synchronizes structured audio-input/audio-output prices into the current expression template", () => {
+    const result = vendorEditorDataForCurrentDraft(
+      "gemini-live",
+      {
+        mode: "expression",
+        pricingCurrency: "USD",
+        blocks: [{ audioInput: 3.5, audioOutput: 21, unit: "1M tokens" }],
+      },
+      {
+        name: "gemini-live",
+        billingMode: "tiered_expr",
+        billingExpr:
+          'tier("audio input + audio output token pricing", ai * 1 + ao * 1)',
+      },
+    );
+
+    expect(result?.billingMode).toBe("tiered_expr");
+    expect(result?.billingExpr).toContain("ai * 3.5");
+    expect(result?.billingExpr).toContain("ao * 21");
+  });
+
+  it("synchronizes structured audio-input/text-output prices into the current expression template", () => {
+    const result = vendorEditorDataForCurrentDraft(
+      "audio-text-model",
+      {
+        mode: "expression",
+        blocks: [{ audioInput: 2, output: 12, unit: "1M tokens" }],
+      },
+      {
+        name: "audio-text-model",
+        billingMode: "tiered_expr",
+        billingExpr:
+          'tier("audio input + text output token pricing", ai * 1 + c * 1)',
+      },
+    );
+
+    expect(result?.billingMode).toBe("tiered_expr");
+    expect(result?.billingExpr).toContain("ai * 2");
+    expect(result?.billingExpr).toContain("c * 12");
+  });
+
+  it("does not partially synchronize a current template with missing vendor fields", () => {
+    const result = vendorEditorDataForCurrentDraft(
+      "incomplete-audio-model",
+      {
+        mode: "expression",
+        blocks: [{ audioInput: 2, unit: "1M tokens" }],
+      },
+      {
+        name: "incomplete-audio-model",
+        billingMode: "tiered_expr",
+        billingExpr:
+          'tier("audio input + audio output token pricing", ai * 1 + ao * 1)',
+      },
+    );
+
+    expect(result).toBeNull();
+  });
+});
+
 describe("vendorComparisonValue", () => {
   it("treats a source URL note as metadata and falls back to structured prices", () => {
     const spec: PriceSpec = {
@@ -442,6 +504,8 @@ describe("vendorComparisonValue", () => {
         const values = [undefined, ...scopes].flatMap((scope) => [
           vendorComparisonValue(spec, "p", scope),
           vendorComparisonValue(spec, "c", scope),
+          vendorComparisonValue(spec, "ai", scope),
+          vendorComparisonValue(spec, "ao", scope),
           vendorComparisonValue(spec, "aud_s", scope),
           vendorComparisonValue(spec, "fixed", scope),
         ]);
