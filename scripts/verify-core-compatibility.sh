@@ -17,6 +17,7 @@ usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usag
 runtime_pricing_test="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.test.ts"
 usage_rule_test="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.test.ts"
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
+renderer="$repo_root/extensions/frontend/model-prices/price-renderer.tsx"
 renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.tsx"
 capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
 template_registry="$repo_root/extensions/frontend/model-prices/billing-template-registry.ts"
@@ -110,6 +111,20 @@ while IFS= read -r key; do
 done < <(sed -n "s/^[[:space:]]*key: '\([^']*\)'.*/\1/p" "$template_registry" | sort -u)
 require_text "$renderer_test" "EXPRESSION_TEMPLATE_REGISTRY" \
   "expression presets are no longer checked against the billing-template registry"
+require_text "$renderer_test" "renders Gemini easy templates with modality-specific horizontal headers" \
+  "Gemini easy-template modality headers and audio cached-input rendering regression coverage was lost"
+require_text "$renderer_test" "Audio cached input" \
+  "Gemini audio cached-input display regression coverage was lost"
+require_text "$renderer_test" "Text/image/video/audio input" \
+  "Gemini unified-input modality-specific display regression coverage was lost"
+require_text "$renderer_test" "Text/image/video input" \
+  "Gemini shared-input modality-specific display regression coverage was lost"
+require_text "$renderer" "audioCache" \
+  "Gemini audio cached-input prices are no longer rendered from the ai_cr/audioCache field"
+require_text "$renderer" "Text/image/video/audio input" \
+  "Gemini unified-input prices no longer show their concrete modalities"
+require_text "$renderer" "Text/image/video input" \
+  "Gemini shared-input prices no longer show their concrete modalities"
 require_text "$usage_rule_test" \
   "ADVANCED_MEDIA_TEMPLATE_REGISTRY" \
   "advanced-media templates are no longer checked against the billing-template registry"

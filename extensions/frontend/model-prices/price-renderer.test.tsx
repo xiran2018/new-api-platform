@@ -560,12 +560,13 @@ describe('expression price display', () => {
     render(
       <PriceRenderer
         tableLayout
+        displayCurrency='USD'
         timezone='Asia/Shanghai'
         spec={{
           mode: 'expression',
           blocks: [
             { label: 'Gemini Flash Lite easy unified input/output', input: 1, cache: 0.1, output: 2, unit: '1M tokens' },
-            { label: 'Gemini Flash Lite easy audio split', input: 1, audioInput: 2, cache: 0.1, audioCache: 0.2, output: 3, unit: '1M tokens' },
+            { label: 'Gemini Flash Lite easy audio split', input: 1, audioInput: 2, cache: 0.1, createCache: 9.9, audioCache: 0.2, output: 3, unit: '1M tokens' },
           ],
         }}
       />,
@@ -574,6 +575,8 @@ describe('expression price display', () => {
     expect(screen.getByText('Audio cached input')).toBeInTheDocument()
     expect(screen.queryByText('Unified input')).not.toBeInTheDocument()
     expect(screen.queryByText('Cache write price')).not.toBeInTheDocument()
+    expect(screen.getByText('$0.200')).toBeInTheDocument()
+    expect(screen.queryByText('$9.900')).not.toBeInTheDocument()
     const unified = render(
       <PriceRenderer
         tableLayout
