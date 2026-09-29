@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   activeUsageRuleSetForDraft,
   applyPricingDiscount,
+  resolveVendorPriceSync,
   runtimeDisplaySpec,
   vendorComparisonSpec,
   vendorComparisonValue,
@@ -18,7 +19,10 @@ import {
   parseVisualBillingDocument,
   type VisualPricingNode,
 } from "@/features/pricing/lib/billing-expression/visual";
-import { matchingUsageRuleSet } from "../../model-prices/usage-rule-expression";
+import {
+  matchingUsageRuleSet,
+  usageRuleSetExpression,
+} from "../../model-prices/usage-rule-expression";
 
 function visualTierLabels(node: VisualPricingNode): string[] {
   return node.kind === "tier"
@@ -70,6 +74,25 @@ const advancedRuleSet: UsageRuleSet = {
       label: "Default image",
       conditions: [],
       charges: [{ meter: "image_count", unit: "张", price: 0.5 }],
+    },
+  ],
+};
+
+const videoRuleSet: UsageRuleSet = {
+  version: 1,
+  execution: "task",
+  rules: [
+    {
+      id: "720p",
+      label: "720P",
+      conditions: [{ field: "resolution", operator: "eq", value: "720P" }],
+      charges: [{ meter: "seconds", unit: "秒", price: 0.04, divisor: 1 }],
+    },
+    {
+      id: "default-video",
+      label: "其他视频分辨率",
+      conditions: [],
+      charges: [{ meter: "seconds", unit: "分钟", price: 3.6, divisor: 60 }],
     },
   ],
 };
@@ -406,6 +429,56 @@ describe("vendorEditorDataForCurrentDraft", () => {
     );
 
     expect(result).toBeNull();
+  });
+});
+
+describe("resolveVendorPriceSync", () => {
+  it("keeps an output-video usage rule as advanced pricing and copies all rule data", () => {
+    const expression = usageRuleSetExpression(videoRuleSet);
+    const vendorSpec: PriceSpec = {
+      mode: "expression",
+      pricingCurrency: "USD",
+      blocks: [{
+        label: "Expression",
+        note: expression,
+        baseExpression: expression,
+        usageRuleSet: videoRuleSet,
+      }],
+    };
+
+    const result = resolveVendorPriceSync(
+      "video-model",
+      vendorSpec,
+      {
+        name: "video-model",
+        billingMode: "tiered_expr",
+        billingExpr: 'tier("old expression", p * 1 + c * 2)',
+      },
+      "task",
+    );
+
+    expect(result?.usageRuleSet).toEqual(videoRuleSet);
+    expect(result?.usageRuleSet).not.toBe(videoRuleSet);
+    expect(result?.usageRuleSet?.rules[0]).not.toBe(videoRuleSet.rules[0]);
+    expect(result?.usageRuleSet?.rules[0].conditions[0]).not.toBe(
+      videoRuleSet.rules[0].conditions[0],
+    );
+    expect(result?.usageRuleSet?.rules[0].charges[0]).not.toBe(
+      videoRuleSet.rules[0].charges[0],
+    );
+    expect(result?.usageRuleSet?.rules[0].conditions[0]).toEqual({
+      field: "resolution",
+      operator: "eq",
+      value: "720P",
+    });
+    expect(result?.usageRuleSet?.rules[1].charges[0]).toEqual({
+      meter: "seconds",
+      unit: "分钟",
+      price: 3.6,
+      divisor: 60,
+    });
+    expect(result?.draft.billingMode).toBe("tiered_expr");
+    expect(result?.draft.billingExpr).toBe(expression);
   });
 });
 

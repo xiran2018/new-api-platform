@@ -497,6 +497,52 @@ export function vendorEditorDataForCurrentDraft(
   return vendorEditorData(modelKey, spec);
 }
 
+export type VendorPriceSyncState = {
+  draft: ModelRatioData;
+  usageRuleSet?: UsageRuleSet;
+};
+
+/**
+ * Resolve the complete vendor pricing mode that should be loaded by one-click
+ * synchronization. Structured advanced-media rules take precedence over their
+ * generated expression because the expression alone cannot restore the visual
+ * template, conditions, units, or usage-meter prices.
+ */
+export function resolveVendorPriceSync(
+  modelKey: string,
+  spec: PriceSpec | undefined,
+  current: ModelRatioData,
+  executionOverride?: UsageRuleSet["execution"],
+): VendorPriceSyncState | null {
+  const sourceRuleSet = matchingUsageRuleSet(spec);
+  if (sourceRuleSet?.rules?.length) {
+    const usageRuleSet: UsageRuleSet = {
+      ...sourceRuleSet,
+      execution: executionOverride || sourceRuleSet.execution,
+      rules: sourceRuleSet.rules.map((rule) => ({
+        ...rule,
+        conditions: rule.conditions.map((condition) => ({ ...condition })),
+        charges: rule.charges.map((charge) => ({ ...charge })),
+      })),
+    };
+    return {
+      draft: {
+        name: modelKey,
+        billingMode: "tiered_expr",
+        billingExpr: usageRuleSetExpression(usageRuleSet),
+        requestRuleExpr: "",
+      },
+      usageRuleSet,
+    };
+  }
+
+  const upstreamTemplate = vendorEditorData(modelKey, spec);
+  const draft = upstreamTemplate?.billingMode === "tiered_expr"
+    ? upstreamTemplate
+    : vendorEditorDataForCurrentDraft(modelKey, spec, current);
+  return draft ? { draft } : null;
+}
+
 /**
  * Build the comparison baseline from the exact draft loaded by vendor sync.
  * This keeps addon labels aligned with the editor even when the stored vendor
@@ -948,45 +994,29 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
   const syncVendorPrice = async () => {
     const current = await ref.current?.commitDraft();
     if (!current) return;
-    const vendorRuleSet = matchingUsageRuleSet(vendorPriceSpec);
-    // An upstream expression is authoritative when it exists. Preserve its
-    // template and structured branches instead of remapping it through the
-    // legacy ratio/request representation.
-    const upstreamTemplate = vendorEditorData(modelKey, vendorPriceSpec);
-    const vendor = upstreamTemplate?.billingMode === "tiered_expr"
-      ? upstreamTemplate
-      : vendorEditorDataForCurrentDraft(modelKey, vendorPriceSpec, current);
-    if (!vendor) {
+    const taskModel = Boolean(entry?.usage_schema && Object.keys(entry.usage_schema).length);
+    const synchronized = resolveVendorPriceSync(
+      modelKey,
+      vendorPriceSpec,
+      current,
+      taskModel ? "task" : undefined,
+    );
+    if (!synchronized) {
       toast.error(t("No vendor price is available for the selected pricing mode"));
       return;
     }
     setComparisonPriceSpec(vendorComparisonSpec(modelKey, vendorPriceSpec));
-    if (vendor.billingMode === "tiered_expr" && vendor.billingExpr) {
-      setEditorOverride(vendor);
-      setUsageRuleSet(undefined);
-      setAdvancedPricingActive(false);
-      const nextPricingCurrency = vendorPriceSpec?.pricingCurrency || pricingCurrency;
-      setPricingCurrency(nextPricingCurrency);
-      onPricingCurrencyChange?.(nextPricingCurrency);
-      toast.success(t("Vendor pricing template and prices synchronized"));
-      return;
-    }
-    if (vendorRuleSet?.rules?.length) {
-      const nextPricingCurrency = vendorPriceSpec?.pricingCurrency || pricingCurrency;
-      setPricingCurrency(nextPricingCurrency);
-      onPricingCurrencyChange?.(nextPricingCurrency);
-      setUsageRuleSet(vendorRuleSet);
-      setAdvancedPricingActive(true);
-      toast.success(t("Vendor pricing template and prices synchronized"));
-      return;
-    }
     const nextPricingCurrency = vendorPriceSpec?.pricingCurrency || pricingCurrency;
     setPricingCurrency(nextPricingCurrency);
     onPricingCurrencyChange?.(nextPricingCurrency);
-    setUsageRuleSet(vendorRuleSet);
-    setAdvancedPricingActive(Boolean(vendorRuleSet));
-    setEditorOverride(vendor);
-    toast.success(t("Vendor price synchronized"));
+    setEditorOverride(synchronized.draft);
+    setUsageRuleSet(synchronized.usageRuleSet);
+    setAdvancedPricingActive(Boolean(synchronized.usageRuleSet));
+    toast.success(t(
+      synchronized.draft.billingMode === "tiered_expr"
+        ? "Vendor pricing template and prices synchronized"
+        : "Vendor price synchronized",
+    ));
   };
   useImperativeHandle(forwardedRef, () => ({ save }));
   if (!entry)
