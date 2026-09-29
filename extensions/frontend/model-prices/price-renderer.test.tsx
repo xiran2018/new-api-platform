@@ -74,6 +74,83 @@ describe('expression price display', () => {
     expect(screen.queryByText('/ 1M tokens')).not.toBeInTheDocument()
   })
 
+  it('does not reserve an empty summary row above a single advanced-media price', () => {
+    const ruleSet: UsageRuleSet = {
+      version: 1,
+      execution: 'request',
+      rules: [
+        {
+          id: 'live-session',
+          label: 'GPT-Live session',
+          conditions: [],
+          charges: [{ meter: 'live_session_seconds', unit: '分钟', price: 0.0408 }],
+        },
+      ],
+    }
+
+    const { container } = render(
+      <PriceRenderer
+        displayCurrency='CNY'
+        timezone='Asia/Shanghai'
+        spec={{
+          mode: 'expression',
+          blocks: [{
+            baseExpression: usageRuleSetExpression(ruleSet),
+            usageRuleSet: ruleSet,
+          }],
+        }}
+      />
+    )
+
+    expect(screen.queryByText(/Pricing mode/)).not.toBeInTheDocument()
+    expect(container.querySelector('.min-h-6')).not.toBeInTheDocument()
+    expect(screen.getByText('GPT-Live session connection duration:')).toBeInTheDocument()
+    expect(screen.getByText('¥0.040800')).toBeInTheDocument()
+  })
+
+  it('hides discount and match-condition columns from advanced pricing tables', () => {
+    const ruleSet: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      rules: [
+        {
+          id: '720p',
+          label: '720P video',
+          conditions: [{ field: 'resolution', operator: 'eq', value: '720P' }],
+          charges: [{ meter: 'seconds', unit: '秒', price: 2.72 }],
+        },
+        {
+          id: 'default',
+          label: 'Other resolution',
+          conditions: [],
+          charges: [{ meter: 'seconds', unit: '秒', price: 4.08 }],
+        },
+      ],
+    }
+
+    render(
+      <PriceRenderer
+        displayCurrency='CNY'
+        timezone='Asia/Shanghai'
+        spec={{
+          mode: 'expression',
+          blocks: [{
+            baseExpression: usageRuleSetExpression(ruleSet),
+            usageRuleSet: ruleSet,
+          }],
+        }}
+      />
+    )
+
+    expect(screen.getByRole('columnheader', { name: 'Pricing tier' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Unit price' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Tier discount' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Match conditions' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/resolution\s*=\s*720P/i)).not.toBeInTheDocument()
+    expect(screen.getByText('720P video')).toBeInTheDocument()
+    expect(screen.getByText('Other resolution')).toBeInTheDocument()
+  })
+
   it('keeps the speech-recognition per-second preset at six decimals', () => {
     const preset = PLATFORM_BILLING_PRESET_GROUPS
       .flatMap((group) => group.presets)

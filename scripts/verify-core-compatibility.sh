@@ -24,6 +24,7 @@ template_registry="$repo_root/extensions/frontend/model-prices/billing-template-
 template_registry_doc="$repo_root/docs/billing-template-registry.md"
 compatibility_contract_doc="$repo_root/docs/billing-mode-compatibility.md"
 vendor_price_regression_doc="$repo_root/docs/vendor-price-sync-regression.md"
+model_price_translations="$repo_root/extensions/frontend/i18n/model-price-translations.ts"
 sync_upstream_script="$repo_root/scripts/sync-upstream.sh"
 compatibility_workflow="$repo_root/.github/workflows/verify-upstream-compatibility.yml"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
@@ -108,6 +109,26 @@ require_text "$template_registry" "ADVANCED_MEDIA_TEMPLATE_REGISTRY" \
   "the machine-readable advanced-media registry was lost"
 require_text "$compatibility_contract_doc" "永久上游同步规则" \
   "the permanent upstream synchronization contract was lost"
+require_text "$compatibility_contract_doc" "价格编辑与展示回归规则（2026-09-29）" \
+  "the pricing editor and renderer regression contract was lost"
+require_text "$usage_rule_test" \
+  "promotes the preceding video tier to a condition-free fallback" \
+  "deleting the final advanced-media fallback no longer promotes the preceding tier"
+require_text "$renderer_test" \
+  "hides a single base tier and does not reserve an empty summary row" \
+  "single-tier base suppression or top-alignment regression coverage was lost"
+require_text "$renderer_test" \
+  "does not reserve an empty summary row above a single advanced-media price" \
+  "single-tier advanced-media prices reserve an empty summary row again"
+require_text "$renderer_test" \
+  "hides discount and match-condition columns from advanced pricing tables" \
+  "advanced pricing tables expose discount or internal match-condition columns again"
+require_text "$runtime_pricing_test" \
+  "keeps an output-video usage rule as advanced pricing and copies all rule data" \
+  "advanced-media vendor synchronization no longer preserves the mode or complete rule data"
+require_text "$model_price_translations" \
+  '"Cache write (1h) price": "1 小时缓存写入价格"' \
+  "the simplified-Chinese one-hour cache-write price translation was lost"
 require_text "$compatibility_contract_doc" "是平台功能的归属目录" \
   "the rule protecting platform extensions from upstream deletion was lost"
 require_text "$template_registry_doc" "登记与检查制度" \

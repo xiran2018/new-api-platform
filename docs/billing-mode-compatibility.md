@@ -21,6 +21,52 @@
 `extensions/frontend/model-prices/billing-template-registry.ts`。以后新增计费模板或高级媒体规则时，
 必须同时更新这两份注册表和对应回归测试。
 
+## 价格编辑与展示回归规则（2026-09-29）
+
+以下规则来自已经修复过的实际问题，属于长期兼容合同。以后新增模板、修改价格字段、调整列表
+布局、重构公共渲染器或同步上游时，都必须同时验证厂商原价和实际价格、管理端和客户端：
+
+1. **删除高级媒体计费规则的最后档位时必须保持规则可保存。** 如果删除的是最后一个无条件兜底档，
+   必须自动把删除后新的最后档提升为兜底档，并清空它的全部 `conditions`；删除中间档位不得改变
+   原有兜底档。厂商原价和实际价格共用该规则，不能只修复其中一页。
+2. **新增价格标签必须完整国际化。** 管理端和客户端不得显示原始英文 key。特别是
+   `Cache write (1h) price` 在简体中文界面必须显示为“1 小时缓存写入价格”，其他已支持语言也要
+   有对应翻译。新增字段时必须同步更新价格字段映射、全部语言翻译和渲染测试。
+3. **单档位不得显示通用占位名称。** 最终只有一个可见档位且名称为 `base` 时，管理端和客户端
+   都必须隐藏 `base`；多档位或具有业务含义的档位名称仍应显示。
+4. **没有摘要信息时不得保留空白行。** “计价模式、折扣、加额”等摘要均为空时，不得渲染固定
+   高度的空摘要容器；空价格块标题也不得保留外边距或占位高度。价格内容必须与模型名称、厂商、
+   标签等相邻列顶部对齐。该规则必须同时覆盖普通表达式价格和高级媒体计费规则；GPT-Live
+   会话时长、按输出图片张数等单档位高级媒体价格不得再生成空的 `min-h` 摘要行。
+5. **展示规则必须共用实现。** 管理端和客户端必须复用公共价格渲染器及相同的档位归一化规则，
+   禁止通过两套独立判断分别修补，否则同一价格会再次出现一端正确、一端错误。
+6. **高级媒体原厂价格同步不得降级计费模式。** 厂商原价采用“高级媒体计费规则”时，实际价格页
+   点击“一键同步原厂价格”后，必须继续选择“高级媒体计费规则”，不能只复制生成的表达式并切换
+   到“计费表达式”。例如“输出视频分辨率与时长计价”必须保留完整规则结构。
+7. **高级媒体同步必须复制全部结构化数据。** 同步内容必须包括 `execution`、全部档位、档位名称、
+   条件字段/运算符/值，以及每个收费项的 `meter`、`unit`、`price`、`divisor`；不得只同步
+   `billingExpr`，也不得因对象引用、浅复制或模板识别失败而丢失原厂价格数据。同步后厂商原价
+   与实际价格必须是内容相等但可独立编辑的深拷贝。
+8. **高级媒体价格表只展示业务价格。** 管理端和客户端的非紧凑价格表只保留“计价档位”和
+   “单价”两列，不显示逐档“折扣”和内部“匹配条件”列，也不得把 `resolution = 720P` 等内部
+   条件表达式暴露给客户端。整体优惠或加额仍通过价格表上方的标签显示。
+
+固定回归断言分别位于：
+
+- `extensions/frontend/admin-pages/model-prices/usage-rule-builder.test.ts`：
+  `promotes the preceding video tier to a condition-free fallback`；
+- `extensions/frontend/model-prices/price-renderer.test.tsx`：
+  `hides a single base tier and does not reserve an empty summary row`；
+  `does not reserve an empty summary row above a single advanced-media price`；
+  `hides discount and match-condition columns from advanced pricing tables`；
+- `extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.test.ts`：
+  `keeps an output-video usage rule as advanced pricing and copies all rule data`；
+- `extensions/frontend/i18n/model-price-translations.ts`：各语言的
+  `Cache write (1h) price` 翻译。
+
+`scripts/verify-core-compatibility.sh` 会检查上述合同、测试名称和关键翻译，不得通过删除断言或降低
+检查强度绕过同步失败。
+
 | 截图计费结构 | 可视化入口 | 实际计费数据 |
 | --- | --- | --- |
 | 按生成图片张数 | 图片分辨率模板或空白规则 | `output_images` |

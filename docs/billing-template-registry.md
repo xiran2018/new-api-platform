@@ -1,6 +1,6 @@
 # 计费模板与高级媒体计费规则注册表
 
-最后核对日期：2026-09-28。
+最后核对日期：2026-09-29。
 
 本文件是计费功能的人工可读兼容合同。机器可读的完整合同位于
 `extensions/frontend/model-prices/billing-template-registry.ts`。模板的代码结构、组件名称和
@@ -39,10 +39,40 @@
 3. 一个模板如果在管理端和客户端采用横向表格显示，必须在同一个渲染器、同一套字段顺序和同一套非零价格规则下显示；不得只修改编辑器而遗漏列表渲染。
 4. 每个新增模板至少添加一个渲染回归测试，断言具体模态表头、全部缓存字段（包括音频缓存）和错误字段不会出现；同时覆盖表达式解析出的字段与真实计费变量一致。
 5. 新增显示文案必须同步加入 `en.json`、`zh.json` 和 `zh-TW.json`，避免中文界面回退到英文或直接显示内部变量名。
+6. 高级媒体规则删除最后一个无条件档位后，必须自动把新的最后档提升为无条件兜底档并清空其
+   `conditions`；厂商原价和实际价格必须共同生效，删除中间档位不能改变原有兜底档。
+7. 只有一个可见档位且通用名称为 `base` 时，管理端和客户端均不得显示 `base`；存在多个档位或
+   名称具有业务含义时仍应保留名称。
+8. “计价模式、折扣、加额”等摘要全部为空时，不得渲染空摘要行、固定最小高度或空标题外边距；
+   价格表应和同一行的模型名称、厂商、标签内容顶部对齐。普通表达式和高级媒体规则必须共用
+   这一约束，单档位 GPT-Live 时长、按图片张数等规则不得保留空的摘要占位容器。
+9. 管理端和客户端必须复用公共价格渲染器、相同的字段顺序、档位归一化和非零价格规则。新增模板
+   不得只验证编辑与保存，还必须验证两个页面的最终显示。
+10. 新增价格字段必须同步登记 i18n。包括 `Cache write (1h) price` 在内的标签不得在中文页面回退
+    为英文；已支持的每一种语言都应有明确翻译。
+11. 厂商原价使用高级媒体计费规则时，“一键同步原厂价格”必须同步模板类型和完整 `usageRuleSet`，
+    实际价格页仍应选中高级媒体计费规则，不能降级成计费表达式。所有档位、条件、收费字段、单位、
+    除数和价格都必须深拷贝，不能只复制生成后的表达式字符串。
+12. 高级媒体价格表只显示“计价档位”和“单价”，不显示逐档“折扣”或内部“匹配条件”列；整体
+    优惠/加额继续使用摘要标签。管理端和客户端不得显示 `field = value` 等内部条件表达式。
 
 本次错误的固定回归断言位于
 `extensions/frontend/model-prices/price-renderer.test.tsx` 的
 `renders Gemini easy templates with modality-specific horizontal headers` 测试中；任何后续模板重构、上游同步或显示方式调整都不得删除或降低该断言。
+
+这次档位删除和单档位布局问题的固定回归断言位于：
+
+- `extensions/frontend/admin-pages/model-prices/usage-rule-builder.test.ts` 的
+  `promotes the preceding video tier to a condition-free fallback`；
+- `extensions/frontend/model-prices/price-renderer.test.tsx` 的
+  `hides a single base tier and does not reserve an empty summary row`。
+  `does not reserve an empty summary row above a single advanced-media price`。
+  `hides discount and match-condition columns from advanced pricing tables`。
+- `extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.test.ts` 的
+  `keeps an output-video usage rule as advanced pricing and copies all rule data`。
+
+新增或重构模板时，应复用这些行为并增加同等强度的测试，不能复制一套缺少兜底档修复、`base`
+抑制或顶部对齐规则的新编辑器/渲染器。
 
 ## 通用数据与结算约定
 

@@ -527,9 +527,9 @@ function UsageRuleSetRenderer({
   // Keep the rule and its charges visible; only hide the redundant mode label.
   const showPricingMode = ruleSet.rules.length > 1;
   const showRuleDetails = ruleSet.rules.length > 1 || ruleSet.rules.some((rule) => rule.conditions.length > 0);
-  const baseUnitPrice = ruleSet.rules
-    .flatMap((rule) => rule.charges)
-    .find((charge) => charge.price > 0)?.price || 0;
+  const showDiscount = discount > 0;
+  const showMarkupBadge = showMarkup && discount < 0;
+  const showPricingSummary = showPricingMode || showDiscount || showMarkupBadge;
   const conditionLabel = (condition: UsageRuleSet["rules"][number]["conditions"][number]) => {
     const field = t(({
       output_images: "Generated image quantity",
@@ -589,11 +589,13 @@ function UsageRuleSetRenderer({
   );
   return (
     <div className="space-y-2">
-      <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-        {showPricingMode && <span>{t("Pricing mode")}: {t("Usage rule pricing")}</span>}
-        {discount > 0 && <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">{t("Discount")} {discount}%</span>}
-        {showMarkup && discount < 0 && <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">{t("Markup")} {Math.abs(discount)}%</span>}
-      </div>
+      {showPricingSummary && (
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+          {showPricingMode && <span>{t("Pricing mode")}: {t("Usage rule pricing")}</span>}
+          {showDiscount && <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">{t("Discount")} {discount}%</span>}
+          {showMarkupBadge && <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">{t("Markup")} {Math.abs(discount)}%</span>}
+        </div>
+      )}
       {!showRuleDetails ? (
         <div className="rounded-md border bg-muted/25 p-3 text-sm">
           {charges(ruleSet.rules[0])}
@@ -613,24 +615,16 @@ function UsageRuleSetRenderer({
           ))}
         </div>
       ) : <div className="overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[560px] table-fixed text-sm">
-          <colgroup><col className="w-[24%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[40%]" /></colgroup>
+        <table className="w-full table-fixed text-sm">
+          <colgroup><col className="w-[36%]" /><col className="w-[64%]" /></colgroup>
           <thead className="bg-muted/60 text-xs text-muted-foreground">
-            <tr><th className="p-2 text-left">{t("Pricing tier")}</th><th className="p-2 text-left">{t("Unit price")}</th><th className="p-2 text-left">{t("Tier discount")}</th><th className="p-2 text-left">{t("Match conditions")}</th></tr>
+            <tr><th className="p-2 text-left">{t("Pricing tier")}</th><th className="p-2 text-left">{t("Unit price")}</th></tr>
           </thead>
           <tbody>
             {ruleSet.rules.map((rule, index) => (
               <tr className="border-t align-top" key={rule.id || index}>
                 <td className="p-2 font-medium">{rule.label}</td>
                 <td className="p-2">{charges(rule)}</td>
-                <td className="p-2 text-xs text-muted-foreground">
-                  {baseUnitPrice > 0 && rule.charges[0]?.price > 0 && rule.charges[0].price < baseUnitPrice
-                    ? `${(rule.charges[0].price / baseUnitPrice * 10).toFixed(1)} ${t("Chinese discount unit")}`
-                    : t("None")}
-                </td>
-                <td className="p-2 text-xs text-muted-foreground">
-                  {rule.conditions.length ? rule.conditions.map(conditionLabel).join(" · ") : rule.label}
-                </td>
               </tr>
             ))}
           </tbody>
