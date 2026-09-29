@@ -575,6 +575,7 @@ describe('expression price display', () => {
     expect(screen.getByText('Audio cached input')).toBeInTheDocument()
     expect(screen.queryByText('Unified input')).not.toBeInTheDocument()
     expect(screen.queryByText('Cache write price')).not.toBeInTheDocument()
+    expect(screen.queryByText('Gemini Flash Lite easy pricing')).not.toBeInTheDocument()
     expect(screen.getByText('$0.200')).toBeInTheDocument()
     expect(screen.queryByText('$9.900')).not.toBeInTheDocument()
     const unified = render(

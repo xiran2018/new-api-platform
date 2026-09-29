@@ -1178,8 +1178,6 @@ export function PriceRenderer({
                 return <div className="overflow-x-auto rounded-md border bg-muted/25">
                   <table className="min-w-[760px] table-fixed text-left text-xs">
                     <thead className="bg-muted/60 text-muted-foreground"><tr>
-                      <th colSpan={geminiEasyAudioBlock ? 5 : 3} className="p-2 text-center font-medium">{t("Gemini Flash Lite easy pricing")}</th>
-                    </tr><tr>
                       <th className="border-r p-2 font-medium">{t(geminiEasyAudioBlock ? "Text/image/video input" : "Text/image/video/audio input")}</th>
                       {geminiEasyAudioBlock && <><th className="border-r p-2 font-medium">{t("Audio input")}</th><th className="border-r p-2 font-medium">{t("Cache read price")}</th><th className="border-r p-2 font-medium">{t("Audio cached input")}</th></>}
                       {!geminiEasyAudioBlock && <th className="border-r p-2 font-medium">{t("Cache read price")}</th>}
