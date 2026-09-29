@@ -690,6 +690,10 @@ export function PriceRenderer({
   const tierCount = publicPriceBlockGroups(blocks).length;
   const tieredMode = displayedSpec?.mode === "tiered" || (displayedSpec?.mode === "expression" && !expressionUsesTime);
   const showTieredPricingMode = !(tieredMode && tierCount <= 1);
+  const discount = blocks[0]?.discount ?? 0;
+  const showDiscount = discount > 0;
+  const showMarkupBadge = showMarkup && discount < 0;
+  const showPricingSummary = showTieredPricingMode || showDiscount || showMarkupBadge;
   const modeLabel = t(
     ({
       token: "Token pricing",
@@ -727,19 +731,19 @@ export function PriceRenderer({
   if (tableLayout) {
     return (
       <div className="min-w-0 space-y-2">
-        <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+        {showPricingSummary && <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
           {showTieredPricingMode && <span>{t("Pricing mode")}: {modeLabel}</span>}
-          {(blocks[0]?.discount ?? 0) > 0 && (
+          {showDiscount && (
             <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
-              {t("Discount")} {blocks[0].discount}%
+              {t("Discount")} {discount}%
             </span>
           )}
-          {showMarkup && (blocks[0]?.discount ?? 0) < 0 && (
+          {showMarkupBadge && (
             <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">
-              {t("Markup")} {Math.abs(blocks[0].discount!)}%
+              {t("Markup")} {Math.abs(discount)}%
             </span>
           )}
-        </div>
+        </div>}
         {(() => {
           const omniPrices = omniOutputPriceSet(blocks);
           const comparedOmniPrices = omniOutputPriceSet(displayedCompareSpec?.blocks || []);
@@ -1394,14 +1398,17 @@ export function PriceRenderer({
                 const comparedRows = publicPriceRows(compareGroupFor(group)?.blocks[0] || {}, requestMode);
                 const current = displayedSpec?.mode === "time" && group.blocks.some((block) => activeWindow(block, timezone));
                 const unit = primary.unit === "request" ? t("Per request") : primary.unit || "";
+                const groupLabel = groups.length === 1 && group.label.trim().toLowerCase() === "base"
+                  ? ""
+                  : group.label;
                 return (
                   <div
                     key={group.key || groupIndex}
                     className={`overflow-hidden rounded-md border ${current ? "border-emerald-500/50 bg-emerald-500/10" : "bg-muted/25"}`}
                   >
-                    {(group.label || primary.start || primary.end || primary.min != null || primary.max != null || current) && (
+                    {(groupLabel || primary.start || primary.end || primary.min != null || primary.max != null || current) && (
                       <div className="flex flex-wrap items-center gap-1.5 border-b bg-background/60 px-3 py-2 text-xs font-medium">
-                        {group.label && <span>{group.label}</span>}
+                        {groupLabel && <span>{groupLabel}</span>}
                         {primary.start && (
                           <span className="inline-flex items-center gap-1 text-muted-foreground">
                             <Clock3 className="size-3" />
@@ -1453,19 +1460,19 @@ export function PriceRenderer({
   }
   return (
     <div className="space-y-2">
-      <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+      {showPricingSummary && <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
         {showTieredPricingMode && <span>{t("Pricing mode")}: {modeLabel}</span>}
-        {(blocks[0]?.discount ?? 0) > 0 && (
+        {showDiscount && (
           <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
-            {t("Discount")} {blocks[0].discount}%
+            {t("Discount")} {discount}%
           </span>
         )}
-        {showMarkup && (blocks[0]?.discount ?? 0) < 0 && (
+        {showMarkupBadge && (
           <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">
-            {t("Markup")} {Math.abs(blocks[0].discount!)}%
+            {t("Markup")} {Math.abs(discount)}%
           </span>
         )}
-      </div>
+      </div>}
       {blocks.map((b, i) => {
         const showRequestPrice = displayedSpec?.mode === "request";
         const showTokenPrices = !showRequestPrice && displayedSpec?.mode !== "table";
@@ -1473,13 +1480,22 @@ export function PriceRenderer({
         const current =
           displayedSpec?.mode === "time" && activeWindow(b, timezone);
         const unit = b.unit === "request" ? t("Per request") : b.unit;
+        const blockLabel = blocks.length === 1 && (b.label || "").trim().toLowerCase() === "base"
+          ? ""
+          : b.label;
+        const showBlockHeader = ((!pricesOnly || spec?.mode === "expression") && blockLabel)
+          || b.start
+          || b.end
+          || b.min != null
+          || b.max != null
+          || current;
         return (
           <div
             key={i}
             className={`rounded-md border p-2.5 ${current ? "border-emerald-500/50 bg-emerald-500/10" : "bg-muted/25"}`}
           >
-            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs font-medium">
-              {(!pricesOnly || spec?.mode === "expression") && b.label && <span>{b.label}</span>}
+            {showBlockHeader && <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs font-medium">
+              {(!pricesOnly || spec?.mode === "expression") && blockLabel && <span>{blockLabel}</span>}
               {b.start && (
                 <span className="inline-flex items-center gap-1 text-muted-foreground">
                   <Clock3 className="size-3" />
@@ -1496,7 +1512,7 @@ export function PriceRenderer({
                   {t("Current")}
                 </span>
               )}
-            </div>
+            </div>}
             {((showTokenPrices && (b.input != null || b.output != null || b.cache != null || b.createCache != null || b.createCache1h != null || b.image != null || b.imageCache != null || b.imageOutput != null || b.audioInput != null || b.audioCache != null || b.audioOutput != null || b.audioDuration != null || b.videoInput != null || b.videoOutput != null || b.multimodalOutput != null)) || (showRequestPrice && b.price != null)) && (
               <div className="space-y-1.5 text-sm">
                 {showTokenPrices && hasNonZeroPrice(b.input) && (
