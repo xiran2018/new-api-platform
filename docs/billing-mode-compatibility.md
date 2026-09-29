@@ -50,6 +50,10 @@
 8. **高级媒体价格表只展示业务价格。** 管理端和客户端的非紧凑价格表只保留“计价档位”和
    “单价”两列，不显示逐档“折扣”和内部“匹配条件”列，也不得把 `resolution = 720P` 等内部
    条件表达式暴露给客户端。整体优惠或加额仍通过价格表上方的标签显示。
+9. **客户端 PDF 必须完整导出五列。** 模型价格页打印/导出 PDF 时必须使用 A4 横向布局，解除
+   页面与表格外层的横向裁剪，并取消屏幕表格的固定最小宽度。模型名称、厂商、标签、厂商原价、
+   实际价格五列必须全部进入 PDF；厂商原价和实际价格各占相同打印宽度，嵌套价格表不得被
+   `overflow-x` 裁掉，分页时表头应重复显示。
 
 固定回归断言分别位于：
 
@@ -61,6 +65,8 @@
   `hides discount and match-condition columns from advanced pricing tables`；
 - `extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.test.ts`：
   `keeps an output-video usage rule as advanced pricing and copies all rule data`；
+- `extensions/frontend/public-pages/model-prices/index.test.ts`：
+  `prints all five columns on an unclipped A4 landscape page`；
 - `extensions/frontend/i18n/model-price-translations.ts`：各语言的
   `Cache write (1h) price` 翻译。
 

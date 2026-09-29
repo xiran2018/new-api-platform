@@ -199,6 +199,7 @@ verify_extensions_preserved
   BUN_TMPDIR="$tmp_root" bunx vitest run \
     src/features/pricing/lib/__tests__/billing-expression.test.ts \
     src/platform/model-prices/price-renderer.test.tsx \
+    src/platform/public-pages/model-prices/index.test.ts \
     src/platform/admin-pages/model-prices/runtime-pricing-editor.test.ts \
     src/platform/admin-pages/model-prices/usage-rule-builder.test.ts \
     src/features/system-settings/models/__tests__/visual-billing-editor.test.tsx

@@ -19,6 +19,7 @@ usage_rule_test="$repo_root/extensions/frontend/admin-pages/model-prices/usage-r
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
 renderer="$repo_root/extensions/frontend/model-prices/price-renderer.tsx"
 renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.tsx"
+public_price_page_test="$repo_root/extensions/frontend/public-pages/model-prices/index.test.ts"
 capability_contract="$repo_root/extensions/frontend/model-prices/billing-capability-contract.ts"
 template_registry="$repo_root/extensions/frontend/model-prices/billing-template-registry.ts"
 template_registry_doc="$repo_root/docs/billing-template-registry.md"
@@ -126,6 +127,9 @@ require_text "$renderer_test" \
 require_text "$runtime_pricing_test" \
   "keeps an output-video usage rule as advanced pricing and copies all rule data" \
   "advanced-media vendor synchronization no longer preserves the mode or complete rule data"
+require_text "$public_price_page_test" \
+  "prints all five columns on an unclipped A4 landscape page" \
+  "the public model-price PDF export regression coverage was lost"
 require_text "$model_price_translations" \
   '"Cache write (1h) price": "1 小时缓存写入价格"' \
   "the simplified-Chinese one-hour cache-write price translation was lost"
@@ -208,6 +212,7 @@ require_text "$vendor_price_regression_doc" "React 保留属性" \
   "the reserved React key vendor-price regression is no longer documented"
 for verification_entry in \
   "src/platform/model-prices/price-renderer.test.tsx" \
+  "src/platform/public-pages/model-prices/index.test.ts" \
   "src/platform/admin-pages/model-prices/runtime-pricing-editor.test.ts" \
   "src/platform/admin-pages/model-prices/usage-rule-builder.test.ts" \
   "src/features/system-settings/models/__tests__/visual-billing-editor.test.tsx"

@@ -8,6 +8,95 @@ import { api } from "@/lib/api";
 import { PriceRenderer } from "../../model-prices/price-renderer";
 import type { ModelPrice } from "../../model-prices/types";
 
+export const MODEL_PRICE_PRINT_STYLES = `
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  html,
+  body,
+  #root,
+  #root .overflow-x-clip,
+  #root .overflow-x-hidden {
+    width: auto !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  header {
+    display: none !important;
+  }
+
+  .model-price-print-page {
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .model-price-print-table-wrap {
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+
+  .model-price-print-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    font-size: 8.5pt !important;
+  }
+
+  .model-price-print-table > colgroup > col:nth-child(1) { width: 17% !important; }
+  .model-price-print-table > colgroup > col:nth-child(2) { width: 10% !important; }
+  .model-price-print-table > colgroup > col:nth-child(3) { width: 9% !important; }
+  .model-price-print-table > colgroup > col:nth-child(4) { width: 32% !important; }
+  .model-price-print-table > colgroup > col:nth-child(5) { width: 32% !important; }
+
+  .model-price-print-table > thead {
+    display: table-header-group !important;
+    position: static !important;
+  }
+
+  .model-price-print-table > tbody > tr {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .model-price-print-table > thead > tr > th,
+  .model-price-print-table > tbody > tr > td {
+    padding: 5px !important;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+  }
+
+  .model-price-print-table .max-w-32 {
+    max-width: none !important;
+  }
+
+  .model-price-print-table .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .model-price-print-table table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  .model-price-print-table table th,
+  .model-price-print-table table td {
+    padding: 3px !important;
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
+}
+`;
+
 export function ModelPricesPage() {
   const { t } = useTranslation();
   const [rows, setRows] = useState<ModelPrice[]>([]);
@@ -39,7 +128,8 @@ export function ModelPricesPage() {
   );
   return (
     <PublicLayout showMainContainer={false}>
-      <main className="w-full min-w-0 max-w-full overflow-x-hidden px-4 pb-12 pt-24 text-foreground sm:px-6">
+      <style>{MODEL_PRICE_PRINT_STYLES}</style>
+      <main className="model-price-print-page w-full min-w-0 max-w-full overflow-x-hidden px-4 pb-12 pt-24 text-foreground sm:px-6">
         <div className="mb-5 text-center">
           <div>
             <h1 className="text-3xl font-semibold tracking-normal">
@@ -95,8 +185,8 @@ export function ModelPricesPage() {
             </Button>
           </div>
         </div>
-        <div className="max-w-full overflow-x-auto rounded-lg border bg-card shadow-sm [scrollbar-gutter:stable]">
-          <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
+        <div className="model-price-print-table-wrap max-w-full overflow-x-auto rounded-lg border bg-card shadow-sm [scrollbar-gutter:stable]">
+          <table className="model-price-print-table w-full min-w-[1080px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[18%]" />
               <col className="w-[13%]" />
