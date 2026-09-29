@@ -280,6 +280,115 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       '这是新增的管理员友好模板，不覆盖原 Gemini 模板；模板 key 和 easy marker 必须保留，截图中的缓存存储小时费仍需独立 usage 才能支持。',
   },
   {
+    key: 'gemini-omni-shared-input-text-video-output-simple',
+    name: 'Gemini Omni easy setup: shared multimodal input + text/video output',
+    group: 'multimodal',
+    purpose:
+      '文本、图片、视频、音频输入共用一个价格，文本输出和视频输出分别计价。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'vid', 'ai', 'c', 'vid_o'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '三个价格输入框：统一多模态输入、文本输出、视频输出。',
+      managementDisplay: '单行三列表格，输入在前，文本和视频输出在后。',
+      publicDisplay: '单行显示具体模态价格，不显示模板名称和表达式源码。',
+    },
+    runtime:
+      '统一输入价同时写入 p、img、vid、ai；c 与 vid_o 使用实际文本输出和视频输出 Token 结算。',
+    compatibility:
+      '不得把默认示例数值固化；模板 marker、共享输入双写及 vid_o 输出字段必须保留。',
+  },
+  {
+    key: 'gemini-image-shared-input-text-image-output-simple',
+    name: 'Gemini image easy setup: shared text/image input + text/image output',
+    group: 'multimodal',
+    purpose: '文本和图片输入共用一个价格，文本输出和图片输出分别计价。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'c', 'img_o'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '三个价格输入框：文本/图片共享输入、文本输出、图片输出。',
+      managementDisplay: '单行三列表格，输入在前，文本和图片输出在后。',
+      publicDisplay: '单行显示具体价格，不显示表达式源码。',
+    },
+    runtime:
+      '共享输入价同时写入 p、img；c 与 img_o 使用实际文本输出和图片输出 Token 结算。',
+    compatibility:
+      'Google Search grounding 继续使用系统现有工具附加费，不得伪造表达式 usage；本模板只负责 Token 价格。',
+  },
+  {
+    key: 'gemini-native-audio-text-media-input-output-simple',
+    name: 'Gemini Native Audio easy setup: text/media input + text/audio output',
+    group: 'multimodal',
+    purpose:
+      '文本输入单独计价，音频和视频输入共享一个价格，文本输出和音频输出分别计价。',
+    conditionFields: [],
+    priceFields: ['p', 'ai', 'vid', 'c', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '四个价格输入框：文本输入、音频/视频共享输入、文本输出、音频输出。',
+      managementDisplay: '单行四列表格，两个输入价格在前，两个输出价格在后。',
+      publicDisplay: '单行显示具体模态价格，不显示模板名称和表达式源码。',
+    },
+    runtime:
+      '音频/视频共享输入价同时写入 ai、vid；p、c、ao 与 ai、vid 使用实际对应模态 Token 结算。',
+    compatibility:
+      '共享输入双写、模板 key 和 easy marker 必须保留；不得用音频时长、视频时长或请求次数代替模态 Token。',
+  },
+  {
+    key: 'gemini-robotics-unified-cache-pricing-simple',
+    name: 'Gemini Robotics easy setup: unified input + cached input + output',
+    group: 'multimodal',
+    purpose:
+      '文本、图片、视频、音频输入共用一个价格，缓存读取和输出分别计价。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'vid', 'ai', 'cr', 'c'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '三个价格输入框：统一多模态输入、Cached input、输出。',
+      managementDisplay: '单行三列表格显示统一输入、缓存读取和输出。',
+      publicDisplay: '只显示最终采用的单一价格，不显示日期阶段和表达式源码。',
+    },
+    runtime:
+      '统一输入价同时写入 p、img、vid、ai；cr 和 c 使用实际缓存读取及输出 Token 结算。',
+    compatibility:
+      '官方按日期调整的价格不写入日期分支，管理员填写最终选定价格；缓存存储每小时费没有独立 usage 前不得用 cr 或 cc1h 冒充，Google Search 继续由工具附加费结算。',
+  },
+  {
+    key: 'gemini-tts-text-cache-audio-output-simple',
+    name: 'Gemini TTS easy setup: text input + cached input + audio output',
+    group: 'multimodal',
+    purpose: '分别设置文本输入、缓存读取和音频输出价格。',
+    conditionFields: [],
+    priceFields: ['p', 'cr', 'ao'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '三个价格输入框：文本输入、Cached input、音频输出。',
+      managementDisplay: '单行三列表格显示输入、缓存和音频输出。',
+      publicDisplay: '只显示具体价格，不显示日期阶段或表达式源码。',
+    },
+    runtime: 'p、cr、ao 使用实际 Token usage 分别乘价后求和。',
+    compatibility:
+      '截图中的日期分阶段不进入代码，管理员填写最终采用的单一价格；缓存存储每小时费在没有独立 usage 前不得伪造。',
+  },
+  {
+    key: 'gemini-multimodal-embedding-input-simple',
+    name: 'Gemini Embedding easy setup: multimodal input only',
+    group: 'multimodal',
+    purpose: 'Embedding 模型分别设置文本、图片、音频和视频输入价格，不收输出费。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'ai', 'vid'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '四个输入价格框，不显示无意义的输出价格。',
+      managementDisplay: '文本、图片、音频、视频输入在一行四列显示。',
+      publicDisplay: '只显示非零输入价格，不显示表达式源码。',
+    },
+    runtime: 'p、img、ai、vid 使用各自实际输入 Token usage 结算，无输出项。',
+    compatibility:
+      '四种输入字段和无输出语义必须保留；数值只是可编辑默认值，不得绑定特定模型名。',
+  },
+  {
     key: 'image-modality-cache-pricing',
     name: 'Image model text/image/cache input + image output pricing',
     group: 'multimodal',
@@ -604,6 +713,25 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
       '普通图片请求使用 core 原生 image_count：按请求 n 预扣，按实际返回图片张数结算。',
     compatibility:
       'request 模式保留 core 原生 fixed(unitPrice) * image_count；task 模式必须生成 u("image_count") * unitPrice，不能在任务表达式中使用 fixed()。',
+  },
+  {
+    key: 'musicPerSong',
+    name: 'Music generation per song/request',
+    purpose: '为一次请求固定生成一首歌曲的音乐模型设置每首歌曲价格。',
+    execution: 'request-only',
+    conditionFields: [],
+    chargeMeters: ['request'],
+    units: ['次'],
+    defaultTiers: '一个无条件档位，管理员只需填写每首歌曲/每次请求价格。',
+    layout: {
+      editor: '单档位、单价格输入框，不要求编辑表达式或 usage 字段。',
+      managementDisplay: '显示每首歌曲/每次请求价格。',
+      publicDisplay: '显示音乐生成按歌曲/请求计费价格。',
+    },
+    runtime:
+      '同步请求每次命中一次固定价格；适用于一个请求固定返回一首歌曲的渠道。',
+    compatibility:
+      '不得把按请求计费描述成真实歌曲数量计费；如果渠道允许一请求返回多首歌曲，必须先增加并上报 song_count usage 后再按数量结算。',
   },
   {
     key: 'boolean',

@@ -85,6 +85,12 @@ for key in \
   shared-text-image-audio-output-simple \
   audio-image-input-text-audio-output-simple \
   text-audio-input-text-audio-output-simple \
+  gemini-omni-shared-input-text-video-output-simple \
+  gemini-image-shared-input-text-image-output-simple \
+  gemini-native-audio-text-media-input-output-simple \
+  gemini-robotics-unified-cache-pricing-simple \
+  gemini-tts-text-cache-audio-output-simple \
+  gemini-multimodal-embedding-input-simple \
   omni-output-modes \
   omni-shared-media-input-output-modes \
   live-translation-multimodal \
@@ -119,6 +125,10 @@ require_text "$renderer_test" "Text/image/video/audio input" \
   "Gemini unified-input modality-specific display regression coverage was lost"
 require_text "$renderer_test" "Text/image/video input" \
   "Gemini shared-input modality-specific display regression coverage was lost"
+require_text "$renderer_test" "renders %s as one administrator-friendly row" \
+  "the new Gemini administrator-friendly price tables lost regression coverage"
+require_text "$visual_billing_test" "updates all input modalities" \
+  "the Gemini shared-input editor no longer verifies all modality prices are updated"
 require_text "$renderer" "audioCache" \
   "Gemini audio cached-input prices are no longer rendered from the ai_cr/audioCache field"
 require_text "$renderer" "Text/image/video/audio input" \
@@ -202,7 +212,7 @@ do
 done
 require_text "$presets" 'text+audio output (audio only)' "the shared-input output branch capability was removed"
 
-for key in image boolean volume video videoAudio videoMode imageVideo audioSeconds ttsCharacters voiceCount taskMatrix blank
+for key in image outputImageCount musicPerSong boolean volume video videoAudio videoMode imageVideo audioSeconds ttsCharacters voiceCount taskMatrix blank
 do
   require_text "$usage_rule_builder" "$key" "a screenshot-derived visual billing template was lost during upstream synchronization"
 done

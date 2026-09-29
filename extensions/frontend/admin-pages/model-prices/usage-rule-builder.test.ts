@@ -292,6 +292,25 @@ describe('screenshot-derived billing templates', () => {
     })
   })
 
+  it('charges one configurable price for a one-song-per-request music API', () => {
+    const rules = createUsageRuleTemplate('musicPerSong', 'request')
+    expect(rules.rules).toEqual([
+      expect.objectContaining({
+        label: '音乐生成按歌曲/请求计费',
+        conditions: [],
+        charges: [{ meter: 'request', unit: '次', price: 0.08 }],
+      }),
+    ])
+
+    const expression = usageRuleSetExpression(rules)
+    expect(expression).toBe('tier("音乐生成按歌曲/请求计费", 80000)')
+    expect(evaluateBillingExpression(expression, {})).toMatchObject({
+      status: 'success',
+      cost: 80_000,
+      matchedTier: '音乐生成按歌曲/请求计费',
+    })
+  })
+
   it('uses native image_count for requests and task usage facts', () => {
     const requestExpression = usageRuleSetExpression(
       createUsageRuleTemplate('volume', 'request')

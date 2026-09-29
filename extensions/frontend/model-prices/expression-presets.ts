@@ -68,6 +68,36 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'tier("Gemini Flash Lite easy audio split", p * 0.25 + img * 0.25 + vid * 0.25 + ai * 0.50 + cr * 0.025 + ai_cr * 0.05 + c * 1.50)',
       },
       {
+        key: 'gemini-omni-shared-input-text-video-output-simple',
+        label: 'Gemini Omni easy setup: shared multimodal input + text/video output',
+        expr: 'tier("Gemini Omni easy shared input text/video output", p * 1.50 + img * 1.50 + vid * 1.50 + ai * 1.50 + c * 9 + vid_o * 17.50)',
+      },
+      {
+        key: 'gemini-image-shared-input-text-image-output-simple',
+        label: 'Gemini image easy setup: shared text/image input + text/image output',
+        expr: 'tier("Gemini image easy shared input text/image output", p * 0.50 + img * 0.50 + c * 3 + img_o * 60)',
+      },
+      {
+        key: 'gemini-native-audio-text-media-input-output-simple',
+        label: 'Gemini Native Audio easy setup: text/media input + text/audio output',
+        expr: 'tier("Gemini native audio easy text/media input/output", p * 0.50 + ai * 3 + vid * 3 + c * 2 + ao * 12)',
+      },
+      {
+        key: 'gemini-robotics-unified-cache-pricing-simple',
+        label: 'Gemini Robotics easy setup: unified input + cached input + output',
+        expr: 'tier("Gemini Robotics easy unified input/cache/output", p * 2 + img * 2 + vid * 2 + ai * 2 + cr * 0.20 + c * 10)',
+      },
+      {
+        key: 'gemini-tts-text-cache-audio-output-simple',
+        label: 'Gemini TTS easy setup: text input + cached input + audio output',
+        expr: 'tier("Gemini TTS easy text cache audio output", p * 1 + cr * 0.25 + ao * 20)',
+      },
+      {
+        key: 'gemini-multimodal-embedding-input-simple',
+        label: 'Gemini Embedding easy setup: multimodal input only',
+        expr: 'tier("Gemini Embedding easy multimodal input", p * 0.20 + img * 0.45 + ai * 6.50 + vid * 12)',
+      },
+      {
         key: 'image-modality-cache-pricing',
         label: 'Image model text/image/cache input + image output pricing',
         expr: 'tier("image modalities", p * 1 + cr * 0.5 + img * 1 + img_cr * 0.5 + img_o * 1)',

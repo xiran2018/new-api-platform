@@ -19,8 +19,8 @@ import {
 
 export { usageRuleSetExpression } from "../../model-prices/usage-rule-expression";
 
-export type TemplateKey = "image" | "outputImageCount" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
-export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
+export type TemplateKey = "image" | "outputImageCount" | "musicPerSong" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
+export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "musicPerSong", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
 
 const requestFields = [
   "resolution",
@@ -244,6 +244,11 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       rule("按输出图片张数", [], [charge(generatedImageMeter, "张")]),
     ]);
   }
+  if (key === "musicPerSong") {
+    return wrap([
+      rule("音乐生成按歌曲/请求计费", [], [charge("request", "次", 0.08)]),
+    ]);
+  }
   if (key === "boolean") {
     return wrap([
       rule("开启", [{ field: "prompt_extend", operator: "eq", value: true }]),
@@ -302,6 +307,7 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   if (!rules.length) return fallback;
   const fields = new Set(rules.flatMap((item) => item.conditions.map((condition) => condition.field)));
   const meters = new Set(rules.flatMap((item) => item.charges.map((part) => part.meter)));
+  if (rules.length === 1 && rules[0].label === "音乐生成按歌曲/请求计费" && meters.has("request")) return "musicPerSong";
   if (meters.has("image_count") && !fields.has("image_count")) return "outputImageCount";
   if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
   if (meters.has("live_session_seconds")) return "liveSessionSeconds";
@@ -433,6 +439,7 @@ export function UsageRuleBuilder({
   const templateHelp: Record<TemplateKey, string> = {
     image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
     outputImageCount: "Prices every generated output image at one configurable unit price.",
+    musicPerSong: "Use for music APIs that return one song per request. The configured price is charged once per request; if a provider can return multiple songs, use a measured song-count field instead.",
     boolean: "Prices the request according to whether the selected request option is enabled.",
     volume: "Prices each generated output image according to the output quantity tier.",
     video: "Prices generated video by output resolution and output duration.",
@@ -466,7 +473,7 @@ export function UsageRuleBuilder({
     [execution, fields, usageSchema],
   );
   const templateSupported = (key: TemplateKey) => execution !== "task"
-    || (key !== "liveSessionSeconds"
+    || (key !== "liveSessionSeconds" && key !== "musicPerSong"
       && unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema).length === 0);
   const unsupportedKeys = unsupportedTaskUsageKeys(
     { version: 1, execution, rules },
@@ -511,6 +518,7 @@ export function UsageRuleBuilder({
           }}>
             <option value="image" disabled={!templateSupported("image")}>{t("Output image resolution (1K/2K)")}</option>
             <option value="outputImageCount" disabled={!templateSupported("outputImageCount")}>{t("Generated output images per image")}</option>
+            <option value="musicPerSong" disabled={!templateSupported("musicPerSong")}>{t("Music generation per song/request")}</option>
             <option value="boolean" disabled={!templateSupported("boolean")}>{t("Boolean request option")}</option>
             <option value="volume" disabled={!templateSupported("volume")}>{t("Generated image quantity tiers")}</option>
             <option value="video" disabled={!templateSupported("video")}>{t("Output video resolution and duration")}</option>

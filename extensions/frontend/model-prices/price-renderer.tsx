@@ -80,6 +80,62 @@ export type PublicPriceRow = {
   value: number;
 };
 
+const SIMPLE_MODALITY_PRICE_TABLES: ReadonlyArray<{
+  marker: string;
+  columns: ReadonlyArray<{ label: string; field: PublicPriceRowField }>;
+}> = [
+  {
+    marker: "gemini omni easy shared input text/video output",
+    columns: [
+      { label: "Text/image/video/audio input", field: "input" },
+      { label: "Text output", field: "output" },
+      { label: "Video output", field: "videoOutput" },
+    ],
+  },
+  {
+    marker: "gemini image easy shared input text/image output",
+    columns: [
+      { label: "Text/image input", field: "input" },
+      { label: "Text output", field: "output" },
+      { label: "Image output", field: "imageOutput" },
+    ],
+  },
+  {
+    marker: "gemini native audio easy text/media input/output",
+    columns: [
+      { label: "Text input", field: "input" },
+      { label: "Audio/video input", field: "audioInput" },
+      { label: "Text output", field: "output" },
+      { label: "Audio output", field: "audioOutput" },
+    ],
+  },
+  {
+    marker: "gemini robotics easy unified input/cache/output",
+    columns: [
+      { label: "Text/image/video/audio input", field: "input" },
+      { label: "Cached input", field: "cache" },
+      { label: "Output price", field: "output" },
+    ],
+  },
+  {
+    marker: "gemini tts easy text cache audio output",
+    columns: [
+      { label: "Text input", field: "input" },
+      { label: "Cached input", field: "cache" },
+      { label: "Audio output", field: "audioOutput" },
+    ],
+  },
+  {
+    marker: "gemini embedding easy multimodal input",
+    columns: [
+      { label: "Text input", field: "input" },
+      { label: "Image input", field: "image" },
+      { label: "Audio input", field: "audioInput" },
+      { label: "Video input", field: "videoInput" },
+    ],
+  },
+];
+
 export function publicPriceRowUnit(
   field: PublicPriceRowField,
   blockUnit?: string,
@@ -713,6 +769,17 @@ export function PriceRenderer({
           const geminiEasyBlocks = new Set(
             [geminiEasyUnifiedBlock, geminiEasyAudioBlock].filter(Boolean),
           );
+          const simpleModalityTable = SIMPLE_MODALITY_PRICE_TABLES.map(
+            (config) => ({
+              config,
+              block: blocks.find((block) =>
+                (block.label || "").toLowerCase().startsWith(config.marker),
+              ),
+            }),
+          ).find(({ block }) => block);
+          const simpleModalityBlocks = new Set(
+            simpleModalityTable?.block ? [simpleModalityTable.block] : [],
+          );
           const groups = publicPriceBlockGroups(
             blocks.filter(
               (block) =>
@@ -721,7 +788,8 @@ export function PriceRenderer({
                 !audioImageBlocks.has(block) &&
                 !textAudioBlocks.has(block) &&
                 !audioTokenOutputBlocks.has(block) &&
-                !geminiEasyBlocks.has(block),
+                !geminiEasyBlocks.has(block) &&
+                !simpleModalityBlocks.has(block),
             ),
           );
           const comparedOmniBlocks = new Set(
@@ -749,6 +817,13 @@ export function PriceRenderer({
               ),
             ),
           );
+          const comparedSimpleModalityBlocks = new Set(
+            (displayedCompareSpec?.blocks || []).filter((block) =>
+              SIMPLE_MODALITY_PRICE_TABLES.some((config) =>
+                (block.label || "").toLowerCase().startsWith(config.marker),
+              ),
+            ),
+          );
           const compareGroups = publicPriceBlockGroups(
             (displayedCompareSpec?.blocks || []).filter(
               (block) =>
@@ -756,7 +831,8 @@ export function PriceRenderer({
                 !comparedSharedTextImageAudioBlocks.has(block) &&
                 !comparedAudioImageBlocks.has(block) &&
                 !comparedTextAudioBlocks.has(block) &&
-                !comparedAudioTokenOutputBlocks.has(block),
+                !comparedAudioTokenOutputBlocks.has(block) &&
+                !comparedSimpleModalityBlocks.has(block),
             ),
           );
           const compareGroupFor = (group: PublicPriceBlockGroup) =>
@@ -1188,6 +1264,34 @@ export function PriceRenderer({
                       {geminiEasyAudioBlock && <><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "audioInput", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "cache", comparedAudio)}</td><td className="border-r p-2.5">{cell(geminiEasyAudioBlock, "audioCache", comparedAudio)}</td></>}
                       {!geminiEasyAudioBlock && <td className="border-r p-2.5">{cell(geminiEasyUnifiedBlock, "cache", comparedUnified)}</td>}
                       <td className="p-2.5">{cell(geminiEasyAudioBlock || geminiEasyUnifiedBlock, "output", comparedAudio || comparedUnified)}</td>
+                    </tr></tbody>
+                  </table>
+                </div>;
+              })()}
+              {simpleModalityTable?.block && (() => {
+                const { block, config } = simpleModalityTable;
+                const compared = displayedCompareSpec?.blocks?.find((candidate) =>
+                  (candidate.label || "").toLowerCase().startsWith(config.marker),
+                );
+                return <div className="overflow-x-auto rounded-md border bg-muted/25">
+                  <table className="min-w-[680px] table-fixed text-left text-xs">
+                    <thead className="bg-muted/60 text-muted-foreground"><tr>
+                      {config.columns.map((column) => (
+                        <th key={column.field} className="border-r p-2 font-medium last:border-r-0">
+                          {t(column.label)}
+                        </th>
+                      ))}
+                    </tr></thead>
+                    <tbody><tr className="border-t align-top">
+                      {config.columns.map((column) => (
+                        <td key={column.field} className="border-r p-2.5 last:border-r-0">
+                          {renderPrice(
+                            priceValue(block, column.field),
+                            block.unit || "",
+                            compared ? priceValue(compared, column.field) : undefined,
+                          )}
+                        </td>
+                      ))}
                     </tr></tbody>
                   </table>
                 </div>;

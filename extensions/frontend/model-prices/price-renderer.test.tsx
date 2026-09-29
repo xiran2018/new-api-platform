@@ -589,6 +589,54 @@ describe('expression price display', () => {
     unified.unmount()
   })
 
+  it.each([
+    [
+      'gemini-omni-shared-input-text-video-output-simple',
+      ['Text/image/video/audio input', 'Text output', 'Video output'],
+    ],
+    [
+      'gemini-image-shared-input-text-image-output-simple',
+      ['Text/image input', 'Text output', 'Image output'],
+    ],
+    [
+      'gemini-native-audio-text-media-input-output-simple',
+      ['Text input', 'Audio/video input', 'Text output', 'Audio output'],
+    ],
+    [
+      'gemini-robotics-unified-cache-pricing-simple',
+      ['Text/image/video/audio input', 'Cached input', 'Output price'],
+    ],
+    [
+      'gemini-tts-text-cache-audio-output-simple',
+      ['Text input', 'Cached input', 'Audio output'],
+    ],
+    [
+      'gemini-multimodal-embedding-input-simple',
+      ['Text input', 'Image input', 'Audio input', 'Video input'],
+    ],
+  ])('renders %s as one administrator-friendly row', (presetKey, headers) => {
+    const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
+      (group) => group.presets
+    ).find((item) => item.key === presetKey)
+    expect(preset).toBeDefined()
+
+    render(
+      <PriceRenderer
+        tableLayout
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: preset?.expr }] }}
+      />
+    )
+
+    expect(document.querySelectorAll('table')).toHaveLength(1)
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(1)
+    for (const header of headers) {
+      expect(screen.getByText(header)).toBeInTheDocument()
+    }
+    expect(screen.queryByText(/Gemini .* easy/i)).not.toBeInTheDocument()
+  })
+
   it('keeps different legacy image and video prices in one Omni table cell', () => {
     render(
       <PriceRenderer
