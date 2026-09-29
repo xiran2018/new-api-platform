@@ -10,6 +10,7 @@ import {
   BILLING_TEMPLATE_KEYS,
   createUsageRuleTemplate,
   findComparisonUsageCharge,
+  removeUsagePricingTier,
   syncExampleTierNames,
   unsupportedTaskUsageKeys,
   usageRuleSetExpression,
@@ -21,6 +22,35 @@ import type {
   UsagePriceRule,
   UsageRuleSet,
 } from '../../model-prices/types'
+
+describe('pricing-tier removal', () => {
+  it('promotes the preceding video tier to a condition-free fallback', () => {
+    const ruleSet = createUsageRuleTemplate('video', 'request')
+    const originalFirstTier = ruleSet.rules[0]
+    const result = removeUsagePricingTier(
+      ruleSet.rules,
+      ruleSet.rules.length - 1,
+    )
+
+    expect(result).toHaveLength(1)
+    expect(result[0].label).toBe('720P')
+    expect(result[0].conditions).toEqual([])
+    expect(result[0].charges).toEqual(originalFirstTier.charges)
+    expect(result[0]).not.toBe(originalFirstTier)
+    expect(originalFirstTier.conditions).not.toEqual([])
+    expect(validateUsageRuleSet({ ...ruleSet, rules: result })).toBe('')
+  })
+
+  it('keeps the existing fallback when deleting a non-final tier', () => {
+    const ruleSet = createUsageRuleTemplate('videoAudio', 'request')
+    const fallback = ruleSet.rules.at(-1)!
+    const result = removeUsagePricingTier(ruleSet.rules, 0)
+
+    expect(result.at(-1)).toBe(fallback)
+    expect(result.at(-1)?.conditions).toEqual([])
+    expect(validateUsageRuleSet({ ...ruleSet, rules: result })).toBe('')
+  })
+})
 
 describe('vendor usage-rule comparison', () => {
   const outputCharge: UsagePriceCharge = {

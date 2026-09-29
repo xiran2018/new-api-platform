@@ -336,6 +336,29 @@ export function validateUsageRuleSet(ruleSet?: UsageRuleSet) {
 }
 
 /**
+ * Remove a pricing tier while preserving the invariant that the final tier is
+ * the condition-free fallback. When the current fallback is removed, the
+ * preceding tier is promoted and all of its matching conditions are cleared.
+ */
+export function removeUsagePricingTier(
+  rules: UsagePriceRule[],
+  index: number,
+): UsagePriceRule[] {
+  if (rules.length <= 1 || index < 0 || index >= rules.length) return rules;
+
+  const removingFallback = index === rules.length - 1;
+  const nextRules = rules.filter((_, ruleIndex) => ruleIndex !== index);
+  if (!removingFallback) return nextRules;
+
+  const fallbackIndex = nextRules.length - 1;
+  nextRules[fallbackIndex] = {
+    ...nextRules[fallbackIndex],
+    conditions: [],
+  };
+  return nextRules;
+}
+
+/**
  * Task expressions may only reference usage keys declared by the selected
  * task plugin. Keep this check in the extension layer so a template can be
  * shown for every model without allowing an undeclared key to reach the
@@ -547,7 +570,7 @@ export function UsageRuleBuilder({
             <div className="flex items-center gap-2">
               <Input className="max-w-xs font-medium" value={item.label} placeholder={t("Tier name")} onChange={(event) => updateRule(ruleIndex, { ...item, label: event.target.value })} />
               <span className="text-xs text-muted-foreground">{ruleIndex === rules.length - 1 ? t("Fallback tier") : t("Tier {{number}}", { number: ruleIndex + 1 })}</span>
-              <Button className="ml-auto" type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(rules.filter((_, index) => index !== ruleIndex))}><Trash2 className="size-4" /></Button>
+              <Button className="ml-auto" type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(removeUsagePricingTier(rules, ruleIndex))}><Trash2 className="size-4" /></Button>
             </div>
             {ruleIndex < rules.length - 1 && (
               <div className="space-y-2">
