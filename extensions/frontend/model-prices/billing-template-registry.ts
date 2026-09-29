@@ -317,6 +317,25 @@ export const EXPRESSION_TEMPLATE_REGISTRY = [
       'Google Search grounding 继续使用系统现有工具附加费，不得伪造表达式 usage；本模板只负责 Token 价格。',
   },
   {
+    key: 'gemini-image-text-image-video-input-output-simple',
+    name: 'Gemini image easy setup: shared text/image/video input + text/thinking and image output',
+    group: 'multimodal',
+    purpose:
+      '文本、图片和视频输入共用一个价格，文本/思考输出与图片输出分别计价。',
+    conditionFields: [],
+    priceFields: ['p', 'img', 'vid', 'c', 'img_o'],
+    unit: '每百万对应模态 Token',
+    layout: {
+      editor: '三个价格输入框：文本/图片/视频共享输入、文本/思考输出、图片输出。',
+      managementDisplay: '单行三列表格，输入在前，两个输出价格在后。',
+      publicDisplay: '单行显示具体模态价格，不显示模板名称和表达式源码。',
+    },
+    runtime:
+      '共享输入价同时写入 p、img、vid；c 使用文本及思考输出 Token，img_o 使用图片输出 Token 真实结算。',
+    compatibility:
+      '保留旧的文本/图片输入模板；不得同时按 img_o Token 价格和换算后的每张图片价格重复收费。截图中的每张图片价格只作为图片输出 Token 数量的换算说明。',
+  },
+  {
     key: 'gemini-native-audio-text-media-input-output-simple',
     name: 'Gemini Native Audio easy setup: text/media input + text/audio output',
     group: 'multimodal',

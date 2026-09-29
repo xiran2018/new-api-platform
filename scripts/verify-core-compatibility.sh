@@ -87,6 +87,7 @@ for key in \
   text-audio-input-text-audio-output-simple \
   gemini-omni-shared-input-text-video-output-simple \
   gemini-image-shared-input-text-image-output-simple \
+  gemini-image-text-image-video-input-output-simple \
   gemini-native-audio-text-media-input-output-simple \
   gemini-robotics-unified-cache-pricing-simple \
   gemini-tts-text-cache-audio-output-simple \

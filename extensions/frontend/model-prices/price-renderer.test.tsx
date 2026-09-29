@@ -599,6 +599,10 @@ describe('expression price display', () => {
       ['Text/image input', 'Text output', 'Image output'],
     ],
     [
+      'gemini-image-text-image-video-input-output-simple',
+      ['Text/image/video input', 'Text/thinking output', 'Image output'],
+    ],
+    [
       'gemini-native-audio-text-media-input-output-simple',
       ['Text input', 'Audio/video input', 'Text output', 'Audio output'],
     ],

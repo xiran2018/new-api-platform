@@ -101,6 +101,14 @@ const SIMPLE_MODALITY_PRICE_TABLES: ReadonlyArray<{
     ],
   },
   {
+    marker: "gemini image easy shared text/image/video input/output",
+    columns: [
+      { label: "Text/image/video input", field: "input" },
+      { label: "Text/thinking output", field: "output" },
+      { label: "Image output", field: "imageOutput" },
+    ],
+  },
+  {
     marker: "gemini native audio easy text/media input/output",
     columns: [
       { label: "Text input", field: "input" },

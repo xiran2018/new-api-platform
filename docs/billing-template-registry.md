@@ -116,6 +116,7 @@
 | `gemini-flash-lite-audio-cache-pricing-simple`<br>Gemini Flash Lite easy setup: shared input + separate audio/cache | 共享文本/图片/视频输入、音频输入、两类 Cached input、输出五项价格 | 五项直接填写表格，共享输入只填写一次 | 共享输入、音频输入、缓存读取、输出分组显示 | 新增管理员友好模板，不覆盖原 Gemini 模板；真实按 `p/img/vid/ai/cr/ai_cr/c` 结算 |
 | `gemini-omni-shared-input-text-video-output-simple`<br>Gemini Omni easy setup: shared multimodal input + text/video output | 文本/图片/视频/音频共享输入 `p/img/vid/ai`、文本输出 `c`、视频输出 `vid_o` | 三项直接填写，共享输入只填写一次 | 单行三列：共享输入、文本输出、视频输出 | 按实际模态 Token 结算；默认价格可修改，不绑定模型名 |
 | `gemini-image-shared-input-text-image-output-simple`<br>Gemini image easy setup: shared text/image input + text/image output | 文本/图片共享输入 `p/img`、文本输出 `c`、图片输出 `img_o` | 三项直接填写，共享输入只填写一次 | 单行三列：共享输入、文本输出、图片输出 | 按实际 Token 结算；Google Search 另走现有工具附加费 |
+| `gemini-image-text-image-video-input-output-simple`<br>Gemini image easy setup: shared text/image/video input + text/thinking and image output | 文本/图片/视频共享输入 `p/img/vid`、文本及思考输出 `c`、图片输出 `img_o` | 三项直接填写，共享输入只填写一次 | 单行三列：共享输入、文本/思考输出、图片输出 | 按实际模态 Token 结算；图片的每张换算价格仅作说明，不能与 `img_o` Token 价格重复收费 |
 | `gemini-native-audio-text-media-input-output-simple`<br>Gemini Native Audio easy setup: text/media input + text/audio output | 文本输入 `p`、音频/视频共享输入 `ai/vid`、文本输出 `c`、音频输出 `ao` | 四项直接填写，音频/视频输入只填写一次 | 单行四列：两个输入价格在前，两个输出价格在后 | 按实际模态 Token 结算，不使用音频/视频时长或请求次数替代 Token |
 | `gemini-robotics-unified-cache-pricing-simple`<br>Gemini Robotics easy setup: unified input + cached input + output | 文本/图片/视频/音频共享输入 `p/img/vid/ai`、缓存读取 `cr`、输出 `c` | 三项直接填写，不实现日期价格分支 | 单行三列：统一输入、Cached input、输出 | 使用管理员选择的单一最终价格真实结算；缓存存储小时费等待独立 usage，Google Search 走工具附加费 |
 | `gemini-tts-text-cache-audio-output-simple`<br>Gemini TTS easy setup: text input + cached input + audio output | 文本输入 `p`、缓存读取 `cr`、音频输出 `ao` | 三项直接填写；不实现日期分阶段 | 单行三列：文本输入、Cached input、音频输出 | 使用单一最终价格真实结算；管理员可填写各阶段中的最大值；缓存存储小时费等待独立 usage |
@@ -135,6 +136,7 @@
 - Gemini Omni 的“文本/图片/视频/音频共享输入 + 文本输出 + 视频输出”：选择 `gemini-omni-shared-input-text-video-output-simple`。
 - Gemini 图片模型的“文本/图片共享输入 + 文本输出 + 图片输出”：选择 `gemini-image-shared-input-text-image-output-simple`。Google Search grounding 不填入此表达式，继续使用系统已有的 `google_search` / `gemini_google_search_call` 工具附加费。
 - Gemini Native Audio 的“文本输入 + 音频/视频输入 + 文本输出 + 音频输出”：选择 `gemini-native-audio-text-media-input-output-simple`，音频/视频共享输入价格只填写一次。
+- Gemini 图片模型的“文本/图片/视频共享输入 + 文本/思考输出 + 图片输出”：选择 `gemini-image-text-image-video-input-output-simple`。如果官方价格按日期分阶段，只填写最终采用的单一价格；图片的每张换算价不另行收费。
 - Gemini Robotics 的“文本/图片/视频/音频统一输入 + Cached input + 输出”：选择 `gemini-robotics-unified-cache-pricing-simple`。若官方按日期分阶段，管理员直接填写最终采用的单一价格；按用户要求可以填写阶段中的最大值。
 - Gemini TTS 的“文本输入 + Cached input + 音频输出”：选择 `gemini-tts-text-cache-audio-output-simple`。若官方价格按日期分阶段，系统不建立日期分支，管理员直接填写最终采用的一个价格（例如选择较大的阶段价格）。缓存存储“每小时”费用在 core 提供独立存储时长 usage 前不应伪造。
 - Gemini Flash 的共享输入、独立音频输入与两类 Cached input：继续选择 `gemini-flash-lite-audio-cache-pricing-simple`。

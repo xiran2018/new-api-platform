@@ -105,6 +105,22 @@ const SIMPLE_MODALITY_PRICING_CONFIGS: SimpleModalityPricingConfig[] = [
     ],
   },
   {
+    marker: 'gemini image easy shared text/image/video input/output',
+    title: 'Gemini image shared text/image/video input + text/thinking and image output pricing',
+    description:
+      'Fill one shared text/image/video input price, one text/thinking output price, and one image output price.',
+    fields: [
+      {
+        label: 'Text/image/video input',
+        variable: 'p',
+        variables: ['p', 'img', 'vid'],
+        hint: 'One price is applied to text, image, and video input tokens.',
+      },
+      { label: 'Text/thinking output', variable: 'c' },
+      { label: 'Image output', variable: 'img_o' },
+    ],
+  },
+  {
     marker: 'gemini native audio easy text/media input/output',
     title: 'Gemini Native Audio text/media input + text/audio output pricing',
     description:
