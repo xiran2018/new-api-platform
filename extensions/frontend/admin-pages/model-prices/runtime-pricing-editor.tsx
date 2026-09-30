@@ -1052,6 +1052,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
         <ModelPricingEditorPanel
           className="!overflow-visible [&_[role=region]]:!overflow-visible [&_[role=region]]:!overscroll-auto [&_aside]:!static"
           ref={ref}
+          loadPublicPricingCatalog={false}
           showPricingCurrencySelector={false}
           editData={resolvedEditorData}
           scrollHeader={

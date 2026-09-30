@@ -287,6 +287,10 @@ require_text "$runtime_pricing_test" "synchronizes structured audio-input/text-o
   "the audio input/text-output vendor synchronization regression test was lost"
 require_text "$sheet" "renderPriceAddon" "the generic pricing-field extension slot was lost from the upstream editor"
 require_text "$sheet" "PricingFieldAddonProvider" "the generic pricing-field provider was lost from the upstream editor"
+require_text "$sheet" "loadPublicPricingCatalog" \
+  "the administrator editor can no longer avoid the client pricing navigation gate"
+require_text "$adapter" "loadPublicPricingCatalog={false}" \
+  "opening the administrator price editor may request a disabled client pricing page again"
 require_text "$addon_context" "createContext" "the isolated pricing-field extension context is missing"
 require_text "$price_inputs" "<PricingFieldAddon" "legacy price fields no longer mount the generic extension slot"
 require_text "$tier_price_fields" "<PricingFieldAddon" "visual expression fields no longer mount the generic extension slot"
