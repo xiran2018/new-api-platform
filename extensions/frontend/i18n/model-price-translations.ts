@@ -470,6 +470,9 @@ Object.assign(resources.zh, {
   "All models": "全部模型",
   "Existing local models": "本机已有模型",
   "Models without pricing": "未设置价格的模型",
+  "All model square statuses": "全部模型广场展示状态",
+  "Model square enabled": "模型广场展示：已开启",
+  "Model square disabled": "模型广场展示：未开启",
 });
 
 Object.assign(resources["zh-TW"], {
@@ -480,6 +483,9 @@ Object.assign(resources["zh-TW"], {
   "All models": "全部模型",
   "Existing local models": "本機已有模型",
   "Models without pricing": "未設定價格的模型",
+  "All model square statuses": "全部模型廣場展示狀態",
+  "Model square enabled": "模型廣場展示：已開啟",
+  "Model square disabled": "模型廣場展示：未開啟",
 });
 Object.assign(resources.fr, {
   "Product prices may change. Please check this page regularly for the latest pricing.":
@@ -489,6 +495,9 @@ Object.assign(resources.fr, {
   "All models": "Tous les modèles",
   "Existing local models": "Modèles locaux",
   "Models without pricing": "Modèles sans prix",
+  "All model square statuses": "Tous les états d’affichage",
+  "Model square enabled": "Affichage dans la galerie : activé",
+  "Model square disabled": "Affichage dans la galerie : désactivé",
 });
 Object.assign(resources.ja, {
   "Product prices may change. Please check this page regularly for the latest pricing.":
@@ -498,6 +507,9 @@ Object.assign(resources.ja, {
   "All models": "すべてのモデル",
   "Existing local models": "ローカルモデル",
   "Models without pricing": "価格未設定モデル",
+  "All model square statuses": "モデル広場のすべての表示状態",
+  "Model square enabled": "モデル広場に表示：オン",
+  "Model square disabled": "モデル広場に表示：オフ",
 });
 Object.assign(resources.ru, {
   "Product prices may change. Please check this page regularly for the latest pricing.":
@@ -507,6 +519,9 @@ Object.assign(resources.ru, {
   "All models": "Все модели",
   "Existing local models": "Локальные модели",
   "Models without pricing": "Модели без цены",
+  "All model square statuses": "Все статусы показа в каталоге",
+  "Model square enabled": "Показ в каталоге: включён",
+  "Model square disabled": "Показ в каталоге: выключен",
 });
 Object.assign(resources.vi, {
   "Product prices may change. Please check this page regularly for the latest pricing.":
@@ -516,9 +531,15 @@ Object.assign(resources.vi, {
   "All models": "Tất cả mô hình",
   "Existing local models": "Mô hình cục bộ",
   "Models without pricing": "Mô hình chưa định giá",
+  "All model square statuses": "Tất cả trạng thái hiển thị",
+  "Model square enabled": "Hiển thị trong kho mô hình: bật",
+  "Model square disabled": "Hiển thị trong kho mô hình: tắt",
 });
 
 Object.assign(resources.en, {
+  "All model square statuses": "All model square statuses",
+  "Model square enabled": "Model square visibility: enabled",
+  "Model square disabled": "Model square visibility: disabled",
   "Qwen3 Omni shared image/video input + three output prices":
     "Qwen3 Omni shared image/video input + three output prices",
   "Input unit price": "Input unit price",
@@ -543,6 +564,42 @@ Object.assign(resources.en, {
   "Non-thinking tier name": "Non-thinking tier name",
 });
 Object.assign(resources.zh, {
+  "Batch multimodal input/cache/output token tiers":
+    "批量多模态输入、缓存及输出 Token 分档计价",
+  "Seedream input/output image and pixel scene pricing":
+    "Seedream 输入图片、输出像素档与生成场景计价",
+  "Seedance resolution and reference-video token pricing":
+    "Seedance 输出分辨率与参考视频 Token 计价",
+  "3D artifact specification pricing": "3D 产物规格计价",
+  "Seedream-friendly matrix for input images, single-image generation or layer decomposition, and output images on either side of the 2.61M-pixel threshold.":
+    "直接填写输入图片、单图生成或图层拆分，以及 261 万像素阈值两侧的输出图片价格。",
+  "Seedance-friendly matrix that selects a billing-token price by output resolution and whether the request contains reference video.":
+    "按输出分辨率和请求是否包含参考视频，直接填写每百万实际计费 Token 的价格。",
+  "Administrator-friendly 3D artifact matrix for standard/HD geometry and texture output specifications.":
+    "按标准/高清几何质量和是否包含纹理，直接填写每次成功输出的 3D 产物价格。",
+  "Generation scene": "生成场景",
+  "Output image price (≤ 2.61M pixels)": "输出图片价格（≤ 261 万像素）",
+  "Output image price (> 2.61M pixels)": "输出图片价格（> 261 万像素）",
+  "Display name": "显示名称",
+  "Reference video input": "参考视频输入",
+  "No reference video": "无参考视频",
+  "With reference video": "有参考视频",
+  "Price per 1M billing tokens": "每百万计费 Token 价格",
+  "New resolution and input-video tier": "新分辨率与参考视频组合",
+  "Add resolution tier": "增加分辨率组合",
+  "3D artifact": "3D 产物",
+  "Output specification": "输出规格",
+  "Price per successful output": "每次成功输出价格",
+  "New 3D artifact": "新 3D 产物",
+  "Add 3D artifact": "增加 3D 产物",
+  "Generation type": "生成类型",
+  "Texture type": "贴图类型",
+  "High definition": "高清",
+  "Standard": "标准",
+  "Textured model": "纹理模型",
+  "Untextured model": "白模",
+  "Text cached input": "文本缓存输入",
+  "Audio cached input": "音频缓存输入",
   "Three input ranges + shared input, thinking/non-thinking output prices":
     "三段输入长度 + 档位共享输入价 + 思考/非思考输出价",
   "Each token range uses one shared input price. Thinking and non-thinking output prices can be set separately.":

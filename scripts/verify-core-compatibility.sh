@@ -74,6 +74,7 @@ reject_text() {
 
 for key in \
   input-length-tiers \
+  batch-multimodal-token-tiers \
   qwen-thinking-output \
   shared-input-thinking-output \
   two-range-thinking-output \
@@ -115,6 +116,15 @@ require_text "$compatibility_contract_doc" "价格编辑与展示回归规则（
 require_text "$usage_rule_test" \
   "promotes the preceding video tier to a condition-free fallback" \
   "deleting the final advanced-media fallback no longer promotes the preceding tier"
+require_text "$usage_rule_test" \
+  "charges Seedance from resolution, reference-video state and actual billing tokens" \
+  "Seedance resolution/reference-video billing execution coverage was lost"
+require_text "$usage_rule_test" \
+  "charges Seedream input images and the real 2.61M-pixel output buckets" \
+  "Seedream input/output pixel-bucket billing coverage was lost"
+require_text "$usage_rule_test" \
+  "charges 3D generation from the persisted output specification" \
+  "3D output-specification billing execution coverage was lost"
 require_text "$renderer_test" \
   "hides a single base tier and does not reserve an empty summary row" \
   "single-tier base suppression or top-alignment regression coverage was lost"
@@ -124,6 +134,15 @@ require_text "$renderer_test" \
 require_text "$renderer_test" \
   "hides discount and match-condition columns from advanced pricing tables" \
   "advanced pricing tables expose discount or internal match-condition columns again"
+require_text "$renderer_test" \
+  "renders batch multimodal token tiers as one compact row per token range" \
+  "batch multimodal token-tier compact rendering coverage was lost"
+require_text "$renderer_test" \
+  "groups Seedance reference-video prices by output resolution" \
+  "Seedance grouped resolution/reference-video rendering coverage was lost"
+require_text "$renderer_test" \
+  "renders Seedream and 3D advanced rules as semantic compact tables" \
+  "Seedream or 3D semantic compact rendering coverage was lost"
 require_text "$runtime_pricing_test" \
   "keeps an output-video usage rule as advanced pricing and copies all rule data" \
   "advanced-media vendor synchronization no longer preserves the mode or complete rule data"
@@ -239,7 +258,7 @@ do
 done
 require_text "$presets" 'text+audio output (audio only)' "the shared-input output branch capability was removed"
 
-for key in image outputImageCount musicPerSong boolean volume video videoAudio videoMode imageVideo audioSeconds ttsCharacters voiceCount taskMatrix blank
+for key in image outputImageCount seedreamPixelScene musicPerSong boolean volume video videoAudio seedanceVideoTokens videoMode imageVideo audioSeconds ttsCharacters voiceCount taskMatrix threeDArtifact blank
 do
   require_text "$usage_rule_builder" "$key" "a screenshot-derived visual billing template was lost during upstream synchronization"
 done

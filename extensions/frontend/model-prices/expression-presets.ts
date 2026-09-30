@@ -8,6 +8,11 @@ export const PLATFORM_BILLING_PRESET_GROUPS = [
         expr: 'len <= 128000 ? tier("0-128K", p * 1 + c * 4) : len <= 256000 ? tier("128K-256K", p * 2 + c * 8) : tier("256K+", p * 4 + c * 16)',
       },
       {
+        key: 'batch-multimodal-token-tiers',
+        label: 'Batch multimodal input/cache/output token tiers',
+        expr: 'len <= 32000 ? tier("Batch multimodal 0-32K", p * 1 + ai * 1 + cr * 0.1 + ai_cr * 0.1 + c * 4) : len <= 128000 ? tier("Batch multimodal 32K-128K", p * 2 + ai * 2 + cr * 0.2 + ai_cr * 0.2 + c * 8) : tier("Batch multimodal 128K-256K", p * 4 + ai * 4 + cr * 0.4 + ai_cr * 0.4 + c * 16)',
+      },
+      {
         key: 'qwen-thinking-output',
         label: 'Qwen input range and thinking output prices',
         expr: 'len <= 256000 ? (param("enable_thinking") == true ? tier("0-256K thinking", p * 1.8 + c * 10.8) : tier("0-256K non-thinking", p * 1.8 + c * 10.8)) : (param("enable_thinking") == true ? tier("256K+ thinking (edit price)", p * 1.8 + c * 10.8) : tier("256K+ non-thinking (edit price)", p * 1.8 + c * 10.8))',

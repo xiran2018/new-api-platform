@@ -506,14 +506,87 @@ const activeWindow = (b: PriceBlock, timezone: string) => {
     : now >= b.start || now < b.end;
 };
 
+export type UsageRulePresentationKind =
+  | "seedance-video-tokens"
+  | "seedream-pixel-scene"
+  | "three-d-artifact"
+  | null;
+
+/**
+ * Detect structured advanced-media rules by their persisted billing semantics,
+ * not by the selected template label. This keeps old database rows and renamed
+ * administrator-facing templates renderable after an upstream synchronization.
+ */
+export function usageRulePresentationKind(
+  ruleSet?: UsageRuleSet,
+): UsageRulePresentationKind {
+  const fields = new Set(
+    ruleSet?.rules.flatMap((rule) =>
+      rule.conditions.map((condition) => condition.field),
+    ) || [],
+  );
+  const meters = new Set(
+    ruleSet?.rules.flatMap((rule) =>
+      rule.charges.map((charge) => charge.meter),
+    ) || [],
+  );
+  if (
+    meters.has("tokens") &&
+    fields.has("resolution") &&
+    fields.has("video_input")
+  ) return "seedance-video-tokens";
+  if (
+    meters.has("images_up_to_1_5k") ||
+    meters.has("images_above_1_5k")
+  ) return "seedream-pixel-scene";
+  if (meters.has("request") && fields.has("output_spec")) {
+    return "three-d-artifact";
+  }
+  return null;
+}
+
+const usageCondition = (
+  rule: UsageRuleSet["rules"][number],
+  field: string,
+) => rule.conditions.find((condition) => condition.field === field)?.value;
+
+const usageRuleSignature = (rule: UsageRuleSet["rules"][number]) =>
+  JSON.stringify(
+    [...rule.conditions]
+      .map(({ field, operator, value }) => [field, operator, value])
+      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
+  );
+
+const matchingUsageCharge = (
+  comparison: UsageRuleSet | undefined,
+  rule: UsageRuleSet["rules"][number],
+  meter: string,
+) => {
+  if (!comparison) return undefined;
+  const signature = usageRuleSignature(rule);
+  const exactRule = comparison.rules.find(
+    (candidate) => usageRuleSignature(candidate) === signature,
+  );
+  const exactCharge = exactRule?.charges.find(
+    (charge) => charge.meter === meter,
+  );
+  if (exactCharge) return exactCharge;
+  const labelRule = comparison.rules.find(
+    (candidate) => candidate.label === rule.label,
+  );
+  return labelRule?.charges.find((charge) => charge.meter === meter);
+};
+
 function UsageRuleSetRenderer({
   ruleSet,
+  compareRuleSet,
   currency,
   discount = 0,
   showMarkup = false,
   compact = false,
 }: {
   ruleSet: UsageRuleSet;
+  compareRuleSet?: UsageRuleSet;
   currency: PricingCurrency;
   discount?: number;
   showMarkup?: boolean;
@@ -530,6 +603,7 @@ function UsageRuleSetRenderer({
   const showDiscount = discount > 0;
   const showMarkupBadge = showMarkup && discount < 0;
   const showPricingSummary = showPricingMode || showDiscount || showMarkupBadge;
+  const presentationKind = usageRulePresentationKind(ruleSet);
   const conditionLabel = (condition: UsageRuleSet["rules"][number]["conditions"][number]) => {
     const field = t(({
       output_images: "Generated image quantity",
@@ -587,6 +661,140 @@ function UsageRuleSetRenderer({
       {!rule.charges.some((charge) => charge.price !== 0) && <span className="text-muted-foreground">{t("Free")}</span>}
     </div>
   );
+  const matrixCharge = (
+    rule: UsageRuleSet["rules"][number] | undefined,
+    meter: string,
+  ) => {
+    const charge = rule?.charges.find((item) => item.meter === meter);
+    if (!rule || !charge || charge.price === 0) {
+      return <span className="text-muted-foreground">-</span>;
+    }
+    const actualPrice = charge.price * factor;
+    const compared = matchingUsageCharge(compareRuleSet, rule, meter);
+    const fractionDigits = priceFractionDigits(
+      (audioDurationRuleSet && meter === "seconds") ||
+        meter === "live_session_seconds",
+    );
+    const difference = compared ? actualPrice - compared.price : null;
+    return (
+      <div className="whitespace-nowrap">
+        <div>
+          <b>{money(actualPrice, currency, fractionDigits)}</b>
+          <span className="ml-1 text-muted-foreground">/ {charge.unit}</span>
+        </div>
+        {compared && (
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {t("Vendor price")}: {money(compared.price, currency, fractionDigits)}
+            {difference != null && Math.abs(difference) > 10 ** -(fractionDigits + 1) && (
+              <span className={`ml-1 font-medium ${difference > 0 ? "text-rose-500" : "text-emerald-500"}`}>
+                {difference > 0 ? "+" : ""}{money(difference, currency, fractionDigits)}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+  const matrix = (() => {
+    if (presentationKind === "seedream-pixel-scene") {
+      return (
+        <div className="overflow-x-auto rounded-md border bg-muted/25">
+          <table className="min-w-[760px] w-full text-left text-xs">
+            <thead className="bg-muted/60 text-muted-foreground"><tr>
+              <th className="border-r p-2 font-medium">{t("Generation scene")}</th>
+              <th className="border-r p-2 font-medium">{t("Input image price")}</th>
+              <th className="border-r p-2 font-medium">{t("Output image price (≤ 2.61M pixels)")}</th>
+              <th className="p-2 font-medium">{t("Output image price (> 2.61M pixels)")}</th>
+            </tr></thead>
+            <tbody>{ruleSet.rules.map((rule, index) => (
+              <tr className="border-t align-top" key={rule.id || index}>
+                <td className="border-r p-2.5 font-medium">{rule.label}</td>
+                <td className="border-r p-2.5">{matrixCharge(rule, "input_images")}</td>
+                <td className="border-r p-2.5">{matrixCharge(rule, "images_up_to_1_5k")}</td>
+                <td className="p-2.5">{matrixCharge(rule, "images_above_1_5k")}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      );
+    }
+    if (presentationKind === "seedance-video-tokens") {
+      const resolutionRules = ruleSet.rules.filter((rule) =>
+        usageCondition(rule, "resolution") != null,
+      );
+      const resolutions = [...new Set(
+        resolutionRules.map((rule) => String(usageCondition(rule, "resolution"))),
+      )];
+      const fallback = ruleSet.rules.find((rule) =>
+        usageCondition(rule, "resolution") == null,
+      );
+      return (
+        <div className="overflow-x-auto rounded-md border bg-muted/25">
+          <table className="min-w-[620px] w-full text-left text-xs">
+            <thead className="bg-muted/60 text-muted-foreground"><tr>
+              <th className="border-r p-2 font-medium">{t("Output resolution")}</th>
+              <th className="border-r p-2 font-medium">{t("No reference video")}</th>
+              <th className="p-2 font-medium">{t("With reference video")}</th>
+            </tr></thead>
+            <tbody>
+              {resolutions.map((resolution) => {
+                const withoutVideo = resolutionRules.find((rule) =>
+                  String(usageCondition(rule, "resolution")) === resolution &&
+                  String(usageCondition(rule, "video_input")) === "none",
+                );
+                const withVideo = resolutionRules.find((rule) =>
+                  String(usageCondition(rule, "resolution")) === resolution &&
+                  String(usageCondition(rule, "video_input")) === "video",
+                );
+                return <tr className="border-t align-top" key={resolution}>
+                  <td className="border-r p-2.5 font-medium">{resolution}</td>
+                  <td className="border-r p-2.5">{matrixCharge(withoutVideo, "tokens")}</td>
+                  <td className="p-2.5">{matrixCharge(withVideo, "tokens")}</td>
+                </tr>;
+              })}
+              {fallback && <tr className="border-t align-top">
+                <td className="border-r p-2.5 font-medium">{fallback.label}</td>
+                <td className="p-2.5" colSpan={2}>{matrixCharge(fallback, "tokens")}</td>
+              </tr>}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    if (presentationKind === "three-d-artifact") {
+      const artifactDetails = (rule: UsageRuleSet["rules"][number]) => {
+        const specification = String(usageCondition(rule, "output_spec") || "");
+        const hd = /^hd-/i.test(specification) || /高清/.test(rule.label);
+        const textured = /texture/i.test(specification) || /纹理/.test(rule.label);
+        return {
+          generation: hd ? t("High definition") : t("Standard"),
+          texture: textured ? t("Textured model") : t("Untextured model"),
+        };
+      };
+      return (
+        <div className="overflow-x-auto rounded-md border bg-muted/25">
+          <table className="min-w-[620px] w-full text-left text-xs">
+            <thead className="bg-muted/60 text-muted-foreground"><tr>
+              <th className="border-r p-2 font-medium">{t("3D artifact")}</th>
+              <th className="border-r p-2 font-medium">{t("Generation type")}</th>
+              <th className="border-r p-2 font-medium">{t("Texture type")}</th>
+              <th className="p-2 font-medium">{t("Unit price")}</th>
+            </tr></thead>
+            <tbody>{ruleSet.rules.map((rule, index) => {
+              const detail = artifactDetails(rule);
+              return <tr className="border-t align-top" key={rule.id || index}>
+                <td className="border-r p-2.5 font-medium">{rule.label}</td>
+                <td className="border-r p-2.5">{detail.generation}</td>
+                <td className="border-r p-2.5">{detail.texture}</td>
+                <td className="p-2.5">{matrixCharge(rule, "request")}</td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      );
+    }
+    return null;
+  })();
   return (
     <div className="space-y-2">
       {showPricingSummary && (
@@ -596,7 +804,7 @@ function UsageRuleSetRenderer({
           {showMarkupBadge && <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-700 dark:text-rose-300">{t("Markup")} {Math.abs(discount)}%</span>}
         </div>
       )}
-      {!showRuleDetails ? (
+      {matrix || (!showRuleDetails ? (
         <div className="rounded-md border bg-muted/25 p-3 text-sm">
           {charges(ruleSet.rules[0])}
         </div>
@@ -629,7 +837,7 @@ function UsageRuleSetRenderer({
             ))}
           </tbody>
         </table>
-      </div>}
+      </div>)}
     </div>
   );
 }
@@ -670,6 +878,7 @@ export function PriceRenderer({
   const displayedCompareSpec = withDerivedPrices(compareSpec);
   const requestMode = displayedSpec?.mode === "request";
   const usageRuleSet = matchingUsageRuleSet(spec);
+  const compareUsageRuleSet = matchingUsageRuleSet(compareSpec);
   const blocks = (displayedSpec?.blocks || []).filter(
     (block) =>
       displayedSpec?.mode === "table" ||
@@ -719,7 +928,7 @@ export function PriceRenderer({
     );
   };
   if (usageRuleSet?.rules?.length) {
-    return <UsageRuleSetRenderer ruleSet={usageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} showMarkup={showMarkup} compact={compact} />;
+    return <UsageRuleSetRenderer ruleSet={usageRuleSet} compareRuleSet={compareUsageRuleSet} currency={currency} discount={spec?.blocks?.[0]?.discount ?? 0} showMarkup={showMarkup} compact={compact} />;
   }
   if (!blocks.length) return <span className="text-muted-foreground">-</span>;
   if (tableLayout) {
@@ -786,6 +995,10 @@ export function PriceRenderer({
           const simpleModalityBlocks = new Set(
             simpleModalityTable?.block ? [simpleModalityTable.block] : [],
           );
+          const batchMultimodalBlocks = blocks.filter((block) =>
+            /^batch multimodal\b/i.test(block.label || ""),
+          );
+          const batchMultimodalBlockSet = new Set(batchMultimodalBlocks);
           const groups = publicPriceBlockGroups(
             blocks.filter(
               (block) =>
@@ -795,7 +1008,8 @@ export function PriceRenderer({
                 !textAudioBlocks.has(block) &&
                 !audioTokenOutputBlocks.has(block) &&
                 !geminiEasyBlocks.has(block) &&
-                !simpleModalityBlocks.has(block),
+                !simpleModalityBlocks.has(block) &&
+                !batchMultimodalBlockSet.has(block),
             ),
           );
           const comparedOmniBlocks = new Set(
@@ -830,6 +1044,11 @@ export function PriceRenderer({
               ),
             ),
           );
+          const comparedBatchMultimodalBlocks = new Set(
+            (displayedCompareSpec?.blocks || []).filter((block) =>
+              /^batch multimodal\b/i.test(block.label || ""),
+            ),
+          );
           const compareGroups = publicPriceBlockGroups(
             (displayedCompareSpec?.blocks || []).filter(
               (block) =>
@@ -838,7 +1057,8 @@ export function PriceRenderer({
                 !comparedAudioImageBlocks.has(block) &&
                 !comparedTextAudioBlocks.has(block) &&
                 !comparedAudioTokenOutputBlocks.has(block) &&
-                !comparedSimpleModalityBlocks.has(block),
+                !comparedSimpleModalityBlocks.has(block) &&
+                !comparedBatchMultimodalBlocks.has(block),
             ),
           );
           const compareGroupFor = (group: PublicPriceBlockGroup) =>
@@ -912,6 +1132,36 @@ export function PriceRenderer({
           ].filter(({ field }) => hasNonZeroPrice(audioImageBlock?.[field]));
           return (
             <>
+              {batchMultimodalBlocks.length > 0 && (
+                <div className="overflow-x-auto rounded-md border bg-muted/25">
+                  <table className="min-w-[920px] w-full text-left text-xs">
+                    <thead className="bg-muted/60 text-muted-foreground"><tr>
+                      <th className="border-r p-2 font-medium">{t("Token range")}</th>
+                      <th className="border-r p-2 font-medium">{t("Text input")}</th>
+                      <th className="border-r p-2 font-medium">{t("Audio input")}</th>
+                      <th className="border-r p-2 font-medium">{t("Text cached input")}</th>
+                      <th className="border-r p-2 font-medium">{t("Audio cached input")}</th>
+                      <th className="p-2 font-medium">{t("Output price")}</th>
+                    </tr></thead>
+                    <tbody>{batchMultimodalBlocks.map((block, index) => {
+                      const compared = displayedCompareSpec?.blocks?.find(
+                        (candidate) => candidate.label === block.label,
+                      );
+                      const unit = block.unit || "1M tokens";
+                      return <tr className="border-t align-top" key={block.label || index}>
+                        <td className="border-r p-2.5 font-medium">
+                          {(block.label || t("Pricing tier")).replace(/^batch multimodal\s*/i, "")}
+                        </td>
+                        <td className="border-r p-2.5">{renderPrice(priceValue(block, "input"), unit, priceValue(compared, "input"))}</td>
+                        <td className="border-r p-2.5">{renderPrice(priceValue(block, "audioInput"), unit, priceValue(compared, "audioInput"))}</td>
+                        <td className="border-r p-2.5">{renderPrice(priceValue(block, "cache"), unit, priceValue(compared, "cache"))}</td>
+                        <td className="border-r p-2.5">{renderPrice(priceValue(block, "audioCache"), unit, priceValue(compared, "audioCache"))}</td>
+                        <td className="p-2.5">{renderPrice(priceValue(block, "output"), unit, priceValue(compared, "output"))}</td>
+                      </tr>;
+                    })}</tbody>
+                  </table>
+                </div>
+              )}
               {audioTokenOutputTables.map((table) => {
                 const unit = table.block.unit || "1M tokens";
                 return (

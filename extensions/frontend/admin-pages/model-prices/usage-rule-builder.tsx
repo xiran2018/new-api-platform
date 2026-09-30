@@ -19,12 +19,15 @@ import {
 
 export { usageRuleSetExpression } from "../../model-prices/usage-rule-expression";
 
-export type TemplateKey = "image" | "outputImageCount" | "musicPerSong" | "boolean" | "volume" | "video" | "videoAudio" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "blank";
-export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "musicPerSong", "boolean", "volume", "video", "videoAudio", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "blank"];
+export type TemplateKey = "image" | "outputImageCount" | "seedreamPixelScene" | "musicPerSong" | "boolean" | "volume" | "video" | "videoAudio" | "seedanceVideoTokens" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "threeDArtifact" | "blank";
+export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "seedreamPixelScene", "musicPerSong", "boolean", "volume", "video", "videoAudio", "seedanceVideoTokens", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "threeDArtifact", "blank"];
 
 const requestFields = [
   "resolution",
   "resolution_tier",
+  "video_input",
+  "generate_audio",
+  "layer_decomposition",
   "quality",
   "mode",
   "prompt_extend",
@@ -40,6 +43,9 @@ const requestFields = [
   "count",
   "task_type",
   "output_spec",
+  "images_up_to_1_5k",
+  "images_above_1_5k",
+  "tokens",
 ];
 
 // Keep all historical advanced-media templates available even when a task
@@ -54,12 +60,18 @@ const knownUsageMeters = [
   "tts_input_characters",
   "tts_output_characters",
   "count",
+  "images_up_to_1_5k",
+  "images_above_1_5k",
+  "tokens",
   "request",
 ];
 
 const fieldLabels: Record<string, string> = {
   resolution: "Output resolution",
   resolution_tier: "Output resolution tier",
+  video_input: "Reference video input",
+  generate_audio: "Generate audio",
+  layer_decomposition: "Layer decomposition",
   quality: "Quality",
   mode: "Mode",
   prompt_extend: "Prompt rewriting",
@@ -75,6 +87,9 @@ const fieldLabels: Record<string, string> = {
   count: "Quantity",
   task_type: "Task type",
   output_spec: "Output specification",
+  images_up_to_1_5k: "Output images (≤ 2.61M pixels)",
+  images_above_1_5k: "Output images (> 2.61M pixels)",
+  tokens: "Billing tokens",
 };
 
 export function usageFieldLabel(field: string, templateKey: TemplateKey) {
@@ -159,7 +174,7 @@ function defaultUnit(meter: string, usageSchema?: BillingUsageSchema) {
   if (meter === "request") return "次";
   const unit = usageSchema?.[meter]?.unit;
   if (unit === "second" || meter === "seconds" || meter === "live_session_seconds") return "秒";
-  if (unit === "token") return "百万 Token";
+  if (unit === "token" || meter === "tokens") return "百万 Token";
   if (unit === "credit") return "计费点";
   if (meter.includes("image")) return "张";
   if (["characters", "tts_input_characters", "tts_output_characters"].includes(meter)) return "字符";
@@ -169,7 +184,7 @@ function defaultUnit(meter: string, usageSchema?: BillingUsageSchema) {
 function defaultConditionValue(field: string, usageSchema?: BillingUsageSchema) {
   const definition = usageSchema?.[field];
   if (definition?.enum?.length) return definition.enum[0];
-  if (definition?.type === "boolean" || ["prompt_extend", "audio"].includes(field)) return true;
+  if (definition?.type === "boolean" || ["prompt_extend", "audio", "generate_audio", "layer_decomposition"].includes(field)) return true;
   if (["resolution", "resolution_tier"].includes(field)) return "1080P";
   if (field === "quality") return "standard";
   return "";
@@ -189,7 +204,7 @@ function unitOptions(meter: string, usageSchema?: BillingUsageSchema) {
   if (meter === "seconds" || meter === "live_session_seconds" || usageSchema?.[meter]?.unit === "second") return ["秒", "分钟", "小时"];
   if (["characters", "tts_input_characters", "tts_output_characters"].includes(meter)) return ["字符", "千字符", "万字符"];
   if (meter.includes("image")) return ["张"];
-  if (usageSchema?.[meter]?.unit === "token") return ["百万 Token"];
+  if (usageSchema?.[meter]?.unit === "token" || meter === "tokens") return ["百万 Token"];
   if (usageSchema?.[meter]?.unit === "credit") return ["计费点"];
   return ["个", "张", "音色"];
 }
@@ -244,6 +259,20 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       rule("按输出图片张数", [], [charge(generatedImageMeter, "张")]),
     ]);
   }
+  if (key === "seedreamPixelScene") {
+    return wrap([
+      rule("单图生成", [{ field: "layer_decomposition", operator: "eq", value: false }], [
+        charge("input_images", "张"),
+        charge("images_up_to_1_5k", "张"),
+        charge("images_above_1_5k", "张"),
+      ]),
+      rule("图层拆分", [], [
+        charge("input_images", "张"),
+        charge("images_up_to_1_5k", "张"),
+        charge("images_above_1_5k", "张"),
+      ]),
+    ]);
+  }
   if (key === "musicPerSong") {
     return wrap([
       rule("音乐生成按歌曲/请求计费", [], [charge("request", "次", 0.08)]),
@@ -278,6 +307,22 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       rule("其他无声视频分辨率", [], [charge("seconds", "秒")]),
     ]);
   }
+  if (key === "seedanceVideoTokens") {
+    const resolutions = ["480p", "720p", "1080p", "4k"];
+    return wrap([
+      ...resolutions.flatMap((resolution) => [
+        rule(`${resolution} · 无参考视频`, [
+          { field: "resolution", operator: "eq", value: resolution },
+          { field: "video_input", operator: "eq", value: "none" },
+        ], [charge("tokens", "百万 Token")]),
+        rule(`${resolution} · 有参考视频`, [
+          { field: "resolution", operator: "eq", value: resolution },
+          { field: "video_input", operator: "eq", value: "video" },
+        ], [charge("tokens", "百万 Token")]),
+      ]),
+      rule("其他视频组合", [], [charge("tokens", "百万 Token")]),
+    ]);
+  }
   if (key === "videoMode") return wrap([rule("Standard mode", [{ field: "mode", operator: "eq", value: "wan-std" }], [charge("seconds", "秒")]), rule("Professional mode", [], [charge("seconds", "秒")])]);
   if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("其他视频分辨率", [], [charge("seconds", "秒")])]);
   if (key === "audioSeconds") return wrap([rule("Audio duration", [], [charge("seconds", "秒")])]);
@@ -299,6 +344,14 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       rule("Other task specification", []),
     ]);
   }
+  if (key === "threeDArtifact") {
+    return wrap([
+      rule("标准白模", [{ field: "output_spec", operator: "eq", value: "standard-no-texture" }], [charge("request", "次")]),
+      rule("标准纹理模型", [{ field: "output_spec", operator: "eq", value: "standard-standard-texture" }], [charge("request", "次")]),
+      rule("高清白模", [{ field: "output_spec", operator: "eq", value: "hd-no-texture" }], [charge("request", "次")]),
+      rule("高清纹理模型", [], [charge("request", "次")]),
+    ]);
+  }
   return wrap([rule("默认")]);
 }
 
@@ -311,6 +364,9 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   if (meters.has("image_count") && !fields.has("image_count")) return "outputImageCount";
   if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
   if (meters.has("live_session_seconds")) return "liveSessionSeconds";
+  if (meters.has("tokens") && fields.has("resolution") && fields.has("video_input")) return "seedanceVideoTokens";
+  if (meters.has("images_up_to_1_5k") || meters.has("images_above_1_5k")) return "seedreamPixelScene";
+  if (fields.has("output_spec") && rules.some((item) => /白模|纹理模型/.test(item.label))) return "threeDArtifact";
   if (fields.has("task_type") || fields.has("output_spec")) return "taskMatrix";
   if (meters.has("count") && !fields.has("output_images")) return "voiceCount";
   if (meters.has("seconds") && !fields.has("resolution") && !fields.has("mode")) return "audioSeconds";
@@ -432,6 +488,179 @@ function ConditionValueEditor({
   return <Input value={String(condition.value)} placeholder={t("Condition value")} onChange={(event) => onChange(parseInputValue(event.target.value))} />;
 }
 
+const friendlyMatrixTemplates: TemplateKey[] = [
+  "seedanceVideoTokens",
+  "seedreamPixelScene",
+  "threeDArtifact",
+];
+
+function FriendlyUsageRuleMatrix({
+  templateKey,
+  rules,
+  comparisonValue,
+  execution,
+  priceMultiplier,
+  pricingCurrency,
+  exchangeRate,
+  currencySymbol,
+  commitRules,
+}: {
+  templateKey: TemplateKey;
+  rules: UsagePriceRule[];
+  comparisonValue?: UsageRuleSet;
+  execution: UsageRuleSet["execution"];
+  priceMultiplier: number;
+  pricingCurrency: { label: string; symbol: string; exchangeRate: number };
+  exchangeRate: number;
+  currencySymbol: string;
+  commitRules: (rules: UsagePriceRule[]) => void;
+}) {
+  const { t } = useTranslation();
+  const updateRule = (ruleIndex: number, next: UsagePriceRule) => {
+    const copy = [...rules];
+    copy[ruleIndex] = next;
+    commitRules(copy);
+  };
+  const priceInput = (item: UsagePriceRule, ruleIndex: number, meter: string) => {
+    const chargeIndex = item.charges.findIndex((part) => part.meter === meter);
+    if (chargeIndex < 0) return null;
+    const part = item.charges[chargeIndex];
+    const vendorPart = findComparisonUsageCharge(comparisonValue, execution, item, part);
+    const fractionDigits = priceFractionDigits(false);
+    const actualPrice = part.price * priceMultiplier;
+    const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
+    return (
+      <div className="min-w-[132px] space-y-1">
+        <PricingAmountInput
+          className="h-9"
+          currency={pricingCurrency}
+          fractionDigits={fractionDigits}
+          value={part.price}
+          onChange={(next) => {
+            const charges = [...item.charges];
+            charges[chargeIndex] = { ...part, price: Math.max(0, Number(next) || 0) };
+            updateRule(ruleIndex, { ...item, charges });
+          }}
+        />
+        {vendorPart ? (
+          <div className="whitespace-nowrap text-[11px] text-muted-foreground">
+            {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}
+            {difference !== 0 && (
+              <span className={difference! > 0 ? "ml-1 text-rose-500" : "ml-1 text-emerald-500"}>
+                {difference! > 0 ? "+" : ""}{currencySymbol}{formatPriceDecimal(difference! * exchangeRate, fractionDigits)}
+              </span>
+            )}
+          </div>
+        ) : <div className="text-[11px] text-muted-foreground">{t("Vendor price is not set")}</div>}
+      </div>
+    );
+  };
+  const ruleLabel = (item: UsagePriceRule, ruleIndex: number) => (
+    <Input className="h-9 min-w-[130px] font-medium" value={item.label} aria-label={t("Tier name")} onChange={(event) => updateRule(ruleIndex, { ...item, label: event.target.value })} />
+  );
+  const removeButton = (ruleIndex: number) => (
+    <Button type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(removeUsagePricingTier(rules, ruleIndex))}>
+      <Trash2 className="size-4" />
+    </Button>
+  );
+  const conditionValue = (item: UsagePriceRule, ruleIndex: number, field: string, values?: Array<{ value: string; label: string }>) => {
+    const conditionIndex = item.conditions.findIndex((condition) => condition.field === field);
+    if (conditionIndex < 0) return <span className="text-xs text-muted-foreground">{t("Fallback tier")}</span>;
+    const condition = item.conditions[conditionIndex];
+    const onChange = (next: string) => {
+      const conditions = [...item.conditions];
+      conditions[conditionIndex] = { ...condition, value: next };
+      updateRule(ruleIndex, { ...item, conditions });
+    };
+    return values ? (
+      <select className="flex h-9 min-w-[130px] rounded-md border bg-background px-2 text-sm" value={String(condition.value)} onChange={(event) => onChange(event.target.value)}>
+        {values.map((option) => <option value={option.value} key={option.value}>{t(option.label)}</option>)}
+      </select>
+    ) : <Input className="h-9 min-w-[130px]" value={String(condition.value)} onChange={(event) => onChange(event.target.value)} />;
+  };
+
+  if (templateKey === "seedreamPixelScene") {
+    return (
+      <div className="overflow-x-auto rounded-lg border bg-background">
+        <table className="min-w-[760px] w-full text-left text-sm">
+          <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
+            <th className="p-2.5">{t("Generation scene")}</th>
+            <th className="p-2.5">{t("Input image price")}</th>
+            <th className="p-2.5">{t("Output image price (≤ 2.61M pixels)")}</th>
+            <th className="p-2.5">{t("Output image price (> 2.61M pixels)")}</th>
+          </tr></thead>
+          <tbody>{rules.map((item, ruleIndex) => (
+            <tr className="border-t align-top" key={item.id}>
+              <td className="p-2.5">{ruleLabel(item, ruleIndex)}</td>
+              <td className="p-2.5">{priceInput(item, ruleIndex, "input_images")}</td>
+              <td className="p-2.5">{priceInput(item, ruleIndex, "images_up_to_1_5k")}</td>
+              <td className="p-2.5">{priceInput(item, ruleIndex, "images_above_1_5k")}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (templateKey === "seedanceVideoTokens") {
+    return (
+      <div className="space-y-3">
+        <div className="overflow-x-auto rounded-lg border bg-background">
+          <table className="min-w-[760px] w-full text-left text-sm">
+            <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
+              <th className="p-2.5">{t("Display name")}</th>
+              <th className="p-2.5">{t("Output resolution")}</th>
+              <th className="p-2.5">{t("Reference video input")}</th>
+              <th className="p-2.5">{t("Price per 1M billing tokens")}</th>
+              <th className="w-12 p-2.5" />
+            </tr></thead>
+            <tbody>{rules.map((item, ruleIndex) => (
+              <tr className="border-t align-top" key={item.id}>
+                <td className="p-2.5">{ruleLabel(item, ruleIndex)}</td>
+                <td className="p-2.5">{conditionValue(item, ruleIndex, "resolution")}</td>
+                <td className="p-2.5">{conditionValue(item, ruleIndex, "video_input", [{ value: "none", label: "No reference video" }, { value: "video", label: "With reference video" }])}</td>
+                <td className="p-2.5">{priceInput(item, ruleIndex, "tokens")}</td>
+                <td className="p-2.5">{removeButton(ruleIndex)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <Button type="button" variant="outline" onClick={() => {
+          const next = rule(t("New resolution and input-video tier"), [{ field: "resolution", operator: "eq", value: "720p" }, { field: "video_input", operator: "eq", value: "none" }], [charge("tokens", "百万 Token")]);
+          commitRules([...rules.slice(0, -1), next, rules.at(-1)!]);
+        }}><Plus className="mr-2 size-4" />{t("Add resolution tier")}</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto rounded-lg border bg-background">
+        <table className="min-w-[660px] w-full text-left text-sm">
+          <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
+            <th className="p-2.5">{t("3D artifact")}</th>
+            <th className="p-2.5">{t("Output specification")}</th>
+            <th className="p-2.5">{t("Price per successful output")}</th>
+            <th className="w-12 p-2.5" />
+          </tr></thead>
+          <tbody>{rules.map((item, ruleIndex) => (
+            <tr className="border-t align-top" key={item.id}>
+              <td className="p-2.5">{ruleLabel(item, ruleIndex)}</td>
+              <td className="p-2.5">{conditionValue(item, ruleIndex, "output_spec")}</td>
+              <td className="p-2.5">{priceInput(item, ruleIndex, "request")}</td>
+              <td className="p-2.5">{removeButton(ruleIndex)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <Button type="button" variant="outline" onClick={() => {
+        const next = rule(t("New 3D artifact"), [{ field: "output_spec", operator: "eq", value: "custom" }], [charge("request", "次")]);
+        commitRules([...rules.slice(0, -1), next, rules.at(-1)!]);
+      }}><Plus className="mr-2 size-4" />{t("Add 3D artifact")}</Button>
+    </div>
+  );
+}
+
 export function UsageRuleBuilder({
   value,
   comparisonValue,
@@ -462,11 +691,13 @@ export function UsageRuleBuilder({
   const templateHelp: Record<TemplateKey, string> = {
     image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
     outputImageCount: "Prices every generated output image at one configurable unit price.",
+    seedreamPixelScene: "Seedream-friendly matrix for input images, single-image generation or layer decomposition, and output images on either side of the 2.61M-pixel threshold.",
     musicPerSong: "Use for music APIs that return one song per request. The configured price is charged once per request; if a provider can return multiple songs, use a measured song-count field instead.",
     boolean: "Prices the request according to whether the selected request option is enabled.",
     volume: "Prices each generated output image according to the output quantity tier.",
     video: "Prices generated video by output resolution and output duration.",
     videoAudio: "Prices generated video by output resolution, output duration and whether audio is enabled.",
+    seedanceVideoTokens: "Seedance-friendly matrix that selects a billing-token price by output resolution and whether the request contains reference video.",
     videoMode: "Prices generated video by output mode and duration.",
     imageVideo: "Prices uploaded images and generated video separately.",
     audioSeconds: "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.",
@@ -474,6 +705,7 @@ export function UsageRuleBuilder({
     ttsCharacters: "Prices text-to-speech input per ten thousand Unicode characters; generated audio output is free.",
     voiceCount: "Prices voice enrollment by the number of voices.",
     taskMatrix: "Prices combinations of task type and output specification.",
+    threeDArtifact: "Administrator-friendly 3D artifact matrix for standard/HD geometry and texture output specifications.",
     blank: "Build a custom rule from request attributes and measured output usage.",
   };
   useEffect(() => {
@@ -541,11 +773,13 @@ export function UsageRuleBuilder({
           }}>
             <option value="image" disabled={!templateSupported("image")}>{t("Output image resolution (1K/2K)")}</option>
             <option value="outputImageCount" disabled={!templateSupported("outputImageCount")}>{t("Generated output images per image")}</option>
+            <option value="seedreamPixelScene" disabled={!templateSupported("seedreamPixelScene")}>{t("Seedream input/output image and pixel scene pricing")}</option>
             <option value="musicPerSong" disabled={!templateSupported("musicPerSong")}>{t("Music generation per song/request")}</option>
             <option value="boolean" disabled={!templateSupported("boolean")}>{t("Boolean request option")}</option>
             <option value="volume" disabled={!templateSupported("volume")}>{t("Generated image quantity tiers")}</option>
             <option value="video" disabled={!templateSupported("video")}>{t("Output video resolution and duration")}</option>
             <option value="videoAudio" disabled={!templateSupported("videoAudio")}>{t("Video resolution, duration and audio switch")}</option>
+            <option value="seedanceVideoTokens" disabled={!templateSupported("seedanceVideoTokens")}>{t("Seedance resolution and reference-video token pricing")}</option>
             <option value="videoMode" disabled={!templateSupported("videoMode")}>{t("Video output mode and duration")}</option>
             <option value="imageVideo" disabled={!templateSupported("imageVideo")}>{t("Input image and output video")}</option>
             <option value="audioSeconds" disabled={!templateSupported("audioSeconds")}>{t("Generated audio/media task duration pricing")}</option>
@@ -553,6 +787,7 @@ export function UsageRuleBuilder({
             <option value="ttsCharacters" disabled={!templateSupported("ttsCharacters")}>{t("Text-to-speech per 10K characters")}</option>
             <option value="voiceCount" disabled={!templateSupported("voiceCount")}>{t("Voice enrollment count")}</option>
             <option value="taskMatrix" disabled={!templateSupported("taskMatrix")}>{t("Task type and output specification matrix")}</option>
+            <option value="threeDArtifact" disabled={!templateSupported("threeDArtifact")}>{t("3D artifact specification pricing")}</option>
             <option value="blank">{t("Blank rule")}</option>
           </select>
         </label>
@@ -564,6 +799,19 @@ export function UsageRuleBuilder({
         </p>
       )}
       <p className="text-xs text-muted-foreground">{t(templateHelp[templateKey])}</p>
+      {friendlyMatrixTemplates.includes(templateKey) ? (
+        <FriendlyUsageRuleMatrix
+          templateKey={templateKey}
+          rules={rules}
+          comparisonValue={comparisonValue}
+          execution={execution}
+          priceMultiplier={priceMultiplier}
+          pricingCurrency={pricingCurrency}
+          exchangeRate={exchangeRate}
+          currencySymbol={currencySymbol}
+          commitRules={commitRules}
+        />
+      ) : <>
       <div className="space-y-3">
         {rules.map((item, ruleIndex) => (
           <div className="space-y-3 rounded-md border bg-background p-3" key={item.id}>
@@ -654,6 +902,7 @@ export function UsageRuleBuilder({
           commitRules([...rules.slice(0, -1), next, rules.at(-1)!]);
         }}><CopyPlus className="mr-2 size-4" />{t("Add pricing tier")}</Button>
       </div>
+      </>}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   publicPriceBlockGroups,
   publicPriceRowUnit,
   publicPriceRows,
+  usageRulePresentationKind,
 } from './price-renderer'
 import { usageRuleSetExpression } from './usage-rule-expression'
 import type { UsageRuleSet } from './types'
@@ -778,5 +779,133 @@ describe('expression price display', () => {
     expect(document.querySelectorAll('tbody tr')).toHaveLength(1)
     expect(screen.getByText('Image input:')).toBeInTheDocument()
     expect(screen.getByText('Video input:')).toBeInTheDocument()
+  })
+
+  it('renders batch multimodal token tiers as one compact row per token range', () => {
+    const preset = PLATFORM_BILLING_PRESET_GROUPS.flatMap(
+      (group) => group.presets,
+    ).find((item) => item.key === 'batch-multimodal-token-tiers')
+    expect(preset).toBeDefined()
+    expect(
+      evaluateBillingExpression(preset!.expr, {
+        tokens: { p: 100, ai: 20, cr: 30, ai_cr: 40, c: 50, len: 100 },
+      }),
+    ).toMatchObject({ status: 'success', cost: 327, matchedTier: 'Batch multimodal 0-32K' })
+
+    render(
+      <PriceRenderer
+        tableLayout
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: preset!.expr }] }}
+      />,
+    )
+
+    expect(document.querySelectorAll('table')).toHaveLength(1)
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(3)
+    expect(screen.getByText('Text input')).toBeInTheDocument()
+    expect(screen.getByText('Audio input')).toBeInTheDocument()
+    expect(screen.getByText('Text cached input')).toBeInTheDocument()
+    expect(screen.getByText('Audio cached input')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('len <=')
+  })
+
+  it('groups Seedance reference-video prices by output resolution', () => {
+    const ruleSet: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      rules: [
+        {
+          id: '480-none',
+          label: '480p · 无参考视频',
+          conditions: [
+            { field: 'resolution', operator: 'eq', value: '480p' },
+            { field: 'video_input', operator: 'eq', value: 'none' },
+          ],
+          charges: [{ meter: 'tokens', unit: '百万 Token', price: 2 }],
+        },
+        {
+          id: '480-video',
+          label: '480p · 有参考视频',
+          conditions: [
+            { field: 'resolution', operator: 'eq', value: '480p' },
+            { field: 'video_input', operator: 'eq', value: 'video' },
+          ],
+          charges: [{ meter: 'tokens', unit: '百万 Token', price: 3 }],
+        },
+        {
+          id: 'other',
+          label: '其他视频组合',
+          conditions: [],
+          charges: [{ meter: 'tokens', unit: '百万 Token', price: 4 }],
+        },
+      ],
+    }
+    expect(usageRulePresentationKind(ruleSet)).toBe('seedance-video-tokens')
+
+    render(
+      <PriceRenderer
+        tableLayout
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: usageRuleSetExpression(ruleSet), usageRuleSet: ruleSet }] }}
+      />,
+    )
+
+    expect(document.querySelectorAll('table')).toHaveLength(1)
+    expect(screen.getByText('No reference video')).toBeInTheDocument()
+    expect(screen.getByText('With reference video')).toBeInTheDocument()
+    expect(screen.getAllByText('480p')).toHaveLength(1)
+    expect(document.body.textContent).not.toContain('video_input')
+  })
+
+  it('renders Seedream and 3D advanced rules as semantic compact tables', () => {
+    const seedream: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      rules: [{
+        id: 'single',
+        label: '单图生成',
+        conditions: [{ field: 'layer_decomposition', operator: 'eq', value: false }],
+        charges: [
+          { meter: 'input_images', unit: '张', price: 0.1 },
+          { meter: 'images_up_to_1_5k', unit: '张', price: 0.2 },
+          { meter: 'images_above_1_5k', unit: '张', price: 0.4 },
+        ],
+      }],
+    }
+    const { unmount } = render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: usageRuleSetExpression(seedream), usageRuleSet: seedream }] }}
+      />,
+    )
+    expect(usageRulePresentationKind(seedream)).toBe('seedream-pixel-scene')
+    expect(screen.getByText('Output image price (≤ 2.61M pixels)')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('images_up_to_1_5k')
+    unmount()
+
+    const artifact: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      rules: [{
+        id: 'standard',
+        label: '标准白模',
+        conditions: [{ field: 'output_spec', operator: 'eq', value: 'standard-no-texture' }],
+        charges: [{ meter: 'request', unit: '次', price: 1.5 }],
+      }],
+    }
+    render(
+      <PriceRenderer
+        tableLayout
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: usageRuleSetExpression(artifact), usageRuleSet: artifact }] }}
+      />,
+    )
+    expect(usageRulePresentationKind(artifact)).toBe('three-d-artifact')
+    expect(screen.getByText('Generation type')).toBeInTheDocument()
+    expect(screen.getByText('Texture type')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('output_spec')
   })
 })

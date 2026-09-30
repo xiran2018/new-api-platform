@@ -530,6 +530,9 @@ export function ModelPriceManagementPage() {
     [q, setQ] = useState(""),
     [filter, setFilter] = useState<"all" | "local" | "unset">("all"),
     [vendorFilter, setVendorFilter] = useState("all"),
+    [squareVisibilityFilter, setSquareVisibilityFilter] = useState<
+      "all" | "enabled" | "disabled"
+    >("all"),
     [edit, setEdit] = useState<ModelPrice | null>(null),
     [savingEdit, setSavingEdit] = useState(false),
     [vendorNames, setVendorNames] = useState<string[]>([]),
@@ -624,12 +627,15 @@ export function ModelPriceManagementPage() {
         const unset = !row.llmapiPriceSpec?.blocks?.length;
         return (
           (vendorFilter === "all" || row.vendor === vendorFilter) &&
+          (squareVisibilityFilter === "all" ||
+            (squareVisibilityFilter === "enabled" && row.published) ||
+            (squareVisibilityFilter === "disabled" && !row.published)) &&
           (filter === "all" ||
             (filter === "local" && local) ||
             (filter === "unset" && local && unset))
         );
       }),
-    [rows, filter, vendorFilter],
+    [rows, filter, vendorFilter, squareVisibilityFilter],
   );
   const totalPages = Math.max(1, Math.ceil(shown.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -637,7 +643,10 @@ export function ModelPriceManagementPage() {
     () => shown.slice((currentPage - 1) * pageSize, currentPage * pageSize),
     [shown, currentPage, pageSize],
   );
-  useEffect(() => setPage(1), [q, filter, vendorFilter, pageSize]);
+  useEffect(
+    () => setPage(1),
+    [q, filter, vendorFilter, squareVisibilityFilter, pageSize],
+  );
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
@@ -756,6 +765,20 @@ export function ModelPriceManagementPage() {
           {[...new Set([...vendorNames, ...rows.map((row) => row.vendor)].filter(Boolean))]
             .sort((left, right) => left.localeCompare(right))
             .map((vendor) => <option value={vendor} key={vendor}>{vendor}</option>)}
+        </select>
+        <select
+          aria-label={t("Model square visibility")}
+          className="h-10 rounded-md border bg-background px-3"
+          value={squareVisibilityFilter}
+          onChange={(event) =>
+            setSquareVisibilityFilter(
+              event.target.value as typeof squareVisibilityFilter,
+            )
+          }
+        >
+          <option value="all">{t("All model square statuses")}</option>
+          <option value="enabled">{t("Model square enabled")}</option>
+          <option value="disabled">{t("Model square disabled")}</option>
         </select>
         <span className="self-center text-sm text-muted-foreground">
           {shown.length} {t("models")}

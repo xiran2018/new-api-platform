@@ -415,4 +415,72 @@ describe('screenshot-derived billing templates', () => {
       matchedTier: '按万字符计费',
     })
   })
+
+  it('charges Seedance from resolution, reference-video state and actual billing tokens', () => {
+    const rules = createUsageRuleTemplate('seedanceVideoTokens', 'task')
+    rules.rules[0].charges[0].price = 2
+    rules.rules[1].charges[0].price = 3
+    const expression = usageRuleSetExpression(rules)
+
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: { resolution: '480p', video_input: 'none', tokens: 500_000 },
+      }),
+    ).toMatchObject({ status: 'success', cost: 1, matchedTier: '480p · 无参考视频' })
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: { resolution: '480p', video_input: 'video', tokens: 500_000 },
+      }),
+    ).toMatchObject({ status: 'success', cost: 1.5, matchedTier: '480p · 有参考视频' })
+  })
+
+  it('charges Seedream input images and the real 2.61M-pixel output buckets', () => {
+    const rules = createUsageRuleTemplate('seedreamPixelScene', 'task')
+    rules.rules[0].charges[0].price = 0.1
+    rules.rules[0].charges[1].price = 0.2
+    rules.rules[0].charges[2].price = 0.4
+    rules.rules[1].charges[0].price = 0.15
+    rules.rules[1].charges[1].price = 0.25
+    rules.rules[1].charges[2].price = 0.5
+    const expression = usageRuleSetExpression(rules)
+
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: {
+          layer_decomposition: false,
+          input_images: 1,
+          images_up_to_1_5k: 2,
+          images_above_1_5k: 0,
+        },
+      }),
+    ).toMatchObject({ status: 'success', cost: 0.5, matchedTier: '单图生成' })
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: {
+          layer_decomposition: true,
+          input_images: 1,
+          images_up_to_1_5k: 0,
+          images_above_1_5k: 2,
+        },
+      }),
+    ).toMatchObject({ status: 'success', cost: 1.15, matchedTier: '图层拆分' })
+  })
+
+  it('charges 3D generation from the persisted output specification', () => {
+    const rules = createUsageRuleTemplate('threeDArtifact', 'task')
+    rules.rules[0].charges[0].price = 1.5
+    rules.rules[3].charges[0].price = 4
+    const expression = usageRuleSetExpression(rules)
+
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: { output_spec: 'standard-no-texture' },
+      }),
+    ).toMatchObject({ status: 'success', cost: 1.5, matchedTier: '标准白模' })
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: { output_spec: 'hd-hd-texture' },
+      }),
+    ).toMatchObject({ status: 'success', cost: 4, matchedTier: '高清纹理模型' })
+  })
 })
