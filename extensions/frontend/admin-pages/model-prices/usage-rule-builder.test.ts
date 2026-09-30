@@ -1,3 +1,5 @@
+import { createElement } from 'react'
+import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { compileBillingExpression } from '@/features/pricing/lib/billing-expression/parser'
@@ -8,12 +10,14 @@ import { PLATFORM_BILLING_PRESET_GROUPS } from '@/platform/model-prices/expressi
 
 import {
   BILLING_TEMPLATE_KEYS,
+  UsageRuleBuilder,
   createUsageRuleTemplate,
   findComparisonUsageCharge,
   removeUsagePricingTier,
   syncExampleTierNames,
   unsupportedTaskUsageKeys,
   usageRuleSetExpression,
+  usageRuleTemplateSelectable,
   usageFieldLabel,
   validateUsageRuleSet,
 } from './usage-rule-builder'
@@ -145,9 +149,40 @@ describe('vendor usage-rule comparison', () => {
       findComparisonUsageCharge(vendor, 'request', actualRule, outputCharge)
     ).toBeUndefined()
   })
+
+  it('shows vendor comparison hints only in the actual-price editor', () => {
+    const value = createUsageRuleTemplate('seedreamPixelScene', 'request')
+    const props = {
+      value,
+      exchangeRate: 1,
+      currencySymbol: '$',
+      onApply: () => undefined,
+    }
+
+    const vendorEditor = render(createElement(UsageRuleBuilder, props))
+    expect(document.body.textContent).not.toContain('Vendor price is not set')
+    vendorEditor.unmount()
+
+    const actualEditor = render(createElement(UsageRuleBuilder, {
+      ...props,
+      showVendorComparison: true,
+    }))
+    expect(document.body.textContent).toContain('Vendor price is not set')
+    actualEditor.unmount()
+  })
 })
 
 describe('task usage-schema compatibility', () => {
+  it('keeps output-image-count pricing legacy-readable but unavailable for new selection', () => {
+    expect(usageRuleTemplateSelectable('outputImageCount', 'request')).toBe(false)
+    expect(usageRuleTemplateSelectable('outputImageCount', 'task', {
+      image_count: { type: 'number', unit: 'count' },
+    })).toBe(false)
+
+    const legacyRules = createUsageRuleTemplate('outputImageCount', 'task')
+    expect(legacyRules.rules[0].charges[0].meter).toBe('image_count')
+  })
+
   it('rejects a resolution template when the task plugin only declares image_count', () => {
     const rules = createUsageRuleTemplate('image', 'task')
     expect(unsupportedTaskUsageKeys(rules, {
@@ -414,6 +449,32 @@ describe('screenshot-derived billing templates', () => {
       cost: 800_000,
       matchedTier: '按万字符计费',
     })
+  })
+
+  it('creates Seedance as an explicit matrix without a fallback tier', () => {
+    const rules = createUsageRuleTemplate('seedanceVideoTokens', 'task')
+
+    expect(rules.unmatchedPolicy).toBe('reject')
+    expect(rules.rules).toHaveLength(8)
+    expect(rules.rules.every((rule) => rule.conditions.length > 0)).toBe(true)
+    expect(validateUsageRuleSet(rules)).toBe('')
+
+    const expression = usageRuleSetExpression(rules)
+    expect(expression).toContain('__pricing_unmatched__')
+    expect(expression).not.toContain('其他视频组合')
+  })
+
+  it('does not promote a Seedance tier to a fallback when the final tier is removed', () => {
+    const rules = createUsageRuleTemplate('seedanceVideoTokens', 'task')
+    const result = removeUsagePricingTier(
+      rules.rules,
+      rules.rules.length - 1,
+      rules.unmatchedPolicy,
+    )
+
+    expect(result).toHaveLength(7)
+    expect(result.at(-1)?.conditions.length).toBeGreaterThan(0)
+    expect(validateUsageRuleSet({ ...rules, rules: result })).toBe('')
   })
 
   it('charges Seedance from resolution, reference-video state and actual billing tokens', () => {

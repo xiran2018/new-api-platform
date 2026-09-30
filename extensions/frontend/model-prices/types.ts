@@ -21,6 +21,8 @@ export type UsageRuleSet = {
   version: 1;
   execution: "request" | "task";
   rules: UsagePriceRule[];
+  /* How unmatched requests are handled; omitted preserves legacy fallback behavior. */
+  unmatchedPolicy?: "fallback" | "reject";
 };
 export type PriceBlock = {
   label?: string;

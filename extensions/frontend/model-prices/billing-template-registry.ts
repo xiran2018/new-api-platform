@@ -747,7 +747,7 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     runtime:
       '普通图片请求使用 core 原生 image_count：按请求 n 预扣，按实际返回图片张数结算。',
     compatibility:
-      'request 模式保留 core 原生 fixed(unitPrice) * image_count；task 模式必须生成 u("image_count") * unitPrice，不能在任务表达式中使用 fixed()。',
+      '仅兼容读取和编辑历史配置，不再允许管理员新选择该模板。不同图片插件的实际输出数量字段并不统一，新配置必须选择插件明确支持的图片计费模板；历史 request 模式保留 core 原生 fixed(unitPrice) * image_count，历史 task 模式继续使用 u("image_count") * unitPrice。',
   },
   {
     key: 'seedreamPixelScene',
@@ -863,14 +863,14 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     conditionFields: ['resolution', 'video_input'],
     chargeMeters: ['tokens'],
     units: ['百万 Token'],
-    defaultTiers: '480p、720p、1080p、4k 分别提供无参考视频/有参考视频两行，并保留可编辑兜底行。',
+    defaultTiers: '480p、720p、1080p、4k 分别提供无参考视频/有参考视频两行；默认不生成兜底档位，未匹配组合拒绝计费。',
     layout: {
       editor: '管理员友好的分辨率、参考视频状态、Token 单价矩阵，可增加、删除和重命名组合。',
       managementDisplay: '同一分辨率合并为一行，无视频输入和有视频输入分别显示。',
       publicDisplay: '紧凑显示分辨率及两种输入场景价格，不显示条件表达式。',
     },
     runtime: 'Doubao Seedance 插件从完成结果读取实际 billing tokens，并保留提交时估算用于预扣；按 resolution/video_input 命中单价后结算。',
-    compatibility: '只对插件声明的分辨率和 video_input 字段启用；截图中的分辨率是默认行而不是硬编码限制。',
+    compatibility: '只对插件声明的分辨率和 video_input 字段启用；截图中的分辨率是默认示例而不是硬编码限制；结构化规则使用 unmatchedPolicy=reject，不生成无条件兜底档位，未匹配组合由后端拒绝。',
   },
   {
     key: 'videoMode',

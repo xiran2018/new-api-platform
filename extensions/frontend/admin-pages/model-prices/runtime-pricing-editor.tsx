@@ -1073,6 +1073,7 @@ export const RuntimePricingEditor = forwardRef<RuntimePricingEditorHandle, {
                 <UsageRuleBuilder
                   value={usageRuleSet}
                   comparisonValue={matchingUsageRuleSet(comparisonPriceSpec)}
+                  showVendorComparison
                   priceMultiplier={1 - discount / 100}
                   usageSchema={entry.usage_schema}
                   exchangeRate={exchangeRate}

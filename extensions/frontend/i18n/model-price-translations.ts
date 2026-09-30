@@ -384,6 +384,8 @@ Object.assign(resources.zh, {
     "Advanced media pricing": "高级媒体计费",
     "Build dynamic prices from request attributes and measured usage. Rules are checked from top to bottom; the final tier is the fallback.":
       "根据请求参数和实际用量设置动态价格。规则从上到下匹配，最后一档是默认档。",
+  "Only explicitly configured resolution/reference-video combinations are priced. Unmatched combinations are rejected.":
+      "仅对已配置的分辨率和参考视频组合计价；未匹配的组合将被拒绝。",
     "Pricing template": "计费模板",
     "Image resolution (1K/2K)": "图片分辨率（1K/2K）",
     "Output image resolution (1K/2K)": "输出图片分辨率（1K/2K）",

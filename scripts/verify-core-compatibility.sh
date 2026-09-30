@@ -16,6 +16,8 @@ adapter="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing
 usage_rule_builder="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.tsx"
 runtime_pricing_test="$repo_root/extensions/frontend/admin-pages/model-prices/runtime-pricing-editor.test.ts"
 usage_rule_test="$repo_root/extensions/frontend/admin-pages/model-prices/usage-rule-builder.test.ts"
+usage_rule_expression="$repo_root/extensions/frontend/model-prices/usage-rule-expression.ts"
+billingexpr_run="$repo_root/core/new-api/pkg/billingexpr/run.go"
 presets="$repo_root/extensions/frontend/model-prices/expression-presets.ts"
 renderer="$repo_root/extensions/frontend/model-prices/price-renderer.tsx"
 renderer_test="$repo_root/extensions/frontend/model-prices/price-renderer.test.tsx"
@@ -119,6 +121,11 @@ require_text "$usage_rule_test" \
 require_text "$usage_rule_test" \
   "charges Seedance from resolution, reference-video state and actual billing tokens" \
   "Seedance resolution/reference-video billing execution coverage was lost"
+require_text "$usage_rule_builder" "unmatchedPolicy" "Seedance unmatched-policy compatibility was lost"
+require_text "$usage_rule_expression" "__pricing_unmatched__" "Seedance unmatched sentinel expression support was lost"
+require_text "$billingexpr_run" "ErrUnmatchedPricingTier" "backend unmatched pricing rejection was lost"
+require_text "$usage_rule_builder" 'if (key === "outputImageCount") return false' "legacy-only output-image-count template became selectable again"
+require_text "$usage_rule_builder" "showVendorComparison" "vendor-price comparison visibility control was lost"
 require_text "$usage_rule_test" \
   "charges Seedream input images and the real 2.61M-pixel output buckets" \
   "Seedream input/output pixel-bucket billing coverage was lost"

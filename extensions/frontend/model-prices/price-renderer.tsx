@@ -725,9 +725,9 @@ function UsageRuleSetRenderer({
       const resolutions = [...new Set(
         resolutionRules.map((rule) => String(usageCondition(rule, "resolution"))),
       )];
-      const fallback = ruleSet.rules.find((rule) =>
-        usageCondition(rule, "resolution") == null,
-      );
+      const fallback = ruleSet.unmatchedPolicy === "reject"
+        ? undefined
+        : ruleSet.rules.find((rule) => usageCondition(rule, "resolution") == null);
       return (
         <div className="overflow-x-auto rounded-md border bg-muted/25">
           <table className="min-w-[620px] w-full text-left text-xs">

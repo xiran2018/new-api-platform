@@ -810,6 +810,37 @@ describe('expression price display', () => {
     expect(document.body.textContent).not.toContain('len <=')
   })
 
+  it('does not render an implicit Seedance fallback for reject matrices', () => {
+    const ruleSet: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      unmatchedPolicy: 'reject',
+      rules: [{
+        id: '480-none',
+        label: '480p · 无参考视频',
+        conditions: [
+          { field: 'resolution', operator: 'eq', value: '480p' },
+          { field: 'video_input', operator: 'eq', value: 'none' },
+        ],
+        charges: [{ meter: 'tokens', unit: '百万 Token', price: 2 }],
+      }],
+    }
+
+    render(
+      <PriceRenderer
+        tableLayout
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: usageRuleSetExpression(ruleSet), usageRuleSet: ruleSet }] }}
+      />,
+    )
+
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(1)
+    expect(screen.getByText('480p')).toBeInTheDocument()
+    expect(screen.queryByText('Fallback tier')).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('__pricing_unmatched__')
+  })
+
   it('groups Seedance reference-video prices by output resolution', () => {
     const ruleSet: UsageRuleSet = {
       version: 1,

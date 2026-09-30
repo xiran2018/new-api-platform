@@ -238,7 +238,7 @@ export function syncExampleTierNames(rules: UsagePriceRule[], oldValue: UsageRul
 }
 
 export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSet["execution"]): UsageRuleSet {
-  const wrap = (rules: UsagePriceRule[]): UsageRuleSet => ({ version: 1, execution, rules });
+  const wrap = (rules: UsagePriceRule[], unmatchedPolicy: UsageRuleSet["unmatchedPolicy"] = "fallback"): UsageRuleSet => ({ version: 1, execution, rules, ...(unmatchedPolicy === "reject" ? { unmatchedPolicy } : {}) });
   // Task plugins expose the completed output count as image_count; using the
   // same canonical meter across request and task rules keeps Alibaba and other
   // providers compatible while request expressions still use native image_count.
@@ -320,8 +320,7 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
           { field: "video_input", operator: "eq", value: "video" },
         ], [charge("tokens", "百万 Token")]),
       ]),
-      rule("其他视频组合", [], [charge("tokens", "百万 Token")]),
-    ]);
+    ], "reject");
   }
   if (key === "videoMode") return wrap([rule("Standard mode", [{ field: "mode", operator: "eq", value: "wan-std" }], [charge("seconds", "秒")]), rule("Professional mode", [], [charge("seconds", "秒")])]);
   if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("其他视频分辨率", [], [charge("seconds", "秒")])]);
@@ -382,8 +381,14 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
 
 export function validateUsageRuleSet(ruleSet?: UsageRuleSet) {
   const rules = ruleSet?.rules || [];
-  if (!rules.length || rules.at(-1)!.conditions.length || rules.slice(0, -1).some((item) => !item.conditions.length)) {
-    return "The last pricing tier must be the condition-free fallback";
+  const rejectsUnmatched = ruleSet?.unmatchedPolicy === "reject";
+  const hasInvalidFallback = rejectsUnmatched
+    ? rules.some((item) => item.conditions.length === 0)
+    : !rules.length || rules.at(-1)!.conditions.length || rules.slice(0, -1).some((item) => !item.conditions.length);
+  if (!rules.length || hasInvalidFallback) {
+    return rejectsUnmatched
+      ? "Configure at least one conditional pricing tier; unmatched combinations are rejected"
+      : "The last pricing tier must be the condition-free fallback";
   }
   if (rules.some((item) => !item.label.trim() || !item.charges.length || item.conditions.some((condition) => !condition.field.trim()) || item.charges.some((entry) => !entry.meter.trim() || !Number.isFinite(entry.price) || entry.price < 0))) {
     return "Complete every tier, condition, meter and non-negative price";
@@ -392,19 +397,19 @@ export function validateUsageRuleSet(ruleSet?: UsageRuleSet) {
 }
 
 /**
- * Remove a pricing tier while preserving the invariant that the final tier is
- * the condition-free fallback. When the current fallback is removed, the
- * preceding tier is promoted and all of its matching conditions are cleared.
+ * Remove a pricing tier. Legacy rule sets keep their final condition-free
+ * fallback. Explicit no-fallback matrices (currently Seedance) may delete any
+ * tier without silently converting another tier into a catch-all price.
  */
 export function removeUsagePricingTier(
   rules: UsagePriceRule[],
   index: number,
+  unmatchedPolicy: UsageRuleSet["unmatchedPolicy"] = "fallback",
 ): UsagePriceRule[] {
   if (rules.length <= 1 || index < 0 || index >= rules.length) return rules;
 
-  const removingFallback = index === rules.length - 1;
   const nextRules = rules.filter((_, ruleIndex) => ruleIndex !== index);
-  if (!removingFallback) return nextRules;
+  if (unmatchedPolicy === "reject" || index !== rules.length - 1) return nextRules;
 
   const fallbackIndex = nextRules.length - 1;
   nextRules[fallbackIndex] = {
@@ -430,6 +435,22 @@ export function unsupportedTaskUsageKeys(
     ...ruleSet.rules.flatMap((item) => item.charges.map((charge) => charge.meter)),
   ]);
   return [...keys].filter((key) => !usageSchema[key]).sort();
+}
+
+/**
+ * Historical prices remain readable even when a template is no longer offered
+ * for new configuration. Output-count fields vary between image providers, so
+ * the generic output-image-count template is intentionally legacy-only.
+ */
+export function usageRuleTemplateSelectable(
+  key: TemplateKey,
+  execution: UsageRuleSet["execution"],
+  usageSchema?: BillingUsageSchema,
+) {
+  if (key === "outputImageCount") return false;
+  return execution !== "task"
+    || (key !== "liveSessionSeconds" && key !== "musicPerSong"
+      && unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema).length === 0);
 }
 
 function parseInputValue(value: string): string | number | boolean {
@@ -498,22 +519,26 @@ function FriendlyUsageRuleMatrix({
   templateKey,
   rules,
   comparisonValue,
+  showVendorComparison,
   execution,
   priceMultiplier,
   pricingCurrency,
   exchangeRate,
   currencySymbol,
   commitRules,
+  unmatchedPolicy,
 }: {
   templateKey: TemplateKey;
   rules: UsagePriceRule[];
   comparisonValue?: UsageRuleSet;
+  showVendorComparison: boolean;
   execution: UsageRuleSet["execution"];
   priceMultiplier: number;
   pricingCurrency: { label: string; symbol: string; exchangeRate: number };
   exchangeRate: number;
   currencySymbol: string;
   commitRules: (rules: UsagePriceRule[]) => void;
+  unmatchedPolicy?: UsageRuleSet["unmatchedPolicy"];
 }) {
   const { t } = useTranslation();
   const updateRule = (ruleIndex: number, next: UsagePriceRule) => {
@@ -542,7 +567,7 @@ function FriendlyUsageRuleMatrix({
             updateRule(ruleIndex, { ...item, charges });
           }}
         />
-        {vendorPart ? (
+        {showVendorComparison && (vendorPart ? (
           <div className="whitespace-nowrap text-[11px] text-muted-foreground">
             {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}
             {difference !== 0 && (
@@ -551,7 +576,7 @@ function FriendlyUsageRuleMatrix({
               </span>
             )}
           </div>
-        ) : <div className="text-[11px] text-muted-foreground">{t("Vendor price is not set")}</div>}
+        ) : <div className="text-[11px] text-muted-foreground">{t("Vendor price is not set")}</div>)}
       </div>
     );
   };
@@ -559,7 +584,7 @@ function FriendlyUsageRuleMatrix({
     <Input className="h-9 min-w-[130px] font-medium" value={item.label} aria-label={t("Tier name")} onChange={(event) => updateRule(ruleIndex, { ...item, label: event.target.value })} />
   );
   const removeButton = (ruleIndex: number) => (
-    <Button type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(removeUsagePricingTier(rules, ruleIndex))}>
+    <Button type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(removeUsagePricingTier(rules, ruleIndex, unmatchedPolicy))}>
       <Trash2 className="size-4" />
     </Button>
   );
@@ -627,7 +652,7 @@ function FriendlyUsageRuleMatrix({
         </div>
         <Button type="button" variant="outline" onClick={() => {
           const next = rule(t("New resolution and input-video tier"), [{ field: "resolution", operator: "eq", value: "720p" }, { field: "video_input", operator: "eq", value: "none" }], [charge("tokens", "百万 Token")]);
-          commitRules([...rules.slice(0, -1), next, rules.at(-1)!]);
+          commitRules(unmatchedPolicy === "reject" ? [...rules, next] : [...rules.slice(0, -1), next, rules.at(-1)!]);
         }}><Plus className="mr-2 size-4" />{t("Add resolution tier")}</Button>
       </div>
     );
@@ -661,9 +686,18 @@ function FriendlyUsageRuleMatrix({
   );
 }
 
+function inferUnmatchedPolicy(value: UsageRuleSet | undefined, templateKey: TemplateKey): UsageRuleSet["unmatchedPolicy"] {
+  if (value?.unmatchedPolicy) return value.unmatchedPolicy;
+  if (templateKey === "seedanceVideoTokens" && value?.rules?.length && value.rules.every((rule) => rule.conditions.length > 0)) {
+    return "reject";
+  }
+  return "fallback";
+}
+
 export function UsageRuleBuilder({
   value,
   comparisonValue,
+  showVendorComparison = false,
   priceMultiplier = 1,
   usageSchema,
   exchangeRate,
@@ -672,6 +706,7 @@ export function UsageRuleBuilder({
 }: {
   value?: UsageRuleSet;
   comparisonValue?: UsageRuleSet;
+  showVendorComparison?: boolean;
   priceMultiplier?: number;
   usageSchema?: BillingUsageSchema;
   exchangeRate: number;
@@ -688,6 +723,7 @@ export function UsageRuleBuilder({
   const defaultTemplate: TemplateKey = execution === "task" ? "blank" : "image";
   const [rules, setRules] = useState<UsagePriceRule[]>(() => value?.rules || createUsageRuleTemplate(defaultTemplate, execution).rules);
   const [templateKey, setTemplateKey] = useState<TemplateKey>(() => detectTemplateKey(value, defaultTemplate));
+  const [unmatchedPolicy, setUnmatchedPolicy] = useState<UsageRuleSet["unmatchedPolicy"]>(() => inferUnmatchedPolicy(value, detectTemplateKey(value, defaultTemplate)));
   const templateHelp: Record<TemplateKey, string> = {
     image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
     outputImageCount: "Prices every generated output image at one configurable unit price.",
@@ -710,7 +746,9 @@ export function UsageRuleBuilder({
   };
   useEffect(() => {
     setRules(value?.rules?.length ? value.rules : createUsageRuleTemplate(defaultTemplate, execution).rules);
-    setTemplateKey(detectTemplateKey(value, defaultTemplate));
+    const nextTemplate = detectTemplateKey(value, defaultTemplate);
+    setTemplateKey(nextTemplate);
+    setUnmatchedPolicy(inferUnmatchedPolicy(value, nextTemplate));
   }, [value, execution, defaultTemplate]);
   const fields = useMemo(
     () => execution === "task"
@@ -727,18 +765,18 @@ export function UsageRuleBuilder({
     ])],
     [execution, fields, usageSchema],
   );
-  const templateSupported = (key: TemplateKey) => execution !== "task"
-    || (key !== "liveSessionSeconds" && key !== "musicPerSong"
-      && unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema).length === 0);
+  const templateSupported = (key: TemplateKey) => usageRuleTemplateSelectable(key, execution, usageSchema);
   const unsupportedKeys = unsupportedTaskUsageKeys(
     { version: 1, execution, rules },
     usageSchema,
   );
-  const commitRules = (nextRules: UsagePriceRule[]) => {
+  const commitRules = (nextRules: UsagePriceRule[], nextPolicy = unmatchedPolicy) => {
     setRules(nextRules);
+    setUnmatchedPolicy(nextPolicy);
     const next = {
       version: 1 as const,
       execution,
+      ...(nextPolicy === "reject" ? { unmatchedPolicy: nextPolicy } : {}),
       rules: nextRules.map((item) => ({
         ...item,
         charges: item.charges.map((part) => ({
@@ -760,7 +798,7 @@ export function UsageRuleBuilder({
       <div>
         <div>
           <div className="font-semibold">{t("Advanced media pricing rules")}</div>
-          <p className="mt-1 text-sm text-muted-foreground">{t("Build dynamic prices from request attributes and measured usage. Rules are checked from top to bottom; the final tier is the fallback.")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t(unmatchedPolicy === "reject" ? "Only explicitly configured resolution/reference-video combinations are priced. Unmatched combinations are rejected." : "Build dynamic prices from request attributes and measured usage. Rules are checked from top to bottom; the final tier is the fallback.")}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-end gap-2">
@@ -768,8 +806,9 @@ export function UsageRuleBuilder({
           <span className="font-medium">{t("Pricing template")}</span>
           <select className="flex h-9 min-w-52 rounded-md border bg-background px-3 text-sm" value={templateKey} onChange={(event) => {
             const nextTemplate = event.target.value as TemplateKey;
+            const nextRuleSet = createUsageRuleTemplate(nextTemplate, execution);
             setTemplateKey(nextTemplate);
-            commitRules(createUsageRuleTemplate(nextTemplate, execution).rules);
+            commitRules(nextRuleSet.rules, nextRuleSet.unmatchedPolicy);
           }}>
             <option value="image" disabled={!templateSupported("image")}>{t("Output image resolution (1K/2K)")}</option>
             <option value="outputImageCount" disabled={!templateSupported("outputImageCount")}>{t("Generated output images per image")}</option>
@@ -804,12 +843,14 @@ export function UsageRuleBuilder({
           templateKey={templateKey}
           rules={rules}
           comparisonValue={comparisonValue}
+          showVendorComparison={showVendorComparison}
           execution={execution}
           priceMultiplier={priceMultiplier}
           pricingCurrency={pricingCurrency}
           exchangeRate={exchangeRate}
           currencySymbol={currencySymbol}
           commitRules={commitRules}
+          unmatchedPolicy={unmatchedPolicy}
         />
       ) : <>
       <div className="space-y-3">
@@ -817,10 +858,10 @@ export function UsageRuleBuilder({
           <div className="space-y-3 rounded-md border bg-background p-3" key={item.id}>
             <div className="flex items-center gap-2">
               <Input className="max-w-xs font-medium" value={item.label} placeholder={t("Tier name")} onChange={(event) => updateRule(ruleIndex, { ...item, label: event.target.value })} />
-              <span className="text-xs text-muted-foreground">{ruleIndex === rules.length - 1 ? t("Fallback tier") : t("Tier {{number}}", { number: ruleIndex + 1 })}</span>
-              <Button className="ml-auto" type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(removeUsagePricingTier(rules, ruleIndex))}><Trash2 className="size-4" /></Button>
+              <span className="text-xs text-muted-foreground">{unmatchedPolicy !== "reject" && ruleIndex === rules.length - 1 ? t("Fallback tier") : t("Tier {{number}}", { number: ruleIndex + 1 })}</span>
+              <Button className="ml-auto" type="button" variant="ghost" size="icon" title={t("Delete tier")} disabled={rules.length === 1} onClick={() => commitRules(removeUsagePricingTier(rules, ruleIndex, unmatchedPolicy))}><Trash2 className="size-4" /></Button>
             </div>
-            {ruleIndex < rules.length - 1 && (
+            {(ruleIndex < rules.length - 1 || unmatchedPolicy === "reject") && (
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">{t("Match all conditions")}</div>
                 {item.conditions.map((condition, conditionIndex) => (
@@ -878,14 +919,14 @@ export function UsageRuleBuilder({
                         updateRule(ruleIndex, { ...item, charges });
                       }}
                     />
-                    {vendorPart ? (
+                    {showVendorComparison && (vendorPart ? (
                       <div className="text-xs text-muted-foreground">
                         {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}
                         <span className={difference! > 0 ? "ml-2 text-rose-500" : difference! < 0 ? "ml-2 text-emerald-500" : "ml-2"}>
                           {t("Difference")}: {difference! > 0 ? "+" : ""}{currencySymbol}{formatPriceDecimal(difference! * exchangeRate, fractionDigits)}
                         </span>
                       </div>
-                    ) : <div className="text-xs text-muted-foreground">{t("Vendor price is not set")}</div>}
+                    ) : <div className="text-xs text-muted-foreground">{t("Vendor price is not set")}</div>)}
                   </div>
                   <Button type="button" variant="ghost" size="icon" title={t("Delete charge")} disabled={item.charges.length === 1} onClick={() => updateRule(ruleIndex, { ...item, charges: item.charges.filter((_, index) => index !== chargeIndex) })}><Trash2 className="size-4" /></Button>
                 </div>
@@ -899,7 +940,7 @@ export function UsageRuleBuilder({
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" disabled={!fields.length} onClick={() => {
           const next = rule(t("New pricing tier"), [{ field: fields[0] || "", operator: "eq", value: defaultConditionValue(fields[0] || "", usageSchema) }]);
-          commitRules([...rules.slice(0, -1), next, rules.at(-1)!]);
+          commitRules(unmatchedPolicy === "reject" ? [...rules, next] : [...rules.slice(0, -1), next, rules.at(-1)!]);
         }}><CopyPlus className="mr-2 size-4" />{t("Add pricing tier")}</Button>
       </div>
       </>}

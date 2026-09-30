@@ -163,6 +163,7 @@ Qwen 模板的初始数字仅用于展示分支结构，不能直接当作截图
   `ai_cr` 和输出 `c`，管理端与客户端按“一个档位一行、各模态分列”显示。
 - Seedance 分辨率/参考视频计价必须保留结构化 `usageRuleSet`，通过任务插件提供的
   `tokens/resolution/video_input` 真实结算，不能只保存一个展示用价格表。
+- Seedance 新模板使用 `unmatchedPolicy: "reject"`，只允许已配置的分辨率+参考视频组合计费；不生成无条件兜底档，表达式中的 `__pricing_unmatched__` 仅是内部拒绝哨兵，后端必须拒绝未匹配请求。带历史兜底档的数据继续保持 fallback 兼容。
 - Seedream 的 `images_up_to_1_5k/images_above_1_5k` 是已有数据字段，界面含义按插件真实阈值
   2,610,000 像素显示；不得因字段历史名称把它误写成 1.5K 分辨率。
 - 3D 产物计价通过 `output_spec` 与按次价格结算。没有该 usage 字段的任务插件必须阻止保存，

@@ -5,6 +5,9 @@ import type {
   UsageRuleSet,
 } from "./types";
 
+/* A non-price branch used to make an unmatched structured rule explicit. */
+export const UNMATCHED_TIER_NAME = "__pricing_unmatched__";
+
 function unitDivisor(unit: string) {
   if (unit === "千字符") return 1_000;
   if (unit === "万字符") return 10_000;
@@ -63,8 +66,12 @@ export function usageRuleSetExpression(ruleSet: UsageRuleSet) {
       : "";
     return [counted, regular].filter(Boolean).join(" + ") || `tier(${label}, 0)`;
   };
-  let expression = body(ruleSet.rules.at(-1)!);
-  for (let index = ruleSet.rules.length - 2; index >= 0; index -= 1) {
+  const rejectsUnmatched = ruleSet.unmatchedPolicy === "reject";
+  let expression = rejectsUnmatched
+    ? `tier(${JSON.stringify(UNMATCHED_TIER_NAME)}, 0)`
+    : body(ruleSet.rules.at(-1)!);
+  const firstConditionalIndex = rejectsUnmatched ? ruleSet.rules.length - 1 : ruleSet.rules.length - 2;
+  for (let index = firstConditionalIndex; index >= 0; index -= 1) {
     const item = ruleSet.rules[index];
     const condition = item.conditions
       .map((itemCondition) => conditionExpression(itemCondition, ruleSet.execution))
