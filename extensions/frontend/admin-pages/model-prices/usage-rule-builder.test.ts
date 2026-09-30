@@ -498,6 +498,41 @@ describe('screenshot-derived billing templates', () => {
     ).toMatchObject({ status: 'success', cost: 1.5, matchedTier: '480p · 有参考视频' })
   })
 
+  it('charges Seed3D and Hyper3D from one administrator-friendly completion-token price', () => {
+    const seed3d = createUsageRuleTemplate('threeDOutputTokens', 'task')
+    expect(seed3d.rules).toHaveLength(1)
+    expect(seed3d.rules[0].conditions).toEqual([])
+    expect(seed3d.rules[0].charges).toHaveLength(1)
+    expect(seed3d.rules[0].charges[0]).toMatchObject({
+      meter: 'tokens',
+      unit: '百万 Token',
+    })
+
+    seed3d.rules[0].charges[0].price = 80
+    const seed3dResult = evaluateBillingExpression(
+      usageRuleSetExpression(seed3d),
+      { usage: { tokens: 30_000 } },
+    )
+    expect(seed3dResult).toMatchObject({
+      status: 'success',
+      matchedTier: '3D 模型输出',
+    })
+    if (seed3dResult.status !== 'success') throw new Error('Seed3D expression did not evaluate successfully')
+    expect(seed3dResult.cost).toBeCloseTo(2.4, 10)
+
+    seed3d.rules[0].charges[0].price = 60
+    const hyper3dResult = evaluateBillingExpression(
+      usageRuleSetExpression(seed3d),
+      { usage: { tokens: 30_000 } },
+    )
+    expect(hyper3dResult).toMatchObject({
+      status: 'success',
+      matchedTier: '3D 模型输出',
+    })
+    if (hyper3dResult.status !== 'success') throw new Error('Hyper3D expression did not evaluate successfully')
+    expect(hyper3dResult.cost).toBeCloseTo(1.8, 10)
+  })
+
   it('charges Seedream input images and the real 2.61M-pixel output buckets', () => {
     const rules = createUsageRuleTemplate('seedreamPixelScene', 'task')
     rules.rules[0].charges[0].price = 0.1

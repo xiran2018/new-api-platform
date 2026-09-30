@@ -873,6 +873,23 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     compatibility: '只对插件声明的分辨率和 video_input 字段启用；截图中的分辨率是默认示例而不是硬编码限制；结构化规则使用 unmatchedPolicy=reject，不生成无条件兜底档位，未匹配组合由后端拒绝。',
   },
   {
+    key: 'threeDOutputTokens',
+    name: '3D generation output token pricing',
+    purpose: 'doubao-seed3d-2.0 与 Hyper3d-Gen2 按任务返回的输出 Token 计价。',
+    execution: 'request-or-task',
+    conditionFields: [],
+    chargeMeters: ['tokens'],
+    units: ['百万 Token'],
+    defaultTiers: '单一“3D 模型输出”收费项。',
+    layout: {
+      editor: '管理员只填写每百万 completion tokens 的价格。',
+      managementDisplay: '单行显示 3D 模型输出价格。',
+      publicDisplay: '单行显示 3D 模型输出 Token 单价。',
+    },
+    runtime: '提交时按 30,000 tokens 预估，任务完成后使用实际 usage.completion_tokens 结算。',
+    compatibility: '必须保留 threeDOutputTokens、tokens usage meter，以及 Doubao 插件的 Seed3D/Hyper3D 模型 usage profile。',
+  },
+  {
     key: 'videoMode',
     name: 'Video output mode and duration',
     purpose: '根据标准/专业等视频模式选择每秒价格。',

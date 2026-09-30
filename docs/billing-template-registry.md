@@ -288,8 +288,16 @@
 |---|---|---|---|---|
 | `batch-multimodal-token-tiers` | 按输入长度分档，每档分别设置文本输入、音频输入、文本缓存、音频缓存和输出 Token 价格 | 使用表达式可视化编辑器维护档位上限、名称及五项价格；默认 32K/128K/256K 仅为可编辑示例 | 一个紧凑表格，每个 Token 档位一行，五类价格分列；不显示表达式源码 | 使用 `p/ai/cr/ai_cr/c` 和真实模态 Token 结算；旧表达式和修改后的档位继续可视化解析 |
 | `seedanceVideoTokens` | Seedance 按输出分辨率和是否有参考视频选择计费 Token 单价 | 专用矩阵直接填写“分辨率 × 无/有参考视频”的每百万 Token 价格，可增删组合；默认不生成“其他视频组合”兜底档 | 同一分辨率合并一行，无参考视频、有参考视频分别为两列；只显示真实配置的组合 | Doubao 任务插件提供 `tokens/resolution/video_input`；提交时预估、完成后按上游真实 billing Token 结算；规则保存 `unmatchedPolicy=reject`，未匹配的分辨率/参考视频组合在后端拒绝，不按 0 元或默认档位放行 |
+| `threeDOutputTokens` | Seed3D/Hyper3D 按任务输出 Token 计价 | 单一管理员友好价格框，只填写每 1M `completion_tokens` 的价格 | 单行显示“3D 模型输出”及 Token 单价，不显示内部规则表达式 | Doubao 任务插件提交时按 30,000 Token 预扣，任务完成后读取真实 `usage.completion_tokens`（缺失时回退 `total_tokens`）结算；模型别名和带日期的官方模型 ID 都必须继续选择此 usage profile |
 | `seedreamPixelScene` | Seedream 输入图片按张，输出按 261 万像素阈值分档，并区分单图生成和图层拆分 | 每个生成场景一行，直接填写输入图片、输出 ≤261 万像素、输出 >261 万像素三项价格 | 生成场景一行三价的紧凑表格 | 使用 `input_images/images_up_to_1_5k/images_above_1_5k/layer_decomposition`；历史字段名 `1_5k` 不代表界面阈值，真实插件阈值为 2,610,000 像素 |
 | `threeDArtifact` | 按成功输出的 3D 产物规格计费，例如标准/高清、白模/纹理模型 | 专用矩阵直接填写产物名称、`output_spec` 和每次成功输出价格，可增删规格 | 产物规格、生成类型、贴图类型、单价组成紧凑表格 | 任务插件必须提供 `output_spec`；按首个匹配规格的 `request` 价格结算，未声明字段时禁止保存 |
+
+`doubao-seed3d-2.0` 和 `Hyper3d-Gen2` 不选择 `threeDArtifact`。这两个模型的白模、纹理、PBR 等产物类型不是不同价格档，成功输出一次统一记 30,000 个 `completion_tokens`。应选择“高级媒体计费规则”，再选择模板 `3D generation output token pricing`（稳定 key：`threeDOutputTokens`），定价货币选择人民币（CNY），然后填写：
+
+- `doubao-seed3d-2.0`：每 1M 输出 Token 填 `80`，即 `30,000 / 1,000,000 × 80 = 2.40 元/次`。
+- `Hyper3d-Gen2`：每 1M 输出 Token 填 `60`，即 `30,000 / 1,000,000 × 60 = 1.80 元/次`。
+
+提交时系统用 30,000 Token 做预扣估算，任务成功后再读取上游真实 `usage.completion_tokens` 结算（缺失时回退 `usage.total_tokens`）；输入价格不参与计费。以后若上游改变实际 Token 数量，不需要修改模板结构。
 
 ### Seedance 显式组合与未匹配处理
 

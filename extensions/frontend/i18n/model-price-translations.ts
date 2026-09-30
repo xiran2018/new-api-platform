@@ -85,6 +85,16 @@ const resources: Record<string, Record<string, string>> = {
       "音频输入 + 音频输出 Token 计价",
     "Audio input + text output token pricing":
       "音频输入 + 文本输出 Token 计价",
+    "3D generation output token pricing": "3D 生成输出 Token 计价",
+    "3D model output": "3D 模型输出",
+    "Billing item": "计费项",
+    "Price per 1M completion tokens": "每 1M completion tokens 价格",
+    "Use for doubao-seed3d-2.0 and Hyper3d-Gen2. Enter only the output price per 1M completion tokens; each successful task is estimated at 30,000 tokens and settled using the actual returned usage.":
+      "适用于 doubao-seed3d-2.0 和 Hyper3d-Gen2。只需填写每 1M completion tokens 的输出价格；每次成功任务按 30,000 Token 预估，并使用上游返回的真实 usage 结算。",
+    "Fill only the completion-token price per 1M tokens. Models such as doubao-seed3d-2.0 and Hyper3d-Gen2 report 30,000 completion tokens for each successful 3D output.":
+      "只需填写每 1M completion_tokens 的价格。doubao-seed3d-2.0、Hyper3d-Gen2 等模型每次成功输出 3D 模型会报告 30,000 个 completion_tokens。",
+    "Enter the price per 1M completion tokens; 30,000 completion tokens are billed for each successful 3D output.":
+      "填写每 1M completion_tokens 的价格；每次成功输出 3D 模型按 30,000 个 completion_tokens 结算。",
     "Fill two prices directly: audio input and audio output per 1M tokens.":
       "直接填写两个价格：每 1M Token 的音频输入价格和音频输出价格。",
     "Fill two prices directly: audio input and text output per 1M tokens.":
@@ -539,6 +549,16 @@ Object.assign(resources.vi, {
 });
 
 Object.assign(resources.en, {
+  "3D generation output token pricing": "3D generation output token pricing",
+  "3D model output": "3D model output",
+  "Billing item": "Billing item",
+  "Price per 1M completion tokens": "Price per 1M completion tokens",
+  "Use for doubao-seed3d-2.0 and Hyper3d-Gen2. Enter only the output price per 1M completion tokens; each successful task is estimated at 30,000 tokens and settled using the actual returned usage.":
+    "Use for doubao-seed3d-2.0 and Hyper3d-Gen2. Enter only the output price per 1M completion tokens; each successful task is estimated at 30,000 tokens and settled using the actual returned usage.",
+  "Fill only the completion-token price per 1M tokens. Models such as doubao-seed3d-2.0 and Hyper3d-Gen2 report 30,000 completion tokens for each successful 3D output.":
+    "Fill only the completion-token price per 1M tokens. Models such as doubao-seed3d-2.0 and Hyper3d-Gen2 report 30,000 completion tokens for each successful 3D output.",
+  "Enter the price per 1M completion tokens; 30,000 completion tokens are billed for each successful 3D output.":
+    "Enter the price per 1M completion tokens; 30,000 completion tokens are billed for each successful 3D output.",
   "All model square statuses": "All model square statuses",
   "Model square enabled": "Model square visibility: enabled",
   "Model square disabled": "Model square visibility: disabled",
@@ -613,6 +633,16 @@ Object.assign(resources.zh, {
   "Non-thinking tier name": "非思考模式档位名称",
 });
 Object.assign(resources["zh-TW"], {
+  "3D generation output token pricing": "3D 生成輸出 Token 計價",
+  "3D model output": "3D 模型輸出",
+  "Billing item": "計費項目",
+  "Price per 1M completion tokens": "每 1M completion tokens 價格",
+  "Use for doubao-seed3d-2.0 and Hyper3d-Gen2. Enter only the output price per 1M completion tokens; each successful task is estimated at 30,000 tokens and settled using the actual returned usage.":
+    "適用於 doubao-seed3d-2.0 和 Hyper3d-Gen2。只需填寫每 1M completion tokens 的輸出價格；每次成功任務按 30,000 Token 預估，並使用上游返回的真實 usage 結算。",
+  "Fill only the completion-token price per 1M tokens. Models such as doubao-seed3d-2.0 and Hyper3d-Gen2 report 30,000 completion tokens for each successful 3D output.":
+    "只需填寫每 1M completion_tokens 的價格。doubao-seed3d-2.0、Hyper3d-Gen2 等模型每次成功輸出 3D 模型會回報 30,000 個 completion_tokens。",
+  "Enter the price per 1M completion tokens; 30,000 completion tokens are billed for each successful 3D output.":
+    "填寫每 1M completion_tokens 的價格；每次成功輸出 3D 模型按 30,000 個 completion_tokens 結算。",
   "Qwen3 Omni shared image/video input + three output prices":
     "Qwen3 Omni 共用圖片/影片輸入價 + 三種輸出價格",
   "Input unit price": "輸入單價",

@@ -19,8 +19,8 @@ import {
 
 export { usageRuleSetExpression } from "../../model-prices/usage-rule-expression";
 
-export type TemplateKey = "image" | "outputImageCount" | "seedreamPixelScene" | "musicPerSong" | "boolean" | "volume" | "video" | "videoAudio" | "seedanceVideoTokens" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "threeDArtifact" | "blank";
-export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "seedreamPixelScene", "musicPerSong", "boolean", "volume", "video", "videoAudio", "seedanceVideoTokens", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "threeDArtifact", "blank"];
+export type TemplateKey = "image" | "outputImageCount" | "seedreamPixelScene" | "musicPerSong" | "boolean" | "volume" | "video" | "videoAudio" | "seedanceVideoTokens" | "threeDOutputTokens" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "threeDArtifact" | "blank";
+export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "seedreamPixelScene", "musicPerSong", "boolean", "volume", "video", "videoAudio", "seedanceVideoTokens", "threeDOutputTokens", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "threeDArtifact", "blank"];
 
 const requestFields = [
   "resolution",
@@ -322,6 +322,11 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       ]),
     ], "reject");
   }
+  if (key === "threeDOutputTokens") {
+    return wrap([
+      rule("3D 模型输出", [], [charge("tokens", "百万 Token")]),
+    ]);
+  }
   if (key === "videoMode") return wrap([rule("Standard mode", [{ field: "mode", operator: "eq", value: "wan-std" }], [charge("seconds", "秒")]), rule("Professional mode", [], [charge("seconds", "秒")])]);
   if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("其他视频分辨率", [], [charge("seconds", "秒")])]);
   if (key === "audioSeconds") return wrap([rule("Audio duration", [], [charge("seconds", "秒")])]);
@@ -364,6 +369,7 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
   if (meters.has("live_session_seconds")) return "liveSessionSeconds";
   if (meters.has("tokens") && fields.has("resolution") && fields.has("video_input")) return "seedanceVideoTokens";
+  if (rules.length === 1 && meters.has("tokens") && !fields.size) return "threeDOutputTokens";
   if (meters.has("images_up_to_1_5k") || meters.has("images_above_1_5k")) return "seedreamPixelScene";
   if (fields.has("output_spec") && rules.some((item) => /白模|纹理模型/.test(item.label))) return "threeDArtifact";
   if (fields.has("task_type") || fields.has("output_spec")) return "taskMatrix";
@@ -511,6 +517,7 @@ function ConditionValueEditor({
 
 const friendlyMatrixTemplates: TemplateKey[] = [
   "seedanceVideoTokens",
+  "threeDOutputTokens",
   "seedreamPixelScene",
   "threeDArtifact",
 ];
@@ -658,6 +665,24 @@ function FriendlyUsageRuleMatrix({
     );
   }
 
+  if (templateKey === "threeDOutputTokens") {
+    const item = rules[0];
+    return (
+      <div className="overflow-x-auto rounded-lg border bg-background">
+        <table className="min-w-[520px] w-full text-left text-sm">
+          <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
+            <th className="p-2.5">{t("Billing item")}</th>
+            <th className="p-2.5">{t("Price per 1M completion tokens")}</th>
+          </tr></thead>
+          <tbody><tr className="border-t align-top">
+            <td className="p-2.5 font-medium">{t("3D model output")}</td>
+            <td className="p-2.5">{item ? priceInput(item, 0, "tokens") : null}</td>
+          </tr></tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-lg border bg-background">
@@ -734,6 +759,7 @@ export function UsageRuleBuilder({
     video: "Prices generated video by output resolution and output duration.",
     videoAudio: "Prices generated video by output resolution, output duration and whether audio is enabled.",
     seedanceVideoTokens: "Seedance-friendly matrix that selects a billing-token price by output resolution and whether the request contains reference video.",
+    threeDOutputTokens: "Use for doubao-seed3d-2.0 and Hyper3d-Gen2. Enter only the output price per 1M completion tokens; each successful task is estimated at 30,000 tokens and settled using the actual returned usage.",
     videoMode: "Prices generated video by output mode and duration.",
     imageVideo: "Prices uploaded images and generated video separately.",
     audioSeconds: "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.",
@@ -819,6 +845,7 @@ export function UsageRuleBuilder({
             <option value="video" disabled={!templateSupported("video")}>{t("Output video resolution and duration")}</option>
             <option value="videoAudio" disabled={!templateSupported("videoAudio")}>{t("Video resolution, duration and audio switch")}</option>
             <option value="seedanceVideoTokens" disabled={!templateSupported("seedanceVideoTokens")}>{t("Seedance resolution and reference-video token pricing")}</option>
+            <option value="threeDOutputTokens" disabled={!templateSupported("threeDOutputTokens")}>{t("3D generation output token pricing")}</option>
             <option value="videoMode" disabled={!templateSupported("videoMode")}>{t("Video output mode and duration")}</option>
             <option value="imageVideo" disabled={!templateSupported("imageVideo")}>{t("Input image and output video")}</option>
             <option value="audioSeconds" disabled={!templateSupported("audioSeconds")}>{t("Generated audio/media task duration pricing")}</option>
