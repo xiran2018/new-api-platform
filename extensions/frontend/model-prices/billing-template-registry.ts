@@ -745,9 +745,9 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
       publicDisplay: '显示输出图片单价，例如 ¥0.500 / 张。',
     },
     runtime:
-      '普通图片请求使用 core 原生 image_count：按请求 n 预扣，按实际返回图片张数结算。',
+      '普通图片请求使用 core 原生 image_count；任务插件必须显式声明并在提交、完成阶段上报 image_count。系统按请求图片数预扣，再按实际成功返回的图片张数结算。',
     compatibility:
-      '仅兼容读取和编辑历史配置，不再允许管理员新选择该模板。不同图片插件的实际输出数量字段并不统一，新配置必须选择插件明确支持的图片计费模板；历史 request 模式保留 core 原生 fixed(unitPrice) * image_count，历史 task 模式继续使用 u("image_count") * unitPrice。',
+      'request 模式始终可选；task 模式只有在所选插件的 usage schema 声明 image_count 时才可选。Doubao Seedream 图片插件会按请求估算图片数，并按实际成功输出图片数覆盖结算；未声明该字段的任务插件仍保持禁用，避免错误地按请求次数收费。',
   },
   {
     key: 'seedreamPixelScene',

@@ -199,7 +199,7 @@
 | 稳定 key / 名称 | 默认条件字段 | 默认收费字段和单位 | 默认布局与用途 | 真实结算和兼容要求 |
 | --- | --- | --- | --- | --- |
 | `image`<br>Output image resolution (1K/2K) | `resolution_tier` | `input_images`、`output_images` / 张 | 默认提供 1K、2K 和可编辑兜底档；每档同时设置输入参考图和输出图片单价 | Alibaba Qwen-Image-3.0 将 `output_image_type`/请求尺寸映射为 `resolution_tier`，将 `input_image_count`/`image_count` 映射为 `input_images`/`output_images`；数字 + DPI/K/P 仅是编辑器输入方式，档位名称和数量可修改，不能把 1K/2K 写死为唯一档位 |
-| `outputImageCount`<br>Generated output images per image | 无 | 普通图片接口使用 `image_count` / 张；异步任务可使用 `output_images` | 单档位统一设置每张生成图片价格 | 普通图片接口按请求 `n` 预扣、按实际返回图片张数结算；不得退化为按请求次数计费 |
+| `outputImageCount`<br>Generated output images per image | 无 | `image_count` / 张 | 单档位统一设置每张生成图片价格 | request 模式直接使用 core 的图片数量；task 模式仅在插件显式声明 `image_count` 时允许选择，按请求数量预扣、按实际成功输出图片数结算；不得退化为按请求次数计费 |
 | `musicPerSong`<br>Music generation per song/request | 无 | `request` / 次 | 单档位只填写每首歌曲/每次请求价格 | 仅用于一个同步请求固定生成一首歌曲的渠道；若一次可生成多首歌曲，必须增加真实 `song_count` usage，不能把请求数冒充歌曲数 |
 | `boolean`<br>Boolean request option | `prompt_extend` | `request` / 次 | 开启条件档 + 关闭兜底档 | 布尔值必须使用启用/禁用下拉，可换成其他 schema 布尔字段 |
 | `volume`<br>Generated image quantity tiers | 普通图片接口 `image_count`；异步任务 `output_images` | 对应图片数量 / 张 | 多个数量区间阶梯价 | 阈值和档位数可编辑；普通图片接口必须按原生 `image_count` 真实结算，旧 `output_images` 数据继续兼容 |
@@ -297,7 +297,7 @@ Seedance 的分辨率 × 参考视频矩阵是显式组合定价：模板只生�
 
 删除 Seedance 的最后一个档位时，不会把倒数第二个档位改成无条件兜底；新增档位也直接追加到显式组合矩阵。历史仍带无条件兜底档位的数据继续按旧 fallback 逻辑兼容，其他模板的最后无条件档位行为不变。
 
-“按输出图片张数计费”（`outputImageCount`）仅用于兼容已经保存的历史价格，不再允许从计费模板下拉菜单中新选择。不同图片插件返回的实际输出数量字段并不统一，新配置必须使用任务插件明确声明并支持的图片计费模板。厂商原价编辑器只录入原厂价格，不显示“原厂价格未设置”；该提示只在实际价格与厂商原价进行比较时显示。
+“按输出图片张数计费”（`outputImageCount`）在 request 模式下使用 core 原生 `image_count`；在 task 模式下，只有任务插件的 usage schema 明确声明 `image_count` 时才能选择。插件必须在提交阶段上报预计图片数，并在完成阶段按实际成功输出图片数覆盖结算。Doubao Seedream 图片模型（包括 `doubao-seedream-4-5-251128`、`doubao-seedream-4-0-250828` 和 `doubao-seedream-4-0-20260415`）提供该字段，因此可以选择此模板并真实按张计费；未提供该字段的任务插件继续禁用。厂商原价编辑器只录入原厂价格，不显示“原厂价格未设置”；该提示只在实际价格与厂商原价进行比较时显示。
 
 防回归要求：
 

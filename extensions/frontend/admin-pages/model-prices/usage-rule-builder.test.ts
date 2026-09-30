@@ -173,14 +173,17 @@ describe('vendor usage-rule comparison', () => {
 })
 
 describe('task usage-schema compatibility', () => {
-  it('keeps output-image-count pricing legacy-readable but unavailable for new selection', () => {
-    expect(usageRuleTemplateSelectable('outputImageCount', 'request')).toBe(false)
+  it('allows output-image-count pricing only when its runtime meter is available', () => {
+    expect(usageRuleTemplateSelectable('outputImageCount', 'request')).toBe(true)
     expect(usageRuleTemplateSelectable('outputImageCount', 'task', {
       image_count: { type: 'number', unit: 'count' },
+    })).toBe(true)
+    expect(usageRuleTemplateSelectable('outputImageCount', 'task', {
+      output_images: { type: 'number', unit: 'count' },
     })).toBe(false)
 
-    const legacyRules = createUsageRuleTemplate('outputImageCount', 'task')
-    expect(legacyRules.rules[0].charges[0].meter).toBe('image_count')
+    const rules = createUsageRuleTemplate('outputImageCount', 'task')
+    expect(rules.rules[0].charges[0].meter).toBe('image_count')
   })
 
   it('rejects a resolution template when the task plugin only declares image_count', () => {

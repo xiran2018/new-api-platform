@@ -438,16 +438,16 @@ export function unsupportedTaskUsageKeys(
 }
 
 /**
- * Historical prices remain readable even when a template is no longer offered
- * for new configuration. Output-count fields vary between image providers, so
- * the generic output-image-count template is intentionally legacy-only.
+ * Request expressions can use the core image_count variable directly. Task
+ * expressions are selectable only when the selected plugin declares every
+ * usage field required by the template, so per-image pricing cannot silently
+ * degrade into per-request pricing.
  */
 export function usageRuleTemplateSelectable(
   key: TemplateKey,
   execution: UsageRuleSet["execution"],
   usageSchema?: BillingUsageSchema,
 ) {
-  if (key === "outputImageCount") return false;
   return execution !== "task"
     || (key !== "liveSessionSeconds" && key !== "musicPerSong"
       && unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema).length === 0);

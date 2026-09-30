@@ -124,7 +124,10 @@ require_text "$usage_rule_test" \
 require_text "$usage_rule_builder" "unmatchedPolicy" "Seedance unmatched-policy compatibility was lost"
 require_text "$usage_rule_expression" "__pricing_unmatched__" "Seedance unmatched sentinel expression support was lost"
 require_text "$billingexpr_run" "ErrUnmatchedPricingTier" "backend unmatched pricing rejection was lost"
-require_text "$usage_rule_builder" 'if (key === "outputImageCount") return false' "legacy-only output-image-count template became selectable again"
+require_text "$usage_rule_builder" 'unsupportedTaskUsageKeys(createUsageRuleTemplate(key, execution), usageSchema)' "task usage-schema template guard was lost"
+require_text "$repo_root/core/new-api/plugins/tasks/doubao/plugin.js" 'image_count: imageCount' "Doubao Seedream output-image-count reservation was lost"
+require_text "$repo_root/core/new-api/plugins/tasks/doubao/plugin.js" 'const facts = { image_count: payloads.length }' "Doubao Seedream output-image-count settlement was lost"
+require_text "$repo_root/core/new-api/plugins/tasks/doubao/plugin.js" '"doubao-seedream-4-0-20260415"' "Doubao Seedream 4.0 alternate deployment billing support was lost"
 require_text "$usage_rule_builder" "showVendorComparison" "vendor-price comparison visibility control was lost"
 require_text "$usage_rule_test" \
   "charges Seedream input images and the real 2.61M-pixel output buckets" \
