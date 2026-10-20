@@ -19,8 +19,8 @@ import {
 
 export { usageRuleSetExpression } from "../../model-prices/usage-rule-expression";
 
-export type TemplateKey = "image" | "outputImageCount" | "seedreamPixelScene" | "musicPerSong" | "boolean" | "volume" | "video" | "videoAudio" | "seedanceVideoTokens" | "threeDOutputTokens" | "videoMode" | "imageVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "threeDArtifact" | "blank";
-export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "outputImageCount", "seedreamPixelScene", "musicPerSong", "boolean", "volume", "video", "videoAudio", "seedanceVideoTokens", "threeDOutputTokens", "videoMode", "imageVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "threeDArtifact", "blank"];
+export type TemplateKey = "image" | "imageResolutionQuality" | "outputImageCount" | "seedreamPixelScene" | "musicPerSong" | "boolean" | "volume" | "video" | "videoAudio" | "seedanceVideoTokens" | "threeDOutputTokens" | "videoMode" | "imageVideo" | "mediaInputVideo" | "audioSeconds" | "liveSessionSeconds" | "ttsCharacters" | "voiceCount" | "taskMatrix" | "threeDArtifact" | "blank";
+export const BILLING_TEMPLATE_KEYS: TemplateKey[] = ["image", "imageResolutionQuality", "outputImageCount", "seedreamPixelScene", "musicPerSong", "boolean", "volume", "video", "videoAudio", "seedanceVideoTokens", "threeDOutputTokens", "videoMode", "imageVideo", "mediaInputVideo", "audioSeconds", "liveSessionSeconds", "ttsCharacters", "voiceCount", "taskMatrix", "threeDArtifact", "blank"];
 
 const requestFields = [
   "resolution",
@@ -33,6 +33,7 @@ const requestFields = [
   "prompt_extend",
   "audio",
   "input_images",
+  "input_video_seconds",
   "output_images",
   "image_count",
   "seconds",
@@ -52,6 +53,7 @@ const requestFields = [
 // provider advertises only a subset of usage fields.
 const knownUsageMeters = [
   "input_images",
+  "input_video_seconds",
   "output_images",
   "image_count",
   "seconds",
@@ -77,6 +79,7 @@ const fieldLabels: Record<string, string> = {
   prompt_extend: "Prompt rewriting",
   audio: "Audio enabled",
   input_images: "Input image count",
+  input_video_seconds: "Input video duration",
   output_images: "Output image count",
   image_count: "Generated output image count",
   seconds: "Output video duration",
@@ -173,7 +176,7 @@ const charge = (meter = "request", unit = "次", price = 0): UsagePriceCharge =>
 function defaultUnit(meter: string, usageSchema?: BillingUsageSchema) {
   if (meter === "request") return "次";
   const unit = usageSchema?.[meter]?.unit;
-  if (unit === "second" || meter === "seconds" || meter === "live_session_seconds") return "秒";
+  if (unit === "second" || meter === "seconds" || meter === "input_video_seconds" || meter === "live_session_seconds") return "秒";
   if (unit === "token" || meter === "tokens") return "百万 Token";
   if (unit === "credit") return "计费点";
   if (meter.includes("image")) return "张";
@@ -193,6 +196,7 @@ function defaultConditionValue(field: string, usageSchema?: BillingUsageSchema) 
 function unitDivisor(unit: string) {
   if (unit === "千字符") return 1_000;
   if (unit === "万字符") return 10_000;
+  if (unit === "百万字符") return 1_000_000;
   if (unit === "百万 Token") return 1_000_000;
   if (unit === "分钟") return 60;
   if (unit === "小时") return 3_600;
@@ -201,8 +205,8 @@ function unitDivisor(unit: string) {
 
 function unitOptions(meter: string, usageSchema?: BillingUsageSchema) {
   if (meter === "request") return ["次"];
-  if (meter === "seconds" || meter === "live_session_seconds" || usageSchema?.[meter]?.unit === "second") return ["秒", "分钟", "小时"];
-  if (["characters", "tts_input_characters", "tts_output_characters"].includes(meter)) return ["字符", "千字符", "万字符"];
+  if (meter === "seconds" || meter === "input_video_seconds" || meter === "live_session_seconds" || usageSchema?.[meter]?.unit === "second") return ["秒", "分钟", "小时"];
+  if (["characters", "tts_input_characters", "tts_output_characters"].includes(meter)) return ["字符", "千字符", "万字符", "百万字符"];
   if (meter.includes("image")) return ["张"];
   if (usageSchema?.[meter]?.unit === "token" || meter === "tokens") return ["百万 Token"];
   if (usageSchema?.[meter]?.unit === "credit") return ["计费点"];
@@ -253,6 +257,20 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
       ]),
       rule("其他图片分辨率", [], [charge("input_images", "张"), charge("output_images", "张")]),
     ]);
+  }
+  if (key === "imageResolutionQuality") {
+    const tiers = [
+      ["1K", "low", 0.04], ["1.5K", "low", 0.05], ["2K", "low", 0.06],
+      ["1K", "medium", 0.06], ["1.5K", "medium", 0.07], ["2K", "medium", 0.08],
+    ] as const;
+    return wrap(tiers.map(([resolution, quality, outputPrice]) => rule(
+      `${resolution} · ${quality}`,
+      [
+        { field: "resolution_tier", operator: "eq", value: resolution },
+        { field: "quality", operator: "eq", value: quality },
+      ],
+      [charge("input_images", "张", 0.01), charge("output_images", "张", outputPrice)],
+    )), "reject");
   }
   if (key === "outputImageCount") {
     return wrap([
@@ -329,6 +347,11 @@ export function createUsageRuleTemplate(key: TemplateKey, execution: UsageRuleSe
   }
   if (key === "videoMode") return wrap([rule("Standard mode", [{ field: "mode", operator: "eq", value: "wan-std" }], [charge("seconds", "秒")]), rule("Professional mode", [], [charge("seconds", "秒")])]);
   if (key === "imageVideo") return wrap([rule("Input image", [{ field: "mode", operator: "eq", value: "image-input" }], [charge("input_images", "张")]), rule("480P output video", [{ field: "resolution", operator: "eq", value: "480P" }], [charge("seconds", "秒")]), rule("其他视频分辨率", [], [charge("seconds", "秒")])]);
+  if (key === "mediaInputVideo") return wrap([
+    rule("480p", [{ field: "resolution", operator: "eq", value: "480p" }], [charge("input_images", "张", 0.01), charge("input_video_seconds", "秒", 0.01), charge("seconds", "秒", 0.08)]),
+    rule("720p", [{ field: "resolution", operator: "eq", value: "720p" }], [charge("input_images", "张", 0.01), charge("input_video_seconds", "秒", 0.01), charge("seconds", "秒", 0.14)]),
+    rule("1080p", [{ field: "resolution", operator: "eq", value: "1080p" }], [charge("input_images", "张", 0.01), charge("input_video_seconds", "秒", 0.01), charge("seconds", "秒", 0.25)]),
+  ], "reject");
   if (key === "audioSeconds") return wrap([rule("Audio duration", [], [charge("seconds", "秒")])]);
   if (key === "liveSessionSeconds") return wrap([rule("GPT-Live session connection duration", [], [charge("live_session_seconds", "分钟", 0.05)])]);
   if (key === "ttsCharacters") {
@@ -364,6 +387,8 @@ function detectTemplateKey(value: UsageRuleSet | undefined, fallback: TemplateKe
   if (!rules.length) return fallback;
   const fields = new Set(rules.flatMap((item) => item.conditions.map((condition) => condition.field)));
   const meters = new Set(rules.flatMap((item) => item.charges.map((part) => part.meter)));
+  if (fields.has("quality") && meters.has("input_images") && meters.has("output_images")) return "imageResolutionQuality";
+  if (fields.has("resolution") && meters.has("input_video_seconds") && meters.has("seconds")) return "mediaInputVideo";
   if (rules.length === 1 && rules[0].label === "音乐生成按歌曲/请求计费" && meters.has("request")) return "musicPerSong";
   if (meters.has("image_count") && !fields.has("image_count")) return "outputImageCount";
   if (meters.has("tts_input_characters") || meters.has("tts_output_characters")) return "ttsCharacters";
@@ -516,6 +541,8 @@ function ConditionValueEditor({
 }
 
 const friendlyMatrixTemplates: TemplateKey[] = [
+  "imageResolutionQuality",
+  "mediaInputVideo",
   "seedanceVideoTokens",
   "threeDOutputTokens",
   "seedreamPixelScene",
@@ -610,6 +637,115 @@ function FriendlyUsageRuleMatrix({
       </select>
     ) : <Input className="h-9 min-w-[130px]" value={String(condition.value)} onChange={(event) => onChange(event.target.value)} />;
   };
+
+  const sharedPriceInput = (meter: string) => {
+    const firstPart = rules.flatMap((item) => item.charges).find((part) => part.meter === meter);
+    if (!firstPart) return null;
+    const vendorPart = comparisonValue ? uniqueComparisonCharge(comparisonValue.rules, firstPart) : undefined;
+    const fractionDigits = priceFractionDigits(meter === "seconds" || meter === "input_video_seconds");
+    const actualPrice = firstPart.price * priceMultiplier;
+    const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
+    return (
+      <div className="min-w-[148px] space-y-1">
+        <PricingAmountInput
+          className="h-9"
+          currency={pricingCurrency}
+          fractionDigits={fractionDigits}
+          value={firstPart.price}
+          onChange={(next) => {
+            const price = Math.max(0, Number(next) || 0);
+            commitRules(rules.map((item) => ({
+              ...item,
+              charges: item.charges.map((part) => part.meter === meter ? { ...part, price } : part),
+            })));
+          }}
+        />
+        {showVendorComparison && (vendorPart ? (
+          <div className="whitespace-nowrap text-[11px] text-muted-foreground">
+            {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}
+            {difference !== 0 && (
+              <span className={difference! > 0 ? "ml-1 text-rose-500" : "ml-1 text-emerald-500"}>
+                {difference! > 0 ? "+" : ""}{currencySymbol}{formatPriceDecimal(difference! * exchangeRate, fractionDigits)}
+              </span>
+            )}
+          </div>
+        ) : <div className="text-[11px] text-muted-foreground">{t("Vendor price is not set")}</div>)}
+      </div>
+    );
+  };
+
+  if (templateKey === "imageResolutionQuality") {
+    const sharedInput = rules.flatMap((item) => item.charges).find((part) => part.meter === "input_images")?.price || 0;
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border bg-background p-3">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">{t("Shared reference image price")}</div>
+          {sharedPriceInput("input_images")}
+        </div>
+        <div className="overflow-x-auto rounded-lg border bg-background">
+          <table className="min-w-[760px] w-full text-left text-sm">
+            <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
+              <th className="p-2.5">{t("Display name")}</th>
+              <th className="p-2.5">{t("Output resolution")}</th>
+              <th className="p-2.5">{t("Quality")}</th>
+              <th className="p-2.5">{t("Output image price")}</th>
+              <th className="w-12 p-2.5" />
+            </tr></thead>
+            <tbody>{rules.map((item, ruleIndex) => (
+              <tr className="border-t align-top" key={item.id}>
+                <td className="p-2.5">{ruleLabel(item, ruleIndex)}</td>
+                <td className="p-2.5">{conditionValue(item, ruleIndex, "resolution_tier")}</td>
+                <td className="p-2.5">{conditionValue(item, ruleIndex, "quality")}</td>
+                <td className="p-2.5">{priceInput(item, ruleIndex, "output_images")}</td>
+                <td className="p-2.5">{removeButton(ruleIndex)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <Button type="button" variant="outline" onClick={() => commitRules([...rules, rule(
+          t("New resolution and quality tier"),
+          [{ field: "resolution_tier", operator: "eq", value: "1K" }, { field: "quality", operator: "eq", value: "low" }],
+          [charge("input_images", "张", sharedInput), charge("output_images", "张")],
+        )])}><Plus className="mr-2 size-4" />{t("Add resolution and quality tier")}</Button>
+      </div>
+    );
+  }
+
+  if (templateKey === "mediaInputVideo") {
+    const sharedImage = rules.flatMap((item) => item.charges).find((part) => part.meter === "input_images")?.price || 0;
+    const sharedVideo = rules.flatMap((item) => item.charges).find((part) => part.meter === "input_video_seconds")?.price || 0;
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-2">
+          <div><div className="mb-1 text-xs font-medium text-muted-foreground">{t("Input image price")}</div>{sharedPriceInput("input_images")}</div>
+          <div><div className="mb-1 text-xs font-medium text-muted-foreground">{t("Input video price")}</div>{sharedPriceInput("input_video_seconds")}</div>
+        </div>
+        <div className="overflow-x-auto rounded-lg border bg-background">
+          <table className="min-w-[620px] w-full text-left text-sm">
+            <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
+              <th className="p-2.5">{t("Display name")}</th>
+              <th className="p-2.5">{t("Output resolution")}</th>
+              <th className="p-2.5">{t("Output video price")}</th>
+              <th className="w-12 p-2.5" />
+            </tr></thead>
+            <tbody>{rules.map((item, ruleIndex) => (
+              <tr className="border-t align-top" key={item.id}>
+                <td className="p-2.5">{ruleLabel(item, ruleIndex)}</td>
+                <td className="p-2.5">{conditionValue(item, ruleIndex, "resolution")}</td>
+                <td className="p-2.5">{priceInput(item, ruleIndex, "seconds")}</td>
+                <td className="p-2.5">{removeButton(ruleIndex)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <Button type="button" variant="outline" onClick={() => commitRules([...rules, rule(
+          t("New video resolution tier"),
+          [{ field: "resolution", operator: "eq", value: "1080p" }],
+          [charge("input_images", "张", sharedImage), charge("input_video_seconds", "秒", sharedVideo), charge("seconds", "秒")],
+        )])}><Plus className="mr-2 size-4" />{t("Add resolution tier")}</Button>
+      </div>
+    );
+  }
 
   if (templateKey === "seedreamPixelScene") {
     return (
@@ -713,7 +849,7 @@ function FriendlyUsageRuleMatrix({
 
 function inferUnmatchedPolicy(value: UsageRuleSet | undefined, templateKey: TemplateKey): UsageRuleSet["unmatchedPolicy"] {
   if (value?.unmatchedPolicy) return value.unmatchedPolicy;
-  if (templateKey === "seedanceVideoTokens" && value?.rules?.length && value.rules.every((rule) => rule.conditions.length > 0)) {
+  if (["seedanceVideoTokens", "imageResolutionQuality", "mediaInputVideo"].includes(templateKey) && value?.rules?.length && value.rules.every((rule) => rule.conditions.length > 0)) {
     return "reject";
   }
   return "fallback";
@@ -751,6 +887,7 @@ export function UsageRuleBuilder({
   const [unmatchedPolicy, setUnmatchedPolicy] = useState<UsageRuleSet["unmatchedPolicy"]>(() => inferUnmatchedPolicy(value, detectTemplateKey(value, defaultTemplate)));
   const templateHelp: Record<TemplateKey, string> = {
     image: "Prices generated images by output resolution; input image count refers only to uploaded reference images.",
+    imageResolutionQuality: "Enter the shared reference-image price once, then add any output resolution and quality combinations. Unconfigured combinations are rejected instead of using the wrong price.",
     outputImageCount: "Prices every generated output image at one configurable unit price.",
     seedreamPixelScene: "Seedream-friendly matrix for input images, single-image generation or layer decomposition, and output images on either side of the 2.61M-pixel threshold.",
     musicPerSong: "Use for music APIs that return one song per request. The configured price is charged once per request; if a provider can return multiple songs, use a measured song-count field instead.",
@@ -760,6 +897,7 @@ export function UsageRuleBuilder({
     videoAudio: "Prices generated video by output resolution, output duration and whether audio is enabled.",
     seedanceVideoTokens: "Seedance-friendly matrix that selects a billing-token price by output resolution and whether the request contains reference video.",
     threeDOutputTokens: "Use for doubao-seed3d-2.0 and Hyper3d-Gen2. Enter only the output price per 1M completion tokens; each successful task is estimated at 30,000 tokens and settled using the actual returned usage.",
+    mediaInputVideo: "Enter shared input-image and input-video prices once, then configure output video prices by resolution and duration. Unconfigured resolutions are rejected.",
     videoMode: "Prices generated video by output mode and duration.",
     imageVideo: "Prices uploaded images and generated video separately.",
     audioSeconds: "Use for generated audio or media tasks that provide seconds. For uploaded ASR or transcription audio, choose Uploaded audio transcription per second instead.",
@@ -837,12 +975,14 @@ export function UsageRuleBuilder({
             commitRules(nextRuleSet.rules, nextRuleSet.unmatchedPolicy);
           }}>
             <option value="image" disabled={!templateSupported("image")}>{t("Output image resolution (1K/2K)")}</option>
+            <option value="imageResolutionQuality" disabled={!templateSupported("imageResolutionQuality")}>{t("Image input plus resolution and quality output matrix")}</option>
             <option value="outputImageCount" disabled={!templateSupported("outputImageCount")}>{t("Generated output images per image")}</option>
             <option value="seedreamPixelScene" disabled={!templateSupported("seedreamPixelScene")}>{t("Seedream input/output image and pixel scene pricing")}</option>
             <option value="musicPerSong" disabled={!templateSupported("musicPerSong")}>{t("Music generation per song/request")}</option>
             <option value="boolean" disabled={!templateSupported("boolean")}>{t("Boolean request option")}</option>
             <option value="volume" disabled={!templateSupported("volume")}>{t("Generated image quantity tiers")}</option>
             <option value="video" disabled={!templateSupported("video")}>{t("Output video resolution and duration")}</option>
+            <option value="mediaInputVideo" disabled={!templateSupported("mediaInputVideo")}>{t("Image/video input plus video resolution output")}</option>
             <option value="videoAudio" disabled={!templateSupported("videoAudio")}>{t("Video resolution, duration and audio switch")}</option>
             <option value="seedanceVideoTokens" disabled={!templateSupported("seedanceVideoTokens")}>{t("Seedance resolution and reference-video token pricing")}</option>
             <option value="threeDOutputTokens" disabled={!templateSupported("threeDOutputTokens")}>{t("3D generation output token pricing")}</option>

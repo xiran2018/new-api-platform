@@ -507,6 +507,8 @@ const activeWindow = (b: PriceBlock, timezone: string) => {
 };
 
 export type UsageRulePresentationKind =
+  | "image-resolution-quality"
+  | "media-input-video-output"
   | "seedance-video-tokens"
   | "seedream-pixel-scene"
   | "three-d-artifact"
@@ -530,6 +532,18 @@ export function usageRulePresentationKind(
       rule.charges.map((charge) => charge.meter),
     ) || [],
   );
+  if (
+    fields.has("quality") &&
+    fields.has("resolution_tier") &&
+    meters.has("input_images") &&
+    meters.has("output_images")
+  ) return "image-resolution-quality";
+  if (
+    fields.has("resolution") &&
+    meters.has("input_images") &&
+    meters.has("input_video_seconds") &&
+    meters.has("seconds")
+  ) return "media-input-video-output";
   if (
     meters.has("tokens") &&
     fields.has("resolution") &&
@@ -610,6 +624,7 @@ function UsageRuleSetRenderer({
       image_count: "Generated image quantity",
       input_images: "Input image count",
       seconds: "Output video duration",
+      input_video_seconds: "Input video duration",
       live_session_seconds: "GPT-Live session connection duration",
       characters: "Character count",
       tts_input_characters: "TTS input price",
@@ -625,6 +640,7 @@ function UsageRuleSetRenderer({
     return t(({
       input_images: "Input image count",
       output_images: "Output image count",
+      input_video_seconds: "Input video duration",
       image_count: "Output image count",
       seconds: "Output video duration",
       live_session_seconds: "GPT-Live session connection duration",
@@ -645,6 +661,7 @@ function UsageRuleSetRenderer({
               currency,
               priceFractionDigits(
                 (audioDurationRuleSet && charge.meter === "seconds")
+                  || charge.meter === "input_video_seconds"
                   || charge.meter === "live_session_seconds",
               ),
             )}</b>
@@ -673,6 +690,7 @@ function UsageRuleSetRenderer({
     const compared = matchingUsageCharge(compareRuleSet, rule, meter);
     const fractionDigits = priceFractionDigits(
       (audioDurationRuleSet && meter === "seconds") ||
+        meter === "input_video_seconds" ||
         meter === "live_session_seconds",
     );
     const difference = compared ? actualPrice - compared.price : null;
@@ -696,6 +714,64 @@ function UsageRuleSetRenderer({
     );
   };
   const matrix = (() => {
+    if (presentationKind === "image-resolution-quality") {
+      const firstRule = ruleSet.rules[0];
+      return (
+        <div className="space-y-2">
+          <div className="rounded-md border bg-muted/25 p-2.5 text-xs">
+            <span className="mr-2 font-medium text-muted-foreground">{t("Shared reference image price")}:</span>
+            {matrixCharge(firstRule, "input_images")}
+          </div>
+          <div className="overflow-x-auto rounded-md border bg-muted/25">
+            <table className="min-w-[620px] w-full text-left text-xs">
+              <thead className="bg-muted/60 text-muted-foreground"><tr>
+                <th className="border-r p-2 font-medium">{t("Output resolution")}</th>
+                <th className="border-r p-2 font-medium">{t("Quality")}</th>
+                <th className="p-2 font-medium">{t("Output image price")}</th>
+              </tr></thead>
+              <tbody>{ruleSet.rules.map((rule, index) => (
+                <tr className="border-t align-top" key={rule.id || index}>
+                  <td className="border-r p-2.5 font-medium">{String(usageCondition(rule, "resolution_tier") || rule.label)}</td>
+                  <td className="border-r p-2.5">{String(usageCondition(rule, "quality") || "-")}</td>
+                  <td className="p-2.5">{matrixCharge(rule, "output_images")}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+    if (presentationKind === "media-input-video-output") {
+      const firstRule = ruleSet.rules[0];
+      return (
+        <div className="space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-md border bg-muted/25 p-2.5 text-xs">
+              <span className="mr-2 font-medium text-muted-foreground">{t("Input image price")}:</span>
+              {matrixCharge(firstRule, "input_images")}
+            </div>
+            <div className="rounded-md border bg-muted/25 p-2.5 text-xs">
+              <span className="mr-2 font-medium text-muted-foreground">{t("Input video price")}:</span>
+              {matrixCharge(firstRule, "input_video_seconds")}
+            </div>
+          </div>
+          <div className="overflow-x-auto rounded-md border bg-muted/25">
+            <table className="min-w-[520px] w-full text-left text-xs">
+              <thead className="bg-muted/60 text-muted-foreground"><tr>
+                <th className="border-r p-2 font-medium">{t("Output resolution")}</th>
+                <th className="p-2 font-medium">{t("Output video price")}</th>
+              </tr></thead>
+              <tbody>{ruleSet.rules.map((rule, index) => (
+                <tr className="border-t align-top" key={rule.id || index}>
+                  <td className="border-r p-2.5 font-medium">{String(usageCondition(rule, "resolution") || rule.label)}</td>
+                  <td className="p-2.5">{matrixCharge(rule, "seconds")}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
     if (presentationKind === "seedream-pixel-scene") {
       return (
         <div className="overflow-x-auto rounded-md border bg-muted/25">

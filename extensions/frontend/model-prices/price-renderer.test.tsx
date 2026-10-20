@@ -841,6 +841,68 @@ describe('expression price display', () => {
     expect(document.body.textContent).not.toContain('__pricing_unmatched__')
   })
 
+  it('renders image quality and video input/output rules as semantic matrices', () => {
+    const imageRules: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      unmatchedPolicy: 'reject',
+      rules: [{
+        id: 'image-medium',
+        label: '1.5K · medium',
+        conditions: [
+          { field: 'resolution_tier', operator: 'eq', value: '1.5K' },
+          { field: 'quality', operator: 'eq', value: 'medium' },
+        ],
+        charges: [
+          { meter: 'input_images', unit: '张', price: 0.01 },
+          { meter: 'output_images', unit: '张', price: 0.07 },
+        ],
+      }],
+    }
+    const imageView = render(
+      <PriceRenderer
+        tableLayout
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: usageRuleSetExpression(imageRules), usageRuleSet: imageRules }] }}
+      />,
+    )
+    expect(usageRulePresentationKind(imageRules)).toBe('image-resolution-quality')
+    expect(screen.getByText('Shared reference image price:')).toBeInTheDocument()
+    expect(screen.getByText('1.5K')).toBeInTheDocument()
+    expect(screen.getByText('medium')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('resolution_tier')
+    imageView.unmount()
+
+    const videoRules: UsageRuleSet = {
+      version: 1,
+      execution: 'task',
+      unmatchedPolicy: 'reject',
+      rules: [{
+        id: 'video-720',
+        label: '720p',
+        conditions: [{ field: 'resolution', operator: 'eq', value: '720p' }],
+        charges: [
+          { meter: 'input_images', unit: '张', price: 0.01 },
+          { meter: 'input_video_seconds', unit: '秒', price: 0.01 },
+          { meter: 'seconds', unit: '秒', price: 0.14 },
+        ],
+      }],
+    }
+    render(
+      <PriceRenderer
+        tableLayout
+        displayCurrency='USD'
+        timezone='Asia/Shanghai'
+        spec={{ mode: 'expression', blocks: [{ baseExpression: usageRuleSetExpression(videoRules), usageRuleSet: videoRules }] }}
+      />,
+    )
+    expect(usageRulePresentationKind(videoRules)).toBe('media-input-video-output')
+    expect(screen.getByText('Input video price:')).toBeInTheDocument()
+    expect(screen.getByText('Output video price')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('input_video_seconds')
+  })
+
   it('groups Seedance reference-video prices by output resolution', () => {
     const ruleSet: UsageRuleSet = {
       version: 1,

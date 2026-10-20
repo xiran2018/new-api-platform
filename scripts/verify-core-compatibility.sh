@@ -276,7 +276,7 @@ do
   require_text "$capability_contract" "'$capability'" "a stable billing capability was removed"
 done
 require_text "$presets" 'text+audio output (audio only)' "the shared-input output branch capability was removed"
-for key in image outputImageCount seedreamPixelScene musicPerSong boolean volume video videoAudio seedanceVideoTokens threeDOutputTokens videoMode imageVideo audioSeconds ttsCharacters voiceCount taskMatrix threeDArtifact blank
+for key in image imageResolutionQuality outputImageCount seedreamPixelScene musicPerSong boolean volume video videoAudio seedanceVideoTokens threeDOutputTokens videoMode imageVideo mediaInputVideo audioSeconds ttsCharacters voiceCount taskMatrix threeDArtifact blank
 do
   require_text "$usage_rule_builder" "$key" "a screenshot-derived visual billing template was lost during upstream synchronization"
 done

@@ -296,13 +296,14 @@ describe('screenshot-derived billing templates', () => {
         evaluateBillingExpression(expression, {
           request: { body: {} },
           usage: {
-            resolution: '1080P',
+            resolution: key === 'mediaInputVideo' ? '1080p' : '1080P',
             resolution_tier: '2K',
-            quality: 'standard',
+            quality: key === 'imageResolutionQuality' ? 'medium' : 'standard',
             mode: 'wan-std',
             prompt_extend: false,
             audio: false,
             input_images: 1,
+            input_video_seconds: 1,
             output_images: 1,
             seconds: 1,
             live_session_seconds: 30,
@@ -340,6 +341,68 @@ describe('screenshot-derived billing templates', () => {
         usage: { resolution_tier: '2K', input_images: 2, output_images: 1 },
       }),
     ).toMatchObject({ status: 'success', cost: 0.54, matchedTier: '2K' })
+  })
+
+  it('charges reference images and output images by resolution and quality', () => {
+    const rules = createUsageRuleTemplate('imageResolutionQuality', 'task')
+    const expression = usageRuleSetExpression(rules)
+
+    expect(rules.unmatchedPolicy).toBe('reject')
+    expect(compileBillingExpression(expression)).toMatchObject({ status: 'ready' })
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: {
+          resolution_tier: '1.5K',
+          quality: 'medium',
+          input_images: 2,
+          output_images: 1,
+        },
+      }),
+    ).toMatchObject({ status: 'success', cost: expect.closeTo(0.09, 10) })
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: {
+          resolution_tier: '4K',
+          quality: 'high',
+          input_images: 1,
+          output_images: 1,
+        },
+      }),
+    ).toMatchObject({ status: 'success', matchedTier: '__pricing_unmatched__' })
+  })
+
+  it('charges shared image/video inputs and output video duration separately', () => {
+    const rules = createUsageRuleTemplate('mediaInputVideo', 'task')
+    const expression = usageRuleSetExpression(rules)
+
+    expect(rules.unmatchedPolicy).toBe('reject')
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: {
+          resolution: '720p',
+          input_images: 2,
+          input_video_seconds: 3,
+          seconds: 10,
+        },
+      }),
+    ).toMatchObject({ status: 'success', cost: expect.closeTo(1.45, 10) })
+  })
+
+  it('converts per-million-character prices into real character usage', () => {
+    const rules = createUsageRuleTemplate('ttsCharacters', 'task')
+    rules.rules[0].charges[0] = {
+      meter: 'tts_input_characters',
+      unit: '百万字符',
+      price: 15,
+      divisor: 1_000_000,
+    }
+    const expression = usageRuleSetExpression(rules)
+
+    expect(
+      evaluateBillingExpression(expression, {
+        usage: { tts_input_characters: 10_000 },
+      }),
+    ).toMatchObject({ status: 'success', cost: 0.15 })
   })
 
   it('charges standard image generation by the actual output image count', () => {

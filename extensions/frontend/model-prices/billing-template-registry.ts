@@ -731,6 +731,23 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
       '分辨率由数字输入和 DPI/K/P 单位下拉组成，不得固定为只有 1K/2K；Qwen-Image-3.0 的 1K/2K 档位由请求尺寸和完成 usage 标准化得到。',
   },
   {
+    key: 'imageResolutionQuality',
+    name: 'Image input plus resolution and quality output matrix',
+    purpose: '输入参考图按张计费，输出图片按“分辨率 × 质量”组合设置每张价格。',
+    execution: 'request-or-task',
+    conditionFields: ['resolution_tier', 'quality'],
+    chargeMeters: ['input_images', 'output_images'],
+    units: ['张'],
+    defaultTiers: '1K/1.5K/2K 与 Low/Medium 的六个管理员友好示例组合；可增删组合；没有兜底档。',
+    layout: {
+      editor: '共享输入参考图价格只填写一次；每行填写显示名称、输出分辨率、质量和输出图片价格。',
+      managementDisplay: '共享输入价显示一次，输出分辨率、质量和图片价格组成紧凑矩阵；保留原厂价和差值。',
+      publicDisplay: '只显示业务字段和非零价格，不显示 usage meter 或表达式源码。',
+    },
+    runtime: '使用 BuildImageBillingExprRequestInput 采集的 resolution_tier、quality、input_images 和 output_images，按首个精确组合结算。',
+    compatibility: '结构化规则必须使用 unmatchedPolicy=reject；未配置的分辨率/质量组合不得误套其他价格。共享输入价保存到每个规则，旧数据按字段语义识别，不依赖模板名称。',
+  },
+  {
     key: 'outputImageCount',
     name: 'Generated output images per image',
     purpose: '为普通图片生成接口设置统一的每张输出图片单价。',
@@ -923,6 +940,23 @@ export const ADVANCED_MEDIA_TEMPLATE_REGISTRY = [
     runtime:
       '按 mode/resolution 选择档位，再使用 input_images 或 seconds 结算。',
     compatibility: '必须明确图片是输入、分辨率和时长是输出视频属性。',
+  },
+  {
+    key: 'mediaInputVideo',
+    name: 'Image/video input plus video resolution output',
+    purpose: '输入图片按张、输入视频按时长计费，并按输出视频分辨率设置输出时长价格。',
+    execution: 'request-or-task',
+    conditionFields: ['resolution'],
+    chargeMeters: ['input_images', 'input_video_seconds', 'seconds'],
+    units: ['张', '秒', '分钟', '小时'],
+    defaultTiers: '480p、720p、1080p 三个输出分辨率示例；输入图片和输入视频价格共享填写；没有兜底档。',
+    layout: {
+      editor: '顶部只填写一次输入图片价和输入视频时长价；下方动态增加或删除输出分辨率与输出视频时长价。',
+      managementDisplay: '共享输入价格显示一次，输出分辨率与输出视频价格组成紧凑表格；保留原厂价和差值。',
+      publicDisplay: '明确区分输入图片、输入视频和输出视频，不显示内部 usage 字段或表达式。',
+    },
+    runtime: '任务插件必须提供 input_images、input_video_seconds、seconds 和 resolution；三个实际 usage 分别乘对应价格后求和。',
+    compatibility: '结构化规则必须使用 unmatchedPolicy=reject；没有声明完整 usage schema 的任务插件不可宣称已真实支持。共享输入价保存到每个规则，旧数据按字段语义识别。',
   },
   {
     key: 'audioSeconds',

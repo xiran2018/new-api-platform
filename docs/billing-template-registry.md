@@ -191,7 +191,7 @@
 - 除最后一档外，每档必须有条件；最后一档必须是无条件兜底。
 - 条件运算符包括 `=、!=、<、≤、>、≥`。布尔值使用启用/禁用下拉；分辨率使用数字加
   `DPI/K/P` 单位下拉；schema 枚举使用下拉，减少错误输入。
-- 收费项由 meter、单位、价格组成。可选单位包括次、张、个、音色、字符、千字符、万字符、
+- 收费项由 meter、单位、价格组成。可选单位包括次、张、个、音色、字符、千字符、万字符、百万字符、
   秒、分钟、小时、百万 Token、计费点；系统用 `divisor` 换算后生成 `u(field)` 结算表达式。
 - 档位、条件和收费项均可增删；价格不得为负数。厂商原价和实际价格都使用该编辑器，并显示
   厂商价格、差值、优惠或加额后的预览。
@@ -199,6 +199,7 @@
 | 稳定 key / 名称 | 默认条件字段 | 默认收费字段和单位 | 默认布局与用途 | 真实结算和兼容要求 |
 | --- | --- | --- | --- | --- |
 | `image`<br>Output image resolution (1K/2K) | `resolution_tier` | `input_images`、`output_images` / 张 | 默认提供 1K、2K 和可编辑兜底档；每档同时设置输入参考图和输出图片单价 | Alibaba Qwen-Image-3.0 将 `output_image_type`/请求尺寸映射为 `resolution_tier`，将 `input_image_count`/`image_count` 映射为 `input_images`/`output_images`；数字 + DPI/K/P 仅是编辑器输入方式，档位名称和数量可修改，不能把 1K/2K 写死为唯一档位 |
+| `imageResolutionQuality`<br>Image input plus resolution and quality output matrix | `resolution_tier`、`quality` | `input_images`、`output_images` / 张 | 共享输入参考图价格只填写一次；分辨率、质量、输出图片价逐行配置，可增删组合 | 同步图片请求使用真实 `resolution_tier/quality/input_images/output_images` 结算；必须使用 `unmatchedPolicy=reject`，未配置组合拒绝而不能套错价格；按字段语义识别以兼容旧数据和模板改名 |
 | `outputImageCount`<br>Generated output images per image | 无 | `image_count` / 张 | 单档位统一设置每张生成图片价格 | request 模式直接使用 core 的图片数量；task 模式仅在插件显式声明 `image_count` 时允许选择，按请求数量预扣、按实际成功输出图片数结算；不得退化为按请求次数计费 |
 | `musicPerSong`<br>Music generation per song/request | 无 | `request` / 次 | 单档位只填写每首歌曲/每次请求价格 | 仅用于一个同步请求固定生成一首歌曲的渠道；若一次可生成多首歌曲，必须增加真实 `song_count` usage，不能把请求数冒充歌曲数 |
 | `boolean`<br>Boolean request option | `prompt_extend` | `request` / 次 | 开启条件档 + 关闭兜底档 | 布尔值必须使用启用/禁用下拉，可换成其他 schema 布尔字段 |
@@ -207,6 +208,7 @@
 | `videoAudio`<br>Video resolution, duration and audio switch | `resolution`、`audio` | `seconds` / 秒、分钟、小时 | 分辨率与有声/无声组合档位 | 同档所有条件同时匹配；有声档应在无声兜底前 |
 | `videoMode`<br>Video output mode and duration | `mode` | `seconds` / 秒、分钟、小时 | 标准/专业等模式的时长价格 | `wan-std` 只是示例，允许新增任意模式 |
 | `imageVideo`<br>Input image and output video | `mode`、`resolution` | `input_images` / 张；`seconds` / 时长 | 输入图片与输出视频混合计价 | 界面和显示必须明确输入/输出方向 |
+| `mediaInputVideo`<br>Image/video input plus video resolution output | `resolution` | `input_images` / 张；`input_video_seconds`、`seconds` / 秒、分钟、小时 | 共享输入图片价和输入视频价只填一次；逐行配置输出分辨率和输出视频时长价 | 仅当任务插件真实上报 `input_images/input_video_seconds/seconds/resolution` 时全链路生效；必须使用 `unmatchedPolicy=reject`，没有完整 usage schema 时不得宣称已支持 |
 | `audioSeconds`<br>Audio duration pricing | 无 | `seconds` / 秒、分钟、小时 | 音频、音乐、语音时长价 | 单位紧邻“音频时长计费”显示 |
 | `liveSessionSeconds`<br>GPT-Live session connection duration pricing | 无 | `live_session_seconds` / 秒、分钟、小时 | GPT-Live WebSocket 会话连接时长价 | 仅用于 OpenAI Realtime；该字段属于服务端同步请求 usage 白名单，不要求 task plugin usage schema；服务端以 `time.Since(StartTime).Seconds()` 注入真实小数秒，不向上取整，不复用上传音频 `aud_s` 或媒体任务 `seconds`；连接前 60 秒只作余额预留，断开时按真实时长结算 |
 | `ttsCharacters`<br>Text-to-speech per 10K characters | 无 | `tts_input_characters`、`tts_output_characters` / 字符、千字符、万字符 | 同档录入 TTS 输入和输出字符价；默认档位明确为“按万字符计费” | 输出允许为 0 或非零；客户端不显示内部变量名；不得产生重复音频输入价格 |

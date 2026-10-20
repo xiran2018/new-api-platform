@@ -11,6 +11,7 @@ export const UNMATCHED_TIER_NAME = "__pricing_unmatched__";
 function unitDivisor(unit: string) {
   if (unit === "千字符") return 1_000;
   if (unit === "万字符") return 10_000;
+  if (unit === "百万字符") return 1_000_000;
   if (unit === "百万 Token") return 1_000_000;
   if (unit === "分钟") return 60;
   if (unit === "小时") return 3_600;
