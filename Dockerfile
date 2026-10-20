@@ -22,6 +22,7 @@ ENV GOOS=${TARGETOS} GOARCH=${TARGETARCH}
 WORKDIR /build
 COPY core/new-api/go.mod core/new-api/go.sum ./
 COPY core/new-api/relaykit/go.mod ./relaykit/go.mod
+COPY core/new-api/tokenkit/go.mod ./tokenkit/go.mod
 RUN go mod download
 COPY core/new-api/ ./
 COPY extensions/backend/ ./platform/

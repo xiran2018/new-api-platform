@@ -30,6 +30,8 @@ vendor_price_regression_doc="$repo_root/docs/vendor-price-sync-regression.md"
 model_price_translations="$repo_root/extensions/frontend/i18n/model-price-translations.ts"
 sync_upstream_script="$repo_root/scripts/sync-upstream.sh"
 compatibility_workflow="$repo_root/.github/workflows/verify-upstream-compatibility.yml"
+platform_dockerfile="$repo_root/Dockerfile"
+core_go_mod="$repo_root/core/new-api/go.mod"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
 model_pricing_api="$repo_root/core/new-api/web/src/features/model-pricing/api.ts"
@@ -73,6 +75,21 @@ reject_text() {
     exit 1
   fi
 }
+
+# Every local module referenced by the core module graph must be available
+# before Docker runs `go mod download`. Upstream may add new local modules.
+while IFS= read -r local_module; do
+  if ! grep -Eq "^(COPY|ADD)[[:space:]]+core/new-api/${local_module}/go\\.mod[[:space:]]+\\./${local_module}/go\\.mod$" "$platform_dockerfile"; then
+    echo "Compatibility check failed: Dockerfile does not stage local Go module ${local_module} before go mod download" >&2
+    echo "Expected COPY core/new-api/${local_module}/go.mod ./${local_module}/go.mod in Dockerfile." >&2
+    exit 1
+  fi
+done < <(
+  awk '$1 == "replace" && $3 == "=>" && $4 ~ /^\.\// {
+    sub(/^\.\//, "", $4)
+    print $4
+  }' "$core_go_mod"
+)
 
 for key in \
   input-length-tiers \
