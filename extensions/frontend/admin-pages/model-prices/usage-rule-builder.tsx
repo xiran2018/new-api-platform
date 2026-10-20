@@ -3,6 +3,7 @@ import { CopyPlus, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
 import { PricingAmountInput } from "@/features/model-pricing/pricing-amount-input";
 import type { BillingUsageSchema } from "@/features/pricing/types";
 import type {
@@ -580,7 +581,7 @@ function FriendlyUsageRuleMatrix({
     copy[ruleIndex] = next;
     commitRules(copy);
   };
-  const priceInput = (item: UsagePriceRule, ruleIndex: number, meter: string) => {
+  const priceInput = (item: UsagePriceRule, ruleIndex: number, meter: string, displayUnit?: string) => {
     const chargeIndex = item.charges.findIndex((part) => part.meter === meter);
     if (chargeIndex < 0) return null;
     const part = item.charges[chargeIndex];
@@ -590,17 +591,34 @@ function FriendlyUsageRuleMatrix({
     const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
     return (
       <div className="min-w-[132px] space-y-1">
-        <PricingAmountInput
-          className="h-9"
-          currency={pricingCurrency}
-          fractionDigits={fractionDigits}
-          value={part.price}
-          onChange={(next) => {
-            const charges = [...item.charges];
-            charges[chargeIndex] = { ...part, price: Math.max(0, Number(next) || 0) };
-            updateRule(ruleIndex, { ...item, charges });
-          }}
-        />
+        {displayUnit ? (
+          <InputGroup className="h-9">
+            <PricingAmountInput
+              grouped
+              currency={pricingCurrency}
+              fractionDigits={fractionDigits}
+              value={part.price}
+              onChange={(next) => {
+                const charges = [...item.charges];
+                charges[chargeIndex] = { ...part, price: Math.max(0, Number(next) || 0) };
+                updateRule(ruleIndex, { ...item, charges });
+              }}
+            />
+            <InputGroupAddon align="inline-end">/ {t(displayUnit)}</InputGroupAddon>
+          </InputGroup>
+        ) : (
+          <PricingAmountInput
+            className="h-9"
+            currency={pricingCurrency}
+            fractionDigits={fractionDigits}
+            value={part.price}
+            onChange={(next) => {
+              const charges = [...item.charges];
+              charges[chargeIndex] = { ...part, price: Math.max(0, Number(next) || 0) };
+              updateRule(ruleIndex, { ...item, charges });
+            }}
+          />
+        )}
         {showVendorComparison && (vendorPart ? (
           <div className="whitespace-nowrap text-[11px] text-muted-foreground">
             {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}
@@ -638,7 +656,7 @@ function FriendlyUsageRuleMatrix({
     ) : <Input className="h-9 min-w-[130px]" value={String(condition.value)} onChange={(event) => onChange(event.target.value)} />;
   };
 
-  const sharedPriceInput = (meter: string) => {
+  const sharedPriceInput = (meter: string, displayUnit?: string) => {
     const firstPart = rules.flatMap((item) => item.charges).find((part) => part.meter === meter);
     if (!firstPart) return null;
     const vendorPart = comparisonValue ? uniqueComparisonCharge(comparisonValue.rules, firstPart) : undefined;
@@ -647,19 +665,38 @@ function FriendlyUsageRuleMatrix({
     const difference = vendorPart == null ? undefined : actualPrice - vendorPart.price;
     return (
       <div className="min-w-[148px] space-y-1">
-        <PricingAmountInput
-          className="h-9"
-          currency={pricingCurrency}
-          fractionDigits={fractionDigits}
-          value={firstPart.price}
-          onChange={(next) => {
-            const price = Math.max(0, Number(next) || 0);
-            commitRules(rules.map((item) => ({
-              ...item,
-              charges: item.charges.map((part) => part.meter === meter ? { ...part, price } : part),
-            })));
-          }}
-        />
+        {displayUnit ? (
+          <InputGroup className="h-9">
+            <PricingAmountInput
+              grouped
+              currency={pricingCurrency}
+              fractionDigits={fractionDigits}
+              value={firstPart.price}
+              onChange={(next) => {
+                const price = Math.max(0, Number(next) || 0);
+                commitRules(rules.map((item) => ({
+                  ...item,
+                  charges: item.charges.map((part) => part.meter === meter ? { ...part, price } : part),
+                })));
+              }}
+            />
+            <InputGroupAddon align="inline-end">/ {t(displayUnit)}</InputGroupAddon>
+          </InputGroup>
+        ) : (
+          <PricingAmountInput
+            className="h-9"
+            currency={pricingCurrency}
+            fractionDigits={fractionDigits}
+            value={firstPart.price}
+            onChange={(next) => {
+              const price = Math.max(0, Number(next) || 0);
+              commitRules(rules.map((item) => ({
+                ...item,
+                charges: item.charges.map((part) => part.meter === meter ? { ...part, price } : part),
+              })));
+            }}
+          />
+        )}
         {showVendorComparison && (vendorPart ? (
           <div className="whitespace-nowrap text-[11px] text-muted-foreground">
             {t("Vendor price")}: {currencySymbol}{formatPriceDecimal(vendorPart.price * exchangeRate, fractionDigits)}
@@ -717,8 +754,8 @@ function FriendlyUsageRuleMatrix({
     return (
       <div className="space-y-3">
         <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-2">
-          <div><div className="mb-1 text-xs font-medium text-muted-foreground">{t("Input image price")}</div>{sharedPriceInput("input_images")}</div>
-          <div><div className="mb-1 text-xs font-medium text-muted-foreground">{t("Input video price")}</div>{sharedPriceInput("input_video_seconds")}</div>
+          <div><div className="mb-1 text-xs font-medium text-muted-foreground">{t("Input image price")}</div>{sharedPriceInput("input_images", "image")}</div>
+          <div><div className="mb-1 text-xs font-medium text-muted-foreground">{t("Input video price")}</div>{sharedPriceInput("input_video_seconds", "second")}</div>
         </div>
         <div className="overflow-x-auto rounded-lg border bg-background">
           <table className="min-w-[620px] w-full text-left text-sm">
@@ -732,7 +769,7 @@ function FriendlyUsageRuleMatrix({
               <tr className="border-t align-top" key={item.id}>
                 <td className="p-2.5">{ruleLabel(item, ruleIndex)}</td>
                 <td className="p-2.5">{conditionValue(item, ruleIndex, "resolution")}</td>
-                <td className="p-2.5">{priceInput(item, ruleIndex, "seconds")}</td>
+                <td className="p-2.5">{priceInput(item, ruleIndex, "seconds", "second")}</td>
                 <td className="p-2.5">{removeButton(ruleIndex)}</td>
               </tr>
             ))}</tbody>

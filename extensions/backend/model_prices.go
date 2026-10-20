@@ -359,6 +359,16 @@ func syncExistingModelPrices(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
+	connectionNames := make([]string, 0, len(connections))
+	for _, connection := range connections {
+		if name := strings.TrimSpace(connection.Model); name != "" {
+			connectionNames = append(connectionNames, name)
+		}
+	}
+	modelSquareVisibility, err := model.GetModelSquareVisibility(connectionNames)
+	if err != nil {
+		return err
+	}
 	rows := make([]modelPriceCatalog, 0, len(models)+len(connections))
 	seen := make(map[string]struct{}, len(models)+len(connections))
 	for index, metadata := range models {
@@ -440,8 +450,8 @@ func syncExistingModelPrices(db *gorm.DB) error {
 		} else if stored, exists := storedPriceSpecs[name]; exists {
 			priceSpec = stored
 		}
-		_, visibleInModelSquare := pricingByName[name]
-		published, apiEnabled := discoveredModelFlags(storedFlags, name, visibleInModelSquare, false)
+		published := modelSquareVisibility[name]
+		apiEnabled := false
 		rows = append(rows, modelPriceCatalog{
 			ModelKey: name, DisplayName: name, Vendor: vendor,
 			Tags: tagsJSON, Currency: "CNY", Timezone: "Asia/Shanghai",
@@ -589,9 +599,20 @@ func syncManagedModelFlags(row modelPriceCatalog) error {
 	}
 	if err := model.SetExactModelCatalogStatus(row.ModelKey, status); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
+			metadata := model.Model{
+				ModelName:    row.ModelKey,
+				Status:       status,
+				APIEnabled:   row.APIEnabled,
+				SyncOfficial: 0,
+				NameRule:     model.NameRuleExact,
+			}
+			if insertErr := metadata.Insert(); insertErr != nil {
+				return fmt.Errorf("model metadata creation failed: %w", insertErr)
+			}
+			model.RefreshPricing()
+		} else {
+			return fmt.Errorf("model catalog visibility update failed: %w", err)
 		}
-		return fmt.Errorf("model catalog visibility update failed: %w", err)
 	}
 	if err := model.SetExactModelAPIEnabled(row.ModelKey, row.APIEnabled); err != nil {
 		return fmt.Errorf("model API availability update failed: %w", err)

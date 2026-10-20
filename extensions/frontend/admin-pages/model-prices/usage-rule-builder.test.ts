@@ -170,6 +170,25 @@ describe('vendor usage-rule comparison', () => {
     expect(document.body.textContent).toContain('Vendor price is not set')
     actualEditor.unmount()
   })
+
+  it('shows billing units beside media input and output prices', () => {
+    const value = createUsageRuleTemplate('mediaInputVideo', 'task')
+    const editor = render(createElement(UsageRuleBuilder, {
+      value,
+      usageSchema: {
+        resolution: { enum: ['720p', '1080p'] },
+        input_images: { type: 'number', unit: 'count' },
+        input_video_seconds: { type: 'number', unit: 'second' },
+        seconds: { type: 'number', unit: 'second' },
+      },
+      exchangeRate: 1,
+      currencySymbol: '$',
+      onApply: () => undefined,
+    }))
+
+    expect(editor.getByText('/ image')).toBeTruthy()
+    expect(editor.getAllByText('/ second')).toHaveLength(value.rules.length + 1)
+  })
 })
 
 describe('task usage-schema compatibility', () => {

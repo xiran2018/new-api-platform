@@ -33,6 +33,9 @@ compatibility_workflow="$repo_root/.github/workflows/verify-upstream-compatibili
 platform_dockerfile="$repo_root/Dockerfile"
 core_go_mod="$repo_root/core/new-api/go.mod"
 platform_backend="$repo_root/extensions/backend/model_prices.go"
+model_metadata_backend="$repo_root/core/new-api/model/model_meta.go"
+model_pricing_backend="$repo_root/core/new-api/model/pricing.go"
+public_pricing_controller="$repo_root/core/new-api/controller/pricing.go"
 model_table="$repo_root/core/new-api/web/src/features/models/components/models-table.tsx"
 model_pricing_api="$repo_root/core/new-api/web/src/features/model-pricing/api.ts"
 tiered_billing_backend="$repo_root/core/new-api/setting/billing_setting/tiered_billing.go"
@@ -418,7 +421,20 @@ require_text "$adapter" "getModelPricing([modelKey])" "platform actual-price edi
 require_text "$model_pricing_api" "api.patch('/api/option/model_pricing'" "the upstream runtime-pricing save endpoint changed"
 require_text "$model_table" "useModelPricing(" "model management no longer reads the shared runtime-pricing configuration"
 require_text "$platform_backend" "model.GetPricing()" "platform display prices are no longer refreshed from runtime pricing"
-require_text "$platform_backend" "visibleInModelSquare" "public model prices no longer use the model-square visibility set"
+require_text "$model_metadata_backend" "func GetModelSquareVisibility(names []string)" \
+  "the explicit model-square visibility policy was lost"
+require_text "$model_metadata_backend" "state := ModelSquareHidden" \
+  "channel-discovered models may become publicly visible without administrator approval"
+require_text "$model_pricing_backend" "func GetModelSquarePricing()" \
+  "the public pricing catalogue no longer filters by explicit model-square visibility"
+require_text "$public_pricing_controller" "model.GetModelSquarePricing()" \
+  "the public pricing endpoint may expose channel-discovered models by default"
+require_text "$platform_backend" "model.GetModelSquareVisibility(connectionNames)" \
+  "platform price management no longer preserves the explicit model-square visibility policy"
+require_text "$platform_backend" "published := modelSquareVisibility[name]" \
+  "channel-discovered models may be published implicitly during price synchronization"
+require_text "$platform_backend" "metadata.Insert()" \
+  "enabling model-square display for a channel-discovered model is no longer persisted"
 require_text "$platform_backend" "storedVendors" "manual vendor selections must survive model synchronization"
 require_text "$platform_backend" '"display_name", "tags"' "public model metadata fields must refresh without overwriting the saved vendor"
 
